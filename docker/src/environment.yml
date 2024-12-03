@@ -42,6 +42,7 @@ dependencies:
   - fonttools=4.54.1=py312h178313f_1
   - freetype=2.12.1=h267a509_2
   - fsspec=2024.10.0=pyhff2d567_0
+  - geos=3.13.0=h5888daf_0
   - giflib=5.2.2=hd590300_0
   - gmp=6.3.0=hac33072_2
   - gmpy2=2.1.5=py312h7201bc8_2
@@ -133,7 +134,7 @@ dependencies:
   - ocl-icd=2.3.2=hd590300_1
   - openjpeg=2.5.2=h488ebb8_0
   - openldap=2.6.8=hedd0468_0
-  - openssl=3.3.2=hb9d3cd8_0
+  - openssl=3.4.0=hb9d3cd8_0
   - packaging=24.1=pyhd8ed1ab_0
   - pandas=2.2.3=py312hf9745cd_1
   - patsy=0.5.6=pyhd8ed1ab_0
@@ -160,6 +161,7 @@ dependencies:
   - seaborn=0.13.2=hd8ed1ab_2
   - seaborn-base=0.13.2=pyhd8ed1ab_2
   - setuptools=75.3.0=pyhd8ed1ab_0
+  - shapely=2.0.6=py312h391bc85_2
   - six=1.16.0=pyh6c4a22f_0
   - sleef=3.7=h1b44611_2
   - statsmodels=0.14.4=py312hc0a28a1_0

@@ -1,0 +1,14 @@
+{
+    "name": "boolean_reservoir",
+    "image": "boolean_reservoir:1.0",
+    "features": {
+        "ghcr.io/devcontainers/features/python:1": {}
+    },
+    "workspaceFolder": "/code",
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/root/repo,type=bind,ro",
+        "source=${localWorkspaceFolder}/code,target=/code,type=bind",
+        "source=${localWorkspaceFolder}/data,target=/data,type=bind",
+        "source=${localWorkspaceFolder}/out,target=/out,type=bind"
+    ]
+}

@@ -1,24 +1,15 @@
 import torch
-import numpy as np
-import random
 
-# Ensure reproducibility by setting seeds globally
-def set_seed(seed=42):
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+from utils import set_seed
+seed = 42 # TODO is this global now???!!!
+set_seed(42)
 
-# Call it before any random operations
-seed = 42
-set_seed(seed)
-
-from reservoir import BooleanReservoir, ThreeLayerPerceptron
-from primes import primes
-from drunken_walk import DrunkenWalkDataset
+from reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBinaryEncoding
+from encoding import float_array_to_boolean, min_max_normalization
+from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader
 import torch.nn as nn
+from visualisations import plot_predictions_and_labels
 
 '''
 TODO
@@ -31,50 +22,76 @@ TODO
 - decide on how many nodes are used for input (input redundancy)
 - input nodes override select reservoir nodes, is this good?
 - scaling issue if we want many connections with current lut
-- should each node have a lut? or use a master lut?
-- is the path integration good? Are important properties lost upon scaling?
 '''
 
-# Parameters: Path Integration
-n_dimensions = 2
-n_steps = 1000
-momentum = 0.9
-step_size = 1.0
+def dataset_init(batch_size, bits_per_feature, encoding):
+    dataset = ConstrainedForagingPathDataset(data_path='/data/levy_walk/25_steps/square_boundary/dataset.pt')
+    dataset.set_normalizer_x(min_max_normalization)
+    dataset.set_normalizer_y(min_max_normalization)
+    dataset.normalize() # TODO uncomment!!!
+    encoder = lambda x: float_array_to_boolean(x, bits=bits_per_feature, encoding_type=encoding)
+    dataset.set_encoder_x(encoder)
+    # dataset.encode_x() # TODO uncomment!!!
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return data_loader
 
-# Parameters: Reservoir 
+# Parameters: Input Layer
+encoding = 'binary'
+bits_per_feature = 5  # Number of bits per dimension
+input_dim = 2  # Number of dimensions
+
+# Parameters: Reservoir Layer
 reservoir_size = 100  # Number of nodes in the reservoir
 lut_length = 16  # max LUT length (implies max connectivity)
-n_features = n_dimensions  # Number of dimensions
-bits_per_feature = 5  # Number of bits per dimension
-output_size = n_dimensions  # Number of dimensions
-encoding = 'tally'
 
-# Check if GPU is available and set the device accordingly
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Parameters: Output Layer
+output_dim = 2  # Number of dimensions
 
 # Create model
-model = BooleanReservoir(bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, primes, seed=seed).to(device)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device, primes, seed=seed).to(device)
+
 # uncomment for alternative model
-# model = ThreeLayerPerceptron(bits_per_feature, n_features, n_steps)
-# model.flush_history = lambda: None
+# model = PathIntegrationVerificationModel(bits_per_feature).to(device)
+model = PathIntegrationVerificationModelBinaryEncoding().to(device)
 
 # Training setup
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-batch_size = 50
+batch_size = 100
 epochs = 25
-radius_threshold = 0.5
+radius_threshold = 0.1
+data_loader = dataset_init(batch_size, bits_per_feature, encoding)
 
-dataset = DrunkenWalkDataset(batch_size=batch_size, bits_per_dimension=bits_per_feature, n_steps=n_steps, n_dimensions=n_dimensions, momentum=momentum, step_size=step_size,  encoding=encoding)
-dataset.normalize() # TODO note that it is more natural to do this outside of dataset given parameter grouping above...
-data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+model.record = False # TODO uncomment
 for epoch in range(epochs):
-    dataset.data['x'].to(device)
-    dataset.data['y'].to(device)
+    data_loader.dataset.data['x'].to(device)
+    data_loader.dataset.data['y'].to(device)
     for x, y in data_loader:
+        # ------------------------------------------------------------------
+        # TODO DEBUG DELETE
+
+        # sum without normalization or encoding:
+        # m = 0
+        # print(torch.sum(x[m:m+1], dim=1), y[m]) # works
+
+        # sum with normalization but without encoding wont work since they are normalized differently, but then you can scale by a fixed constant!
+        m = 0
+        k = y[m:m+1] / torch.sum(x[m:m+1], dim=1)
+        m = 1
+        print(torch.sum(x[m:m+1], dim=1) * k, y[m]) # doesnt work
+
+        # testing comutative property: sum with manual normalization (no normalization or encoding)
+        # m = 0
+        # k = x[m:m+1, 0]  # select random k
+        # m = 1
+        # print(torch.sum(x[m:m+1], dim=1) * k, y[m] * k) # works
+        # print(torch.sum(x[m:m+1] * k, dim=1), y[m] * k) # works
+        # ------------------------------------------------------------------
+
         optimizer.zero_grad()
         y_hat = model(x)
         loss = criterion(y_hat, y)
@@ -92,3 +109,5 @@ for epoch in range(epochs):
 
     model.flush_history()
     model.record = False # only need history from first epoch if the process is deterministic...
+    if epoch == epochs - 1:
+        plot_predictions_and_labels(y_hat, y)

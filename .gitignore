@@ -1,5 +1,6 @@
 # directories and files
 out/
+data/
 docker/docker.sh
 
 # Byte-compiled / optimized / DLL files

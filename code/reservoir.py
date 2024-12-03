@@ -3,6 +3,7 @@ import torch.nn as nn
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timezone
+from encoding import bin2dec
 
 
 class BooleanReservoir(nn.Module):
@@ -72,8 +73,6 @@ class BooleanReservoir(nn.Module):
             self.history_buffer_file_count += 1
 
     def forward(self, x):
-        m, s, d, b = x.shape
-        outputs = []
         '''
         Accepts the decomposed velocities encoded in boolean format. In 2d: x = dx, dy
         Since each series of velocities corresponds to a single coordinate label the shape of x is: mxsxd
@@ -89,16 +88,18 @@ class BooleanReservoir(nn.Module):
 
         TODO order of operations below: input step vs state index calculation!! good?
         '''
+        m, s, d, b = x.shape
+        outputs = []
         
         for i in range(m):
             self.sample_init()
             # INPUT LAYER
             for j in range(s):
                 # Overwrite specific reservoir nodes with input data
-                # TODO we need bits_per_feature * n_features bits in the reservoir for this approach!!!
+                # TODO we need at least bits_per_feature * n_features bits in the reservoir for this approach!!!
                 self.reservoir[self.input_nodes] = x[i][j].flatten()
 
-                # Record states
+                # Record states # TODO what granularity do we want?
                 if self.record:
                     record = dict()
                     record['sample'] = i 
@@ -122,66 +123,49 @@ class BooleanReservoir(nn.Module):
         return torch.stack(outputs)
 
 
+class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
+    # Linear model for sanity check to verify:
+    # a) Binary encoding is a lossless transformation
+    # b) Path integration task can be computed by summing steps
+    # Note that x values should be in the range [0, 1] for use of bin2dec
+    # Encoding assumed to be binary
+    def __init__(self):
+        super(PathIntegrationVerificationModelBinaryEncoding, self).__init__()
+        self.scaler = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
-class ThreeLayerPerceptron2(nn.Module):
-    def __init__(self, bits_per_feature, n_features):
-        super(ThreeLayerPerceptron, self).__init__()
-        pass
-        
-        '''
-        # bits_per_features
-        boolean representation of feature
-
-        # n_features
-        number of features
-
-        # example init
-        model = ThreeLayerPerceptron(5, 2)
-
-        # example forward
-        y_hat = model(x)
-        x has dimension torch.Size([50, 1000, 2, 5]) and is a boolean type
-        y hat is torch.Size([50, 2]) and is a float
-        note that 50 is the batch size in this case
-        each x sample has 1000 parts which predict a single (x, y) float coordinate
-        '''
-
-
-class ThreeLayerPerceptron(nn.Module):
-    def __init__(self, bits_per_feature, n_features, n_steps):
-        super(ThreeLayerPerceptron, self).__init__()
-
-        # Store the number of features, bits per feature, and steps
-        self.bits_per_feature = bits_per_feature
-        self.n_features = n_features
-        input_size = n_steps * n_features * bits_per_feature
-        
-        # Define layers with the computed input size
-        self.layer1 = nn.Linear(input_size, 512)
-        self.layer2 = nn.Linear(512, 256)
-        self.layer3 = nn.Linear(256, 2)
-        
-        # Activation function
-        self.relu = nn.ReLU()
-        
     def forward(self, x):
-        # Ensure input is float type
-        x = x.float()
-        
-        # Flatten the input tensor except for the batch dimension
-        x = x.view(x.size(0), -1)  # Shape: [batch_size, variable_size * n_features * bits_per_feature]
+        m, s, d, b = x.shape
+        x = x.to(dtype=torch.float32)
+        x = x.view(m * s * d, -1)          # role out dims
+        x = bin2dec(x, b).to(torch.float)  # undo bit encoding 
+        x = x.view(m, s, d)                # recover dimensions
+        x = torch.sum(x, dim=1)            # sum over s time steps
+        x *= self.scaler                   # scale to y range 
+        return x
 
-        # Pass through the first layer
-        x = self.layer1(x)
-        x = self.relu(x)
-        
-        # Pass through the second layer
-        x = self.layer2(x)
-        x = self.relu(x)
-        
-        # Pass through the third layer
-        y_hat = self.layer3(x)
-        
-        return y_hat
- 
+    def flush_history(self):
+        pass
 
+
+class PathIntegrationVerificationModel(nn.Module):
+    # Linear model for sanity check to verify:
+    # a) Binary encoding is a lossless transformation
+    # b) Path integration task can be computed by summing steps
+    # Encoding assumed to be a generalized linear transformation
+    def __init__(self, bits_per_feature):
+        super(PathIntegrationVerificationModel, self).__init__()
+        self.decoder = nn.Linear(bits_per_feature, 1)
+        self.scaler = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+
+    def forward(self, x):
+        m, s, d, b = x.shape
+        x = x.to(dtype=torch.float32)
+        x = x.view(m * s * d, -1)          # role out dims
+        x = self.decoder(x)                # undo bit encoding 
+        x = x.view(m, s, d)                # recover dimensions
+        x = torch.sum(x, dim=1)            # sum over s time steps
+        x *= self.scaler                   # scale to y range 
+        return x
+
+    def flush_history(self):
+        pass
