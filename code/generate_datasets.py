@@ -9,7 +9,7 @@ def generate_dataset_levy_square_no_momentum():
 
     # Parameters: Path Integration
     n_dimensions = 2
-    n_steps = 2
+    n_steps = 25 
     strategy = LevyFlightStrategy(momentum=0, bias=0)
     square = generate_polygon_points(4, 10, rotation=pi/4) 
     boundary = PolygonBoundary(points=square)

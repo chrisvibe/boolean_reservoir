@@ -54,29 +54,62 @@ def plot_random_walk_model(x: np.array, model, y: np.array):
     
     plt.savefig("/out/incremental_error.png")
 
-
-def plot_predictions_and_labels(y_hat, y):
+def plot_predictions_and_labels(y_hat, y, tolerance=0.1, scale=None):
     fig, axs = plt.subplots(2, 2, figsize=(12, 12))
 
-    for i, (data, label) in enumerate([(y_hat, r'$\hat{y}$'), (y, 'y')]):
-        array = data.detach().numpy()
-        x_coords = array[:, 0]
-        y_coords = array[:, 1]
+    # Convert tensors to numpy arrays
+    y_hat_np = y_hat.detach().numpy()
+    y_np = y.detach().numpy()
 
-        # Create a box plot
-        axs[i, 0].boxplot([x_coords, y_coords], labels=[r'$\hat{x}$' if i == 0 else 'x', r'$\hat{y}$' if i == 0 else 'y'])
-        axs[i, 0].set_title(f'Box Plot - {label}')
+    # Generate random colors
+    num_points = y_hat_np.shape[0]
+    colors = np.random.rand(num_points, 3)  # RGB colors
 
-        # Create a scatter plot
-        axs[i, 1].scatter(x_coords, y_coords, alpha=0.7)
-        axs[i, 1].set_xlabel(r'$\hat{x}$' if i == 0 else 'x')
-        axs[i, 1].set_ylabel(r'$\hat{y}$' if i == 0 else 'y')
-        axs[i, 1].set_title(f'Scatter Plot - {label}')
-        axs[i, 1].grid(True)
+    # Predictions (y_hat)
+    x_hat_coords = y_hat_np[:, 0]
+    y_hat_coords = y_hat_np[:, 1]
+
+    axs[0, 0].boxplot([x_hat_coords, y_hat_coords], labels=[r'$\hat{x}$', r'$\hat{y}$'])
+    axs[0, 0].set_title(r'Box Plot - $\hat{y}$')
+
+    axs[0, 1].scatter(x_hat_coords, y_hat_coords, c=colors, alpha=0.7, edgecolors='none')
+    axs[0, 1].set_xlabel(r'$\hat{x}$')
+    axs[0, 1].set_ylabel(r'$\hat{y}$')
+    axs[0, 1].set_title(r'Scatter Plot - $\hat{y}$')
+    axs[0, 1].grid(True)
+
+    # Actual labels (y)
+    x_coords = y_np[:, 0]
+    y_coords = y_np[:, 1]
+
+    axs[1, 0].boxplot([x_coords, y_coords], labels=['x', 'y'])
+    axs[1, 0].set_title('Box Plot - y')
+
+    # Check for errors within the given tolerance
+    markers = np.where(np.all(np.abs(y_hat_np - y_np) <= tolerance, axis=1), 'o', 'x')
+
+    for j, (x, y) in enumerate(zip(x_coords, y_coords)):
+        axs[1, 1].scatter(x, y, color=colors[j], alpha=0.7, marker=markers[j], edgecolors='none')
+
+    axs[1, 1].set_xlabel('x')
+    axs[1, 1].set_ylabel('y')
+    axs[1, 1].set_title('Scatter Plot - y')
+    axs[1, 1].grid(True)
 
     # Adjust layout
     plt.tight_layout()
     plt.ion()
-    
+
+    # Scale axes if scale is provided
+    if scale:
+        # Scale y-axis for box plots
+        for ax in [axs[0, 0], axs[1, 0]]:
+            ax.set_ylim(scale)
+        
+        # Scale both axes for scatter plots
+        for ax in [axs[0, 1], axs[1, 1]]:
+            ax.set_xlim(scale)
+            ax.set_ylim(scale)
+
     # Save the figure
     plt.savefig("/out/predictions_versus_labels.png")

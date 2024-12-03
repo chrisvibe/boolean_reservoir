@@ -28,16 +28,16 @@ def dataset_init(batch_size, bits_per_feature, encoding):
     dataset = ConstrainedForagingPathDataset(data_path='/data/levy_walk/25_steps/square_boundary/dataset.pt')
     dataset.set_normalizer_x(min_max_normalization)
     dataset.set_normalizer_y(min_max_normalization)
-    dataset.normalize() # TODO uncomment!!!
+    dataset.normalize()
     encoder = lambda x: float_array_to_boolean(x, bits=bits_per_feature, encoding_type=encoding)
     dataset.set_encoder_x(encoder)
-    # dataset.encode_x() # TODO uncomment!!!
+    dataset.encode_x()
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data_loader
 
 # Parameters: Input Layer
 encoding = 'binary'
-bits_per_feature = 5  # Number of bits per dimension
+bits_per_feature = 10  # Number of bits per dimension
 input_dim = 2  # Number of dimensions
 
 # Parameters: Reservoir Layer
@@ -61,8 +61,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
 batch_size = 100
-epochs = 25
-radius_threshold = 0.1
+epochs = 250
+radius_threshold = 0.05
 data_loader = dataset_init(batch_size, bits_per_feature, encoding)
 
 
@@ -71,27 +71,6 @@ for epoch in range(epochs):
     data_loader.dataset.data['x'].to(device)
     data_loader.dataset.data['y'].to(device)
     for x, y in data_loader:
-        # ------------------------------------------------------------------
-        # TODO DEBUG DELETE
-
-        # sum without normalization or encoding:
-        # m = 0
-        # print(torch.sum(x[m:m+1], dim=1), y[m]) # works
-
-        # sum with normalization but without encoding wont work since they are normalized differently, but then you can scale by a fixed constant!
-        m = 0
-        k = y[m:m+1] / torch.sum(x[m:m+1], dim=1)
-        m = 1
-        print(torch.sum(x[m:m+1], dim=1) * k, y[m]) # doesnt work
-
-        # testing comutative property: sum with manual normalization (no normalization or encoding)
-        # m = 0
-        # k = x[m:m+1, 0]  # select random k
-        # m = 1
-        # print(torch.sum(x[m:m+1], dim=1) * k, y[m] * k) # works
-        # print(torch.sum(x[m:m+1] * k, dim=1), y[m] * k) # works
-        # ------------------------------------------------------------------
-
         optimizer.zero_grad()
         y_hat = model(x)
         loss = criterion(y_hat, y)
@@ -110,4 +89,4 @@ for epoch in range(epochs):
     model.flush_history()
     model.record = False # only need history from first epoch if the process is deterministic...
     if epoch == epochs - 1:
-        plot_predictions_and_labels(y_hat, y)
+        plot_predictions_and_labels(y_hat, y, tolerance=radius_threshold, scale=[0, 1])

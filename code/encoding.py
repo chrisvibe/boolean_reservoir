@@ -47,31 +47,13 @@ def bin2dec(x, bits, small_endian=False):
     else:
         mask = 2 ** torch.arange(bits - 1, -1, -1, device=x.device)
     mask.to(x.device, x.dtype)
-    return torch.sum(mask * x, -1).long()
-
-# def min_max_normalization(data): # TODO problem here!!!!!!!!!!!!! Bug
-#     data = data.to(torch.float)
-#     min_ = data.min(axis=0).values
-#     max_ = data.max(axis=0).values
-    # return (data - min_) / (max_ - min_)
-
-# def min_max_normalization(data): # TODO try just doing a random normalization here to see if problems persist...
-#     data = data.to(torch.float)
-#     min_ = data[10:11, 0:1] - 0.3
-#     max_ = data[13:14, 0:1] + 0.3
-#     return (data - min_) / (max_ - min_)
+    return torch.sum(mask * x, -1).long().unsqueeze(dim=1)
 
 def min_max_normalization(data):
     data = data.to(torch.float)
     min_ = data.amin(dim=(0, 1), keepdim=True)  # Minimum along the samples and steps dimensions
     max_ = data.amax(dim=(0, 1), keepdim=True)  # Maximum along the samples and steps dimensions
     return (data - min_) / (max_ - min_)
-
-# def standard_normalization(data): # TODO this probably has a bug, see bug above...
-#     data = data.to(torch.float)
-#     means = data.mean(axis=0)
-#     stds = data.std(axis=0)
-#     return (data - means) / stds
 
 def standard_normalization(data):
     data = data.to(torch.float)

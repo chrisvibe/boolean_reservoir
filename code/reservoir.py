@@ -131,16 +131,18 @@ class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
     # Encoding assumed to be binary
     def __init__(self):
         super(PathIntegrationVerificationModelBinaryEncoding, self).__init__()
-        self.scaler = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.shift = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
     def forward(self, x):
         m, s, d, b = x.shape
         x = x.to(dtype=torch.float32)
         x = x.view(m * s * d, -1)          # role out dims
         x = bin2dec(x, b).to(torch.float)  # undo bit encoding 
+        x *= self.scale                    # scale to y range 
+        x += self.shift                    # shift to y range 
         x = x.view(m, s, d)                # recover dimensions
         x = torch.sum(x, dim=1)            # sum over s time steps
-        x *= self.scaler                   # scale to y range 
         return x
 
     def flush_history(self):
@@ -155,16 +157,18 @@ class PathIntegrationVerificationModel(nn.Module):
     def __init__(self, bits_per_feature):
         super(PathIntegrationVerificationModel, self).__init__()
         self.decoder = nn.Linear(bits_per_feature, 1)
-        self.scaler = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.shift = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
     def forward(self, x):
         m, s, d, b = x.shape
         x = x.to(dtype=torch.float32)
         x = x.view(m * s * d, -1)          # role out dims
         x = self.decoder(x)                # undo bit encoding 
+        x *= self.scale                    # scale to y range 
+        x += self.shift                    # shift to y range 
         x = x.view(m, s, d)                # recover dimensions
         x = torch.sum(x, dim=1)            # sum over s time steps
-        x *= self.scaler                   # scale to y range 
         return x
 
     def flush_history(self):

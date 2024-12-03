@@ -158,7 +158,7 @@ def stretch_polygon(points, stretch_x, stretch_y):
 
 if __name__ == '__main__':
     # boundary = NoBoundary()
-    square = generate_polygon_points(4, 500, rotation=np.pi/4) 
+    square = generate_polygon_points(4, 10, rotation=np.pi/4) 
     # rectangle = stretch_polygon(square, 2, 1/2) 
     # triangle = generate_polygon_points(3, 500) 
     # pentagon = generate_polygon_points(5, 500) 
