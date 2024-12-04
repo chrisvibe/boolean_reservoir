@@ -8,13 +8,16 @@ from primes import primes
 
 
 class BooleanReservoir(nn.Module):
-    def __init__(self, bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, record=True, out_path='/out', max_history_buffer_size=10000):
+    def __init__(self, graph, lut, bits_per_feature, n_features, reservoir_size, output_size, device, record=False, out_path='/out', max_history_buffer_size=10000):
         super(BooleanReservoir, self).__init__()
+        self.graph = graph
+        self.lut = lut
         self.bits_per_feature = bits_per_feature
         self.reservoir_size = reservoir_size
         self.output_size = output_size
         self.device = device
 
+        # Logging
         self.out_path = Path(out_path)
         self.folders = ['reservoir_history']
         for f in self.folders:
@@ -26,15 +29,8 @@ class BooleanReservoir(nn.Module):
         self.history_buffer = list() 
         self.history_buffer_file_count = 0
         
-        # Create a list of random lookup tables for each node in the reservoir
-        lut_list = [torch.randint(0, 2, (2 ** lut_length,), dtype=torch.bool) for _ in range(reservoir_size)]
-        self.lut_tensor = torch.stack(lut_list).to(device, dtype=torch.int)
-
         # Initialize reservoir states
-        self.initial_reservoir = torch.randint(0, 2, (reservoir_size,), dtype=torch.bool).to(device)
-
-        # Initialize graph (adjacency matrix)
-        self.W_reservoir = torch.randint(0, 2, (reservoir_size, reservoir_size), dtype=torch.bool).to(device)
+        self.initial_reservoir = torch.randint(0, 2, (reservoir_size,), dtype=torch.bool)
 
         # Dense readout layer
         self.readout = nn.Linear(reservoir_size, output_size)
@@ -43,11 +39,11 @@ class BooleanReservoir(nn.Module):
         self.primes = torch.tensor(primes[:reservoir_size], dtype=torch.int) # start from 3
 
         # precompute for later...
-        self.node_indeces = torch.arange(self.reservoir_size).to(self.device)
+        self.node_indeces = torch.arange(self.reservoir_size)
 
         # Preselect which reservoir nodes will be overwritten by the input data
         # TODO confine features to certain areas of the reservoir??? Now they are mixing...
-        self.input_nodes = torch.randperm(reservoir_size)[:bits_per_feature * n_features].to(device)
+        self.input_nodes = torch.randperm(reservoir_size)[:bits_per_feature * n_features]
 
 
     def sample_init(self):
@@ -90,7 +86,7 @@ class BooleanReservoir(nn.Module):
         '''
         m, s, d, b = x.shape
         outputs = []
-        
+
         for i in range(m):
             self.sample_init()
             # INPUT LAYER
@@ -107,11 +103,11 @@ class BooleanReservoir(nn.Module):
                     self.save_record(record)
 
                 # Calculate an index for each reservoir state
-                state_idx = (self.reservoir * self.primes * self.W_reservoir).sum(dim=1)
+                state_idx = (self.reservoir * self.primes * self.graph).sum(dim=1)
 
                 # RESERVOIR LAYER
                 # Use LUT to update the reservoir nodes in parallel
-                perturbed_reservoir = (self.lut_tensor[self.node_indeces, state_idx]).bool()
+                perturbed_reservoir = (self.lut[self.node_indeces, state_idx]).bool()
             
                 # Update the reservoir
                 self.reservoir = perturbed_reservoir

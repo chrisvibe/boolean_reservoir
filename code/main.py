@@ -9,6 +9,8 @@ from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from visualisations import plot_predictions_and_labels
+from luts import lut_random 
+from graphs import graph_average_k_income_edges_w_self_loops 
 
 '''
 TODO
@@ -16,8 +18,6 @@ TODO
 - lup needs a max connectivity (or else it becomes super long)
 - how to enforce and measure a target connectivity
 - take a spectral radius measurement of reservoir apriori
-- good threshold of output data
-- how to encode input velocities as binary data
 - decide on how many nodes are used for input (input redundancy)
 - input nodes override select reservoir nodes, is this good?
 - scaling issue if we want many connections with current lut
@@ -51,7 +51,9 @@ output_dim = 2  # Number of dimensions
 
 # Create model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device).to(device)
+# lut = lut_random(reservoir_size, lut_length)
+# graph = graph_average_k_income_edges_w_self_loops(reservoir_size, avg_k=2)
+# model = BooleanReservoir(graph, lut, bits_per_feature, input_dim, reservoir_size, output_dim, device, record=False).to(device)
 
 # uncomment for alternative model
 # model = PathIntegrationVerificationModel(bits_per_feature, input_dim).to(device)
@@ -68,7 +70,6 @@ radius_threshold = 0.05
 data_loader = dataset_init(batch_size, bits_per_feature, encoding)
 
 
-model.record = False # TODO uncomment
 x_test, y_test = data_loader.dataset.data['x_test'].to(device), data_loader.dataset.data['y_test'].to(device)
 for epoch in range(epochs):
     data_loader.dataset.data['x'].to(device)
@@ -82,6 +83,8 @@ for epoch in range(epochs):
 
     # Calculate accuracy after each epoch
     with torch.no_grad():
+        data_loader.dataset.data['x_test'].to(device)
+        data_loader.dataset.data['y_test'].to(device)
         y_hat_test = model(x_test)
         # Compute Euclidean distance between predicted and true coordinates
         distances = torch.sqrt(torch.sum((y_hat_test - y_test) ** 2, dim=1))
