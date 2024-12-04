@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib
 import numpy as np
+from copy import deepcopy
+from encoding import bin2dec
 matplotlib.use('Agg')
 
 def plot_random_walk(positions, boundary):
@@ -113,3 +115,25 @@ def plot_predictions_and_labels(y_hat, y, tolerance=0.1, scale=None):
 
     # Save the figure
     plt.savefig("/out/predictions_versus_labels.png")
+
+def plot_binary_encoding_error_hist_and_boxplotplot(dataset, bins):
+    x0 = deepcopy(dataset.data['x']).numpy()
+    # distances = np.sqrt((dataset.data['y'].numpy() ** 2).sum(axis=1))
+    dataset.encode_x()
+    x1 = bin2dec(dataset.data['x'], dataset.data['x'].shape[-1]).numpy()
+    diff = (x0.ravel() - x1.ravel())
+
+    fig, axes = plt.subplots(1, 2, figsize=(20, 10))  # 1 row, 2 columns
+    
+    # Histogram on the left
+    axes[0].hist(diff, bins=bins)
+    # axes[0].hist(distances, bins=bins)
+    axes[0].set_title("Histogram")
+
+    # Boxplot on the right
+    axes[1].boxplot(diff, vert=False)
+    axes[1].set_title("Boxplot")
+
+    # Save the plot to an image file
+    plt.savefig("/out/binary_ecoding_error_hist_and_boxplot.png")
+    plt.show()

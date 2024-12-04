@@ -4,10 +4,11 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime, timezone
 from encoding import bin2dec
+from primes import primes
 
 
 class BooleanReservoir(nn.Module):
-    def __init__(self, bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, primes, record=True, out_path='/out', seed=42, max_history_buffer_size=10000):
+    def __init__(self, bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, record=True, out_path='/out', seed=42, max_history_buffer_size=10000):
         super(BooleanReservoir, self).__init__()
         torch.manual_seed(seed)  # Seed for reproducibility
         self.bits_per_feature = bits_per_feature
@@ -129,19 +130,18 @@ class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
     # b) Path integration task can be computed by summing steps
     # Note that x values should be in the range [0, 1] for use of bin2dec
     # Encoding assumed to be binary
-    def __init__(self):
+    # Note that this assumes the number of steps is constant; if the number of steps changes then a secondary scaling is necesary after summation!
+    def __init__(self, n_dims):
         super(PathIntegrationVerificationModelBinaryEncoding, self).__init__()
-        self.scale = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
-        self.shift = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.scale = nn.Linear(n_dims, n_dims)
 
     def forward(self, x):
         m, s, d, b = x.shape
         x = x.to(dtype=torch.float32)
         x = x.view(m * s * d, -1)          # role out dims
-        x = bin2dec(x, b).to(torch.float)  # undo bit encoding 
-        x *= self.scale                    # scale to y range 
-        x += self.shift                    # shift to y range 
+        x = bin2dec(x, b)                  # undo bit encoding 
         x = x.view(m, s, d)                # recover dimensions
+        x = self.scale(x)                  # scale to y range
         x = torch.sum(x, dim=1)            # sum over s time steps
         return x
 
@@ -154,20 +154,19 @@ class PathIntegrationVerificationModel(nn.Module):
     # a) Binary encoding is a lossless transformation
     # b) Path integration task can be computed by summing steps
     # Encoding assumed to be a generalized linear transformation
-    def __init__(self, bits_per_feature):
+    # Note that this assumes the number of steps is constant; if the number of steps changes then a secondary scaling is necesary after summation!
+    def __init__(self, bits_per_feature, n_dims):
         super(PathIntegrationVerificationModel, self).__init__()
         self.decoder = nn.Linear(bits_per_feature, 1)
-        self.scale = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
-        self.shift = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.scale = nn.Linear(n_dims, n_dims)
 
     def forward(self, x):
         m, s, d, b = x.shape
         x = x.to(dtype=torch.float32)
         x = x.view(m * s * d, -1)          # role out dims
         x = self.decoder(x)                # undo bit encoding 
-        x *= self.scale                    # scale to y range 
-        x += self.shift                    # shift to y range 
         x = x.view(m, s, d)                # recover dimensions
+        x = self.scale(x)                  # scale to y range
         x = torch.sum(x, dim=1)            # sum over s time steps
         return x
 

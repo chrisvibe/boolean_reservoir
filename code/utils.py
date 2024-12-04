@@ -9,3 +9,37 @@ def set_seed(seed=42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+def balance_dataset(dataset, num_bins=100):
+    x = dataset.data['x']
+    y = dataset.data['y']
+    
+    # Step 1: Calculate the distance of each point from the origin
+    distances = torch.sqrt((y ** 2).sum(dim=1))
+
+    # Step 2: Create distance bins
+    bins = torch.linspace(distances.min(), distances.max(), num_bins + 1)
+
+    # Step 3: Assign points to bins
+    bin_indices = torch.bucketize(distances, bins) - 1  # subtracting 1 because bucketize returns 1-based index
+
+    # Step 4: Sample points uniformly from each bin
+    balanced_indices = []
+    target_points_per_bin = len(y) // num_bins  # Number of points you want in each bin
+
+    for i in range(num_bins):
+        bin_points_indices = (bin_indices == i).nonzero().squeeze()
+        if len(bin_points_indices) > target_points_per_bin:
+            sampled_indices = bin_points_indices[torch.randperm(len(bin_points_indices))[:target_points_per_bin]]
+        else:
+            sampled_indices = bin_points_indices
+        balanced_indices.append(sampled_indices)
+
+    # Concatenate all the balanced indices into a single tensor
+    balanced_indices = torch.cat(balanced_indices, dim=0)
+
+    # Use the balanced indices to create balanced versions of x and y
+    n_before, n_after = len(x), len(balanced_indices)
+    dataset.data['x'] = x[balanced_indices]
+    dataset.data['y'] = y[balanced_indices]
+    print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100}% reduction)')

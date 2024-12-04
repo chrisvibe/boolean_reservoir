@@ -7,6 +7,7 @@ from encoding import float_array_to_boolean, min_max_normalization
 from constrained_foraging_path import random_walk, Boundary, NoBoundary, positions_to_p_v_pairs, generate_polygon_points, stretch_polygon, PolygonBoundary, LevyFlightStrategy 
 from numpy import pi
 from pathlib import Path
+from math import floor
 
 class ConstrainedForagingPathDataset(Dataset):
     def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='/data/test/dataset.pt', generate_data=False):
@@ -37,7 +38,24 @@ class ConstrainedForagingPathDataset(Dataset):
 
         return {
             'x': torch.stack(data_x),
-            'y': torch.stack(data_y)
+            'y': torch.stack(data_y),
+        }
+
+    def split_dataset(self, split=(0.6, 0.3, 0.1)):
+        assert sum(split) == 1, "Split ratios must sum to 1."
+
+        x, y = self.data['x'], self.data['y']
+        idx = torch.randperm(x.size(0))
+
+        train_end, dev_end = floor(split[0] * x.size(0)), floor((split[0] + split[1]) * x.size(0))
+
+        self.data = {
+            'x': x[idx[:train_end]],
+            'y': y[idx[:train_end]],
+            'x_dev': x[idx[train_end:dev_end]],
+            'y_dev': y[idx[train_end:dev_end]],
+            'x_test': x[idx[dev_end:]],
+            'y_test': y[idx[dev_end:]],
         }
 
     def save_data(self):

@@ -47,7 +47,8 @@ def bin2dec(x, bits, small_endian=False):
     else:
         mask = 2 ** torch.arange(bits - 1, -1, -1, device=x.device)
     mask.to(x.device, x.dtype)
-    return torch.sum(mask * x, -1).long().unsqueeze(dim=1)
+    vals = torch.sum(mask * x, -1).long()
+    return vals / (2**bits - 1)
 
 def min_max_normalization(data):
     data = data.to(torch.float)

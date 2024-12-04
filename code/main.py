@@ -1,6 +1,6 @@
 import torch
 
-from utils import set_seed
+from utils import set_seed, balance_dataset
 seed = 42 # TODO is this global now???!!!
 set_seed(42)
 
@@ -26,12 +26,17 @@ TODO
 
 def dataset_init(batch_size, bits_per_feature, encoding):
     dataset = ConstrainedForagingPathDataset(data_path='/data/levy_walk/25_steps/square_boundary/dataset.pt')
+    bins = 100
+    balance_dataset(dataset, num_bins=bins) # Note that data range play a role here (outliers dangerous)
     dataset.set_normalizer_x(min_max_normalization)
     dataset.set_normalizer_y(min_max_normalization)
     dataset.normalize()
     encoder = lambda x: float_array_to_boolean(x, bits=bits_per_feature, encoding_type=encoding)
     dataset.set_encoder_x(encoder)
+    # from visualisations import plot_binary_encoding_error_hist_and_boxplotplot # TODO debug comment out
+    # plot_binary_encoding_error_hist_and_boxplotplot(dataset, bins=bins) # TODO debug comment out
     dataset.encode_x()
+    dataset.split_dataset()
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     return data_loader
 
@@ -49,15 +54,15 @@ output_dim = 2  # Number of dimensions
 
 # Create model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device, primes, seed=seed).to(device)
+# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device, seed=seed).to(device)
 
 # uncomment for alternative model
-# model = PathIntegrationVerificationModel(bits_per_feature).to(device)
-model = PathIntegrationVerificationModelBinaryEncoding().to(device)
+# model = PathIntegrationVerificationModel(bits_per_feature, input_dim).to(device)
+model = PathIntegrationVerificationModelBinaryEncoding(input_dim).to(device)
 
 # Training setup
 criterion = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 
 # Training loop
 batch_size = 100
@@ -67,6 +72,7 @@ data_loader = dataset_init(batch_size, bits_per_feature, encoding)
 
 
 model.record = False # TODO uncomment
+x_test, y_test = data_loader.dataset.data['x_test'].to(device), data_loader.dataset.data['y_test'].to(device)
 for epoch in range(epochs):
     data_loader.dataset.data['x'].to(device)
     data_loader.dataset.data['y'].to(device)
@@ -79,12 +85,13 @@ for epoch in range(epochs):
 
     # Calculate accuracy after each epoch
     with torch.no_grad():
+        y_hat_test = model(x_test)
         # Compute Euclidean distance between predicted and true coordinates
-        distances = torch.sqrt(torch.sum((y_hat - y) ** 2, dim=1))
+        distances = torch.sqrt(torch.sum((y_hat_test - y_test) ** 2, dim=1))
         correct_predictions = distances < radius_threshold
-        accuracy = correct_predictions.sum().item() / batch_size
+        accuracy_test = correct_predictions.sum().item() / len(y_test)
 
-    print(f"Epoch: {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Accuracy: {accuracy:.4f}")
+        print(f"Epoch: {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Test Accuracy: {accuracy_test:.4f}")
 
     model.flush_history()
     model.record = False # only need history from first epoch if the process is deterministic...
