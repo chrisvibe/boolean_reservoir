@@ -8,9 +8,8 @@ from primes import primes
 
 
 class BooleanReservoir(nn.Module):
-    def __init__(self, bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, record=True, out_path='/out', seed=42, max_history_buffer_size=10000):
+    def __init__(self, bits_per_feature, n_features, reservoir_size, output_size, lut_length, device, record=True, out_path='/out', max_history_buffer_size=10000):
         super(BooleanReservoir, self).__init__()
-        torch.manual_seed(seed)  # Seed for reproducibility
         self.bits_per_feature = bits_per_feature
         self.reservoir_size = reservoir_size
         self.output_size = output_size

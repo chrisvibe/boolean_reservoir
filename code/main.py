@@ -1,7 +1,6 @@
 import torch
 
 from utils import set_seed, balance_dataset
-seed = 42 # TODO is this global now???!!!
 set_seed(42)
 
 from reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBinaryEncoding
@@ -33,8 +32,6 @@ def dataset_init(batch_size, bits_per_feature, encoding):
     dataset.normalize()
     encoder = lambda x: float_array_to_boolean(x, bits=bits_per_feature, encoding_type=encoding)
     dataset.set_encoder_x(encoder)
-    # from visualisations import plot_binary_encoding_error_hist_and_boxplotplot # TODO debug comment out
-    # plot_binary_encoding_error_hist_and_boxplotplot(dataset, bins=bins) # TODO debug comment out
     dataset.encode_x()
     dataset.split_dataset()
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -54,7 +51,7 @@ output_dim = 2  # Number of dimensions
 
 # Create model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device, seed=seed).to(device)
+# model = BooleanReservoir(bits_per_feature, input_dim, reservoir_size, output_dim, lut_length, device).to(device)
 
 # uncomment for alternative model
 # model = PathIntegrationVerificationModel(bits_per_feature, input_dim).to(device)
