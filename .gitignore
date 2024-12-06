@@ -2,6 +2,7 @@
 out/
 data/
 docker/docker.sh
+/code/experiments.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
