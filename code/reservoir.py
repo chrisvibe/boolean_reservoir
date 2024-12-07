@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 from encoding import bin2dec
 from graphs import graph2adjacency_list
 import networkx as nx
+from utils import make_folders
 
 
 class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
     # Linear model for sanity check to verify:
-    # a) Binary encoding is a lossless transformation
+    # a) Base 2 binary encoding is relatively lossless with a decent number of bits
     # b) Path integration task can be computed by summing steps
     # Note that x values should be in the range [0, 1] for use of bin2dec
-    # Encoding assumed to be binary
-    # Note that this assumes the number of steps is constant; if the number of steps changes then a secondary scaling is necesary after summation!
+    # Encoding assumed to be binary base 2
     def __init__(self, n_dims):
         super(PathIntegrationVerificationModelBinaryEncoding, self).__init__()
         self.scale = nn.Linear(n_dims, n_dims)
@@ -36,14 +36,13 @@ class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
 
 class PathIntegrationVerificationModel(nn.Module):
     # Linear model for sanity check to verify:
-    # a) Binary encoding is a lossless transformation
+    # a) Any reasonable binary encoding (not just base 2)
     # b) Path integration task can be computed by summing steps
     # Encoding assumed to be a generalized linear transformation
-    # Note that this assumes the number of steps is constant; if the number of steps changes then a secondary scaling is necesary after summation!
-    def __init__(self, bits_per_feature, n_dims):
+    def __init__(self, bits_per_feature, n_inputs):
         super(PathIntegrationVerificationModel, self).__init__()
         self.decoder = nn.Linear(bits_per_feature, 1)
-        self.scale = nn.Linear(n_dims, n_dims)
+        self.scale = nn.Linear(n_inputs, n_inputs)
 
     def forward(self, x):
         m, s, d, b = x.shape
@@ -58,29 +57,6 @@ class PathIntegrationVerificationModel(nn.Module):
     def flush_history(self):
         pass
 
-class PathIntegrationVerificationModelNoEncoding(nn.Module):
-    # Linear model for sanity check to verify:
-    # a) No encoding 
-    # b) Path integration task should NOT be solvable if the number of steps is CONSTANT
-    # b) Path integration task should be SOLVABLE if the number of steps is FLEXIBLE
-    # Note that this assumes the number of steps is constant; if the number of steps changes then a secondary scaling is necesary after summation!
-    def __init__(self, bits_per_feature, n_dims):
-        super(PathIntegrationVerificationModel, self).__init__()
-        self.decoder = nn.Linear(bits_per_feature, 1)
-        self.scale = nn.Linear(n_dims, n_dims)
-
-    def forward(self, x):
-        m, s, d, b = x.shape
-        x = x.to(dtype=torch.float32)
-        x = x.view(m * s * d, -1)          # role out dims
-        x = self.decoder(x)                # undo bit encoding 
-        x = x.view(m, s, d)                # recover dimensions
-        x = self.scale(x)                  # scale to y range
-        x = torch.sum(x, dim=1)            # sum over s time steps
-        return x
-
-    def flush_history(self):
-        pass
 
 
 class BooleanReservoir(nn.Module):
@@ -108,6 +84,7 @@ class BooleanReservoir(nn.Module):
         # Preselect which reservoir nodes will be perturbed for input
         # TODO confine features to certain areas of the reservoir??? Now they are mixing...
         self.input_nodes = torch.randperm(self.n_nodes)[:self.n_inputs * self.bits_per_feature]
+        # self.input_nodes2 = torch.randperm(self.n_nodes)[:self.n_inputs * self.bits_per_feature] # TODO delete
         
         # Precompute adj_list and expand it to the batch size
         self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.max_connectivity) 
@@ -121,10 +98,7 @@ class BooleanReservoir(nn.Module):
         # Logging
         self.out_path = Path(out_path)
         self.folders = ['reservoir_history']
-        for f in self.folders:
-            p = self.out_path / f 
-            if not p.exists():
-                p.mkdir(parents=True)
+        make_folders(self.out_path, self.folders) 
         self.record = record
         self.max_history_buffer_size = max_history_buffer_size
         self.history_buffer = list() 
@@ -193,10 +167,6 @@ class BooleanReservoir(nn.Module):
                 outputs_list.append(outputs)
             return torch.cat(outputs_list, dim=0)
 
-
-        # INPUT LAYER
-        # ----------------------------------------------------
-
         # Record states # TODO what granularity do we want?
         # if self.record:
         #     record = dict()
@@ -205,9 +175,13 @@ class BooleanReservoir(nn.Module):
         #     record['reservoir_states'] = (torch.clone(self.node_states).to(torch.int).numpy())
         #     self.save_record(record)
 
+        # INPUT LAYER
+        # ----------------------------------------------------
+
         for j in range(s):
             # Perturb specific reservoir nodes with input
             self.states_paralell[:m, self.input_nodes] ^= x[:, j].view(m, -1)
+            # self.states_paralell[:m, self.input_nodes2] ^= x[:, j].view(m, -1)
 
             # RESERVOIR LAYER
             # ----------------------------------------------------

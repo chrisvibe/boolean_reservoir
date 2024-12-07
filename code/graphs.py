@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 
 def adjacency_matrix_average_k_incoming_edges_w_self_loops(n_nodes, avg_k):
-    assert avg_k <= n_nodes
+    assert 0 <= avg_k <= n_nodes
     total_edges = round(n_nodes * avg_k)
     adj_matrix_flat = np.zeros(n_nodes * n_nodes, dtype=bool)
     adj_matrix_flat[:total_edges] = True

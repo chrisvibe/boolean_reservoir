@@ -10,11 +10,11 @@ class Boundary(ABC):
         self.points = points
 
     @abstractmethod
-    def is_inside(self, x, y):
+    def is_inside(self, p):
         pass
     
     @abstractmethod
-    def get_closest_distance_from_edge(self, x, y):
+    def get_closest_distance_from_edge(self, p):
         pass
     
     def generate_polygon_points(self):
@@ -26,87 +26,89 @@ class PolygonBoundary(Boundary):
         super().__init__(points)
         self.polygon = Polygon(points)
 
-    def is_inside(self, x, y):
-        point = Point(x, y)
+    def is_inside(self, p):
+        point = Point(p)
         return self.polygon.contains(point)
 
-    def get_closest_distance_from_edge(self, x, y):
-        point = Point(x, y)
+    def get_closest_distance_from_edge(self, p):
+        point = Point(p)
         return self.polygon.exterior.distance(point)
+
+class IntervalBoundary:
+    def __init__(self, interval):
+        self.interval = interval
+
+    def is_inside(self, p):
+        return self.interval[0] <= p <= self.interval[1]
+
+    def get_closest_distance_from_edge(self, p):
+        closest_distance = float('inf')
+        if self.is_inside(p):
+            return min(abs(p - self.min), abs(self.max - p))
+        return closest_distance
 
 class NoBoundary(Boundary):
     def __init__(self):
         super().__init__([])
 
-    def is_inside(self, x, y):
+    def is_inside(self, p):
         return True 
 
-    def get_closest_distance_from_edge(self, x, y):
+    def get_closest_distance_from_edge(self, p):
         return np.inf
 
 class WalkStrategy(ABC):
     @abstractmethod
-    def compute_step(self, x, y, boundary):
+    def compute_step(self, p, boundary):
         pass
 
 class SimpleRandomWalkStrategy(WalkStrategy):
-    def compute_step(self, x, y, boundary):
-        dx = random.uniform(-1, 1)
-        dy = random.uniform(-1, 1)
+    def compute_step(self, p, boundary):
+        dp = np.random.uniform(-1, 1, p.shape)
         
         # Update position ensuring it stays inside the boundary
-        new_x, new_y = x + dx, y + dy
-        if not boundary.is_inside(new_x, new_y):
-            new_x, new_y = x, y
+        new_p = p + dp 
+        if not boundary.is_inside(p):
+            new_p = p 
         
-        return new_x, new_y
+        return new_p 
 
 
 class LevyFlightStrategy(WalkStrategy):
-    def __init__(self, alpha=1.5, bias=1, momentum=0.9):
+    def __init__(self, dim=2, alpha=1.5, bias=1, momentum=0.9):
+        self.dim = dim
         self.alpha = alpha
         self.bias = bias
         self.momentum = momentum
 
         # Initialize previous velocities with zeros
-        self.vx_prev = 0
-        self.vy_prev = 0
+        self.v_prev = np.zeros(dim)
     
-    def compute_step(self, x, y, boundary):
+    def compute_step(self, p, boundary):
         # Generate step length from a power-law distribution
-        step_length = (np.random.pareto(self.alpha) + self.bias)
+        dp = (np.random.pareto(self.alpha, self.dim) + self.bias) * np.random.choice([-1, 1], size=p.shape)
         
-        # Generate a random angle
-        angle = np.random.uniform(0, 2 * np.pi)
-        
-        # Compute the displacement in x and y directions
-        dx = step_length * math.cos(angle)
-        dy = step_length * math.sin(angle)
-
         # Apply momentum by preserving contribution from previous values
-        dx = self.momentum * self.vx_prev + (1 - self.momentum) * dx
-        dy = self.momentum * self.vy_prev + (1 - self.momentum) * dy
+        dp = self.momentum * self.v_prev + (1 - self.momentum) * dp
 
         # Update previous velocities
-        self.vx_prev = dx
-        self.vy_prev = dy
+        self.vp_prev = dp
         
         # Update position ensuring it stays inside the boundary
-        new_x, new_y = x + dx, y + dy
-        if not boundary.is_inside(new_x, new_y):
-            new_x, new_y = x, y
+        new_p = p + dp
+        if not boundary.is_inside(new_p):
+            new_p = p
         
-        return new_x, new_y
+        return new_p
 
 # Function to simulate the random walk with a strategy
-def random_walk(steps, strategy: WalkStrategy, boundary: Boundary):
-    mouse_x, mouse_y = 0, 0
-    
+def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary):
+    agent_p = np.zeros(dim) 
     positions = []
-    
+    # positions.append((agent_p))
     for _ in range(steps):
-        mouse_x, mouse_y = strategy.compute_step(mouse_x, mouse_y, boundary)
-        positions.append((mouse_x, mouse_y))
+        agent_p = strategy.compute_step(agent_p, boundary)
+        positions.append((agent_p))
         
     return np.array(positions)
 
@@ -157,23 +159,21 @@ def stretch_polygon(points, stretch_x, stretch_y):
 
 
 if __name__ == '__main__':
+    dim = 1
+    # -------------------------------------------------------------
     # boundary = NoBoundary()
-    square = generate_polygon_points(4, 10, rotation=np.pi/4) 
-    # rectangle = stretch_polygon(square, 2, 1/2) 
-    # triangle = generate_polygon_points(3, 500) 
-    # pentagon = generate_polygon_points(5, 500) 
-    # hexagon = generate_polygon_points(6, 500) 
-    # circle = generate_polygon_points(20, 10) 
-    boundary = PolygonBoundary(points=square)
+    boundary = IntervalBoundary([-.1, .1]) 
+    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
 
-    # Choose a strategy
-    # strategy = SimpleRandomWalkStrategy()
-    # strategy = LevyFlightStrategy(momentum=0, bias=0)
-    strategy = LevyFlightStrategy(momentum=0.9, bias=0)
+    dim = 2
+    # -------------------------------------------------------------
+    # boundary = NoBoundary()
+    square = generate_polygon_points(4, .1, rotation=np.pi/4) 
+    boundary = PolygonBoundary(points=square)
+    # strategy = SimpleRandomWalkStrategy(dim=dim)
+    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
 
     # Simulate the walk
-    steps = 25
-    positions = random_walk(steps, strategy, boundary)
-    
+    steps = 5
+    positions = random_walk(dim, steps, strategy, boundary)
     plot_random_walk(positions, boundary)
-

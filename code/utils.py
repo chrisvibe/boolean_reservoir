@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import random
+from collections.abc import Iterable
+from pathlib import Path
 
 # Ensure reproducibility by setting seeds globally
 def set_seed(seed=42):
@@ -9,6 +11,14 @@ def set_seed(seed=42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+def make_folders(out_path: Path | str, folders: Iterable[str]):
+    if isinstance(out_path, str):
+        out_path = Path(out_path)
+    for f in folders:
+        p = out_path / f 
+        if not p.exists():
+            p.mkdir(parents=True)
 
 def balance_dataset(dataset, num_bins=100):
     x = dataset.data['x']
@@ -29,6 +39,8 @@ def balance_dataset(dataset, num_bins=100):
 
     for i in range(num_bins):
         bin_points_indices = (bin_indices == i).nonzero().squeeze()
+        if bin_points_indices.dim() == 0:
+            bin_points_indices = bin_points_indices.unsqueeze(0)
         if len(bin_points_indices) > target_points_per_bin:
             sampled_indices = bin_points_indices[torch.randperm(len(bin_points_indices))[:target_points_per_bin]]
         else:
