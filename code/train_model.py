@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # encoding = 'base2'
     encoding = 'binary_embedding'
     n_inputs = 1
-    bits_per_feature = 16  # Number of bits per dimension
+    bits_per_feature = 42  # Number of bits per dimension
 
     # Parameters: Reservoir Layer
     n_nodes = 1000
@@ -53,9 +53,9 @@ if __name__ == '__main__':
 
     # Training
     batch_size = 100
-    epochs = 250
+    epochs = 100
     radius_threshold = 0.05
-    learning_rate = 0.005
+    learning_rate = 0.001
 
     # Create model
     graph = graph_average_k_incoming_edges_w_self_loops(n_nodes, avg_k)

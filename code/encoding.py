@@ -18,7 +18,7 @@ def float_array_to_boolean(values, encoding_type='binary', bits=8):
     elif encoding_type == 'tally':
         bin_values = dec2tally(values, bits)
     elif encoding_type == 'binary_embedding':
-        n = 4
+        n = 6
         b = bits // n
         assert bits % n == 0
         encoder = BinaryEmbedding(b=b, n=n)
