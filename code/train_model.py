@@ -41,10 +41,10 @@ if __name__ == '__main__':
     # encoding = 'base2'
     encoding = 'binary_embedding'
     n_inputs = 1
-    bits_per_feature = 20  # Number of bits per dimension
+    bits_per_feature = 16  # Number of bits per dimension
 
     # Parameters: Reservoir Layer
-    n_nodes = 1000
+    n_nodes = 100
     max_connectivity = 5
     avg_k = 2
 
