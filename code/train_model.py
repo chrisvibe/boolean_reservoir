@@ -38,17 +38,18 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Parameters: Input Layer
-    encoding = 'binary'
+    # encoding = 'base2'
+    encoding = 'binary_embedding'
     n_inputs = 1
-    bits_per_feature = 10  # Number of bits per dimension
+    bits_per_feature = 20  # Number of bits per dimension
 
     # Parameters: Reservoir Layer
-    n_nodes = 100
-    max_connectivity = 2
+    n_nodes = 1000
+    max_connectivity = 5
     avg_k = 2
 
     # Parameters: Output Layer
-    n_outputs = 2
+    n_outputs = n_inputs
 
     # Training
     batch_size = 100
@@ -93,10 +94,10 @@ if __name__ == '__main__':
             distances = torch.sqrt(torch.sum((y_hat_test - y_test) ** 2, dim=1))
             correct_predictions = distances < radius_threshold
             accuracy_test = correct_predictions.sum().item() / len(y_test)
-
             print(f"Epoch: {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Test Accuracy: {accuracy_test:.4f}")
+            # TODO add a visualixation of the train / test metrics
 
         model.flush_history()
         model.record = False # only need history from first epoch if the process is deterministic...
         if epoch == epochs - 1:
-            plot_predictions_and_labels(y_hat_test, y_test, tolerance=radius_threshold, axis_limits=[0, 1])
+            plot_predictions_and_labels(y_hat_test[:500], y_test[:500], tolerance=radius_threshold, axis_limits=[0, 1])

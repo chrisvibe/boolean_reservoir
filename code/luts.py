@@ -1,13 +1,31 @@
 import torch
 
-def lut_random(reservoir_size, lut_length, p=0.5):
-    # Step 1: Create a random float array
-    lut = torch.rand(reservoir_size, lut_length)
 
-    # Step 2: Update the last column based on the probability p
-    lut[:, -1] = torch.bernoulli(torch.full((reservoir_size,), p))
+def lut_random(n_nodes, max_connectivity, p=0.5):
+    assert 0 <= p <= 1
+    expected_sum = round(n_nodes * p)
+    
+    # Generate a random boolean tensor for the lut matrix
+    lut = torch.rand((n_nodes, max_connectivity)) < 0.5
+    
+    # Initialize the out_col tensor with zeros 
+    out_col = torch.zeros(n_nodes, dtype=torch.bool)
+    
+    # Set the first 'expected_sum' elements to True
+    out_col[:expected_sum] = True
+    
+    # Shuffle the out_col tensor
+    out_col = out_col[torch.randperm(n_nodes)]
+    
+    # Concatenate along the correct dimension
+    lut = torch.cat((lut, out_col.unsqueeze(1)), dim=1)
+    
+    return lut
 
-    # Step 3: Convert the whole array to boolean
-    lut_bool = lut > 0.5
-
-    return lut_bool
+if __name__ == '__main__':
+    n = 100
+    k = 3
+    p = 0.5
+    lut = lut_random(n, k, p=p)
+    print(torch.sum(lut, dim=0) / n)
+    print(lut[:10].to(torch.int).numpy())

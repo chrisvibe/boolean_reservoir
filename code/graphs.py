@@ -24,8 +24,7 @@ def graph2adjacency_list(graph: nx.Graph):
 
 
 if __name__ == '__main__':
-    # Example usage
-    reservoir_size = 3
-    avg_k = 2  # This is an example; you can adjust it.
+    reservoir_size = 20
+    avg_k = 2
     g = graph_average_k_incoming_edges_w_self_loops(reservoir_size, avg_k)
     print(graph2adjacency_list(g))

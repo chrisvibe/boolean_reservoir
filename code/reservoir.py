@@ -185,9 +185,10 @@ class BooleanReservoir(nn.Module):
 
             # RESERVOIR LAYER
             # ----------------------------------------------------
-            # Gather the states based on the expanded adj_list
+            # Gather the states based on the expanded adj_list (note that this is maybe not efficient...)
             state_expanded = self.states_paralell[:m].unsqueeze(-1).expand(-1, -1, self.max_connectivity)
             states_paralell = torch.gather(state_expanded, 1, self.adj_list_expanded[:m])
+
 
             # Apply mask as the adj_list has invalid connections due to homogenized tensor
             states_paralell &= self.adj_list_mask
