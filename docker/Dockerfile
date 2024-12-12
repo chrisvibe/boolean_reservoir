@@ -5,7 +5,8 @@ ENV PYTHONPATH=/code
 
 RUN apt-get update && apt-get install -y \
     tree \
-    neovim
+    neovim \
+    graphviz
 
 RUN conda env create -f /tmp/environment.yml
 # RUN /opt/conda/bin/conda init bash && \

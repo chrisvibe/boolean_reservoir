@@ -1,7 +1,7 @@
 import torch
 
 
-def float_array_to_boolean(values, encoding_type='binary', bits=8):
+def float_array_to_boolean(values, encoding_type='binary', bits=8, redundancy=1):
     '''
     accepts a point tensor with dimensions as columns and points are rows
     returns a boolean encoding of this
@@ -13,15 +13,14 @@ def float_array_to_boolean(values, encoding_type='binary', bits=8):
     assert torch.is_floating_point(values)
     assert torch.max(values) <= 1
     assert torch.min(values) >= 0
+    b = bits // redundancy
+    assert bits % redundancy == 0
     if encoding_type == 'base2':
-        bin_values = dec2bin(values, bits)
+        bin_values = dec2bin(values, b)
     elif encoding_type == 'tally':
-        bin_values = dec2tally(values, bits)
+        bin_values = dec2tally(values, b)
     elif encoding_type == 'binary_embedding':
-        n = 6
-        b = bits // n
-        assert bits % n == 0
-        encoder = BinaryEmbedding(b=b, n=n)
+        encoder = BinaryEmbedding(b=b, n=redundancy)
         bin_values = encoder.encode(values)
     else:
         raise ValueError(f"encoding {encoding_type} is not an option!")

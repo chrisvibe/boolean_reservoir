@@ -13,3 +13,5 @@ build_base_image()
 {
     docker build -t $image:$version $build_context
 }
+
+build_base_image

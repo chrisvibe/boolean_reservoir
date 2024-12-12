@@ -1,4 +1,4 @@
-from utils import set_seed, balance_dataset
+from utils import set_seed, balance_dataset, euclidean_distance_accuracy
 set_seed(42)
 
 import torch
@@ -7,7 +7,8 @@ from encoding import float_array_to_boolean, min_max_normalization
 from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader
 import torch.nn as nn
-from visualisations import plot_predictions_and_labels
+from visualisations import plot_predictions_and_labels, plot_train_history
+from graph_visualizations import plot_graph_with_weight_coloring_1D
 from luts import lut_random 
 from graphs import graph_average_k_incoming_edges_w_self_loops
 
@@ -38,15 +39,16 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Parameters: Input Layer
-    # encoding = 'base2'
-    encoding = 'binary_embedding'
+    encoding = 'tally'
     n_inputs = 1
-    bits_per_feature = 42  # Number of bits per dimension
+    bits_per_feature = 48
+    redundancy = 6
 
     # Parameters: Reservoir Layer
     n_nodes = 1000
-    max_connectivity = 5
-    avg_k = 2
+    max_connectivity = 5 
+    avg_k = 3
+    p = 0.5
 
     # Parameters: Output Layer
     n_outputs = n_inputs
@@ -59,7 +61,7 @@ if __name__ == '__main__':
 
     # Create model
     graph = graph_average_k_incoming_edges_w_self_loops(n_nodes, avg_k)
-    lut = lut_random(n_nodes, 2**max_connectivity, p=0.5)
+    lut = lut_random(n_nodes, 2**max_connectivity, p=p)
     model = BooleanReservoir(graph, lut, batch_size, max_connectivity, n_inputs, bits_per_feature, n_outputs)
 
     # uncomment for verification models
@@ -78,26 +80,36 @@ if __name__ == '__main__':
     data_loader.dataset.data['x'].to(device)
     data_loader.dataset.data['y'].to(device)
     y_hat_test = None
+    history = list()
+    checkpoint_stats = dict()
 
     for epoch in range(epochs):
+        stats = dict()
+        epoch_train_loss = 0
+        epoch_correct_train_predictions = 0
         for x, y in data_loader:
             optimizer.zero_grad()
             y_hat = model(x)
             loss = criterion(y_hat, y)
             loss.backward()
             optimizer.step()
+            epoch_train_loss += loss.item()
+            epoch_correct_train_predictions += euclidean_distance_accuracy(y_hat, y, radius_threshold, normalize=False) 
 
-        # Calculate accuracy after each epoch
+        stats['loss_train'] = epoch_train_loss / len(data_loader)
+        stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader) * data_loader.batch_size)
+
         with torch.no_grad():
             y_hat_test = model(x_test)
-            # Compute Euclidean distance between predicted and true coordinates
-            distances = torch.sqrt(torch.sum((y_hat_test - y_test) ** 2, dim=1))
-            correct_predictions = distances < radius_threshold
-            accuracy_test = correct_predictions.sum().item() / len(y_test)
-            print(f"Epoch: {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Test Accuracy: {accuracy_test:.4f}")
-            # TODO add a visualixation of the train / test metrics
+            stats['epoch'] = epoch + 1
+            stats['loss_test'] = loss.item()
+            stats['accuracy_test'] = euclidean_distance_accuracy(y_hat_test, y_test, radius_threshold) 
+            history.append(stats)
+            print(f"Epoch: {stats['epoch']:0{len(str(epochs))}d}/{epochs}, Loss: {stats['loss_test']:.4f}, Test Accuracy: {stats['accuracy_test']:.4f}")
 
         model.flush_history()
         model.record = False # only need history from first epoch if the process is deterministic...
-        if epoch == epochs - 1:
-            plot_predictions_and_labels(y_hat_test[:500], y_test[:500], tolerance=radius_threshold, axis_limits=[0, 1])
+
+    plot_predictions_and_labels(y_hat_test[:500], y_test[:500], tolerance=radius_threshold, axis_limits=[0, 1])
+    plot_train_history(history)
+    # plot_graph_with_weight_coloring_1D(model, layout='dot')

@@ -149,3 +149,26 @@ def plot_predictions_and_labels(y_hat, y, tolerance=0.1, axis_limits=[0, 1]):
     
     # Save the figure
     plt.savefig(f"/out/visualizations/{num_dims}D_predictions_versus_labels.png")
+
+
+def plot_train_history(history):
+    history_df = pd.DataFrame(history)
+    history_melted = history_df.melt(id_vars=['epoch'], value_vars=['loss_train', 'loss_test', 'accuracy_train', 'accuracy_test'], 
+                                    var_name='metric', value_name='value')
+    fig, ax1 = plt.subplots()
+
+    loss_plot = sns.lineplot(data=history_melted[history_melted['metric'].str.contains('loss')], 
+                             x='epoch', y='value', hue='metric', ax=ax1)
+    loss_plot.legend(loc='upper left')
+
+    ax1.set_ylabel('Loss')
+    ax1.set_xlabel('Epoch')
+    ax2 = ax1.twinx()
+
+    accuracy_plot = sns.lineplot(data=history_melted[history_melted['metric'].str.contains('accuracy')], 
+                                 x='epoch', y='value', hue='metric', ax=ax2, linestyle='--')
+    accuracy_plot.legend(loc='upper right')
+    ax2.set_ylabel('Accuracy')
+    fig.suptitle("Loss and Accuracy")
+    fig.tight_layout()
+    plt.savefig(f"/out/visualizations/training.png", bbox_inches='tight')
