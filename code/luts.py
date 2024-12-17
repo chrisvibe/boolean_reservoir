@@ -1,18 +1,16 @@
 import torch
 
 
-def lut_random(n_nodes, max_connectivity, p=0.5):
+def lut_random(n_nodes, max_incoming_edges, p=0.5):
+    # make a independent lut for each node
+    # lut[0] is the lut for node 0
+    # let idx represent the state of the reservoir: lut[0][idx] is the next state of node 0 with probability p
     assert 0 <= p <= 1
-    expected_sum = round(n_nodes * p)
-    lut = torch.rand((n_nodes, max_connectivity)) < 0.5
-    out_col = torch.zeros(n_nodes, dtype=torch.bool)
-    out_col[:expected_sum] = True
-    out_col = out_col[torch.randperm(n_nodes)]
-    lut = torch.cat((lut, out_col.unsqueeze(1)), dim=1)
+    lut = torch.rand((n_nodes, 2 ** max_incoming_edges)) < p
     return lut
 
 if __name__ == '__main__':
-    n = 100
+    n = 100000
     k = 3
     p = 0.5
     lut = lut_random(n, k, p=p)

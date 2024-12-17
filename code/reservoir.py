@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime, timezone
 from encoding import bin2dec
-from graphs import graph2adjacency_list
+from graphs import graph2adjacency_list_incoming
 import networkx as nx
 from utils import make_folders
 
@@ -63,7 +63,7 @@ class BooleanReservoir(nn.Module):
     def __init__(self, graph: nx.Graph, lut, batch_size, max_connectivity, n_inputs, bits_per_feature, n_outputs, out_path='/out', record=False, max_history_buffer_size=10000):
         super(BooleanReservoir, self).__init__()
         self.graph = graph
-        self.adj_list = graph2adjacency_list(graph)
+        self.adj_list = graph2adjacency_list_incoming(graph)
         self.lut = lut
 
         self.n_nodes = graph.number_of_nodes()
@@ -83,8 +83,9 @@ class BooleanReservoir(nn.Module):
 
         # Preselect which reservoir nodes will be perturbed for input
         # TODO confine features to certain areas of the reservoir??? Now they are mixing...
-        self.input_nodes = torch.randperm(self.n_nodes)[:self.n_inputs * self.bits_per_feature]
-        # self.input_nodes2 = torch.randperm(self.n_nodes)[:self.n_inputs * self.bits_per_feature] # TODO delete
+        input_bits = self.n_inputs * self.bits_per_feature
+        assert input_bits <= self.n_nodes
+        self.input_nodes = torch.randperm(self.n_nodes)[:input_bits]
         
         # Precompute adj_list and expand it to the batch size
         self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.max_connectivity) 
@@ -181,7 +182,6 @@ class BooleanReservoir(nn.Module):
         for j in range(s):
             # Perturb specific reservoir nodes with input
             self.states_paralell[:m, self.input_nodes] ^= x[:, j].view(m, -1)
-            # self.states_paralell[:m, self.input_nodes2] ^= x[:, j].view(m, -1)
 
             # RESERVOIR LAYER
             # ----------------------------------------------------
@@ -214,21 +214,24 @@ class BooleanReservoir(nn.Module):
 
 
 if __name__ == '__main__':
-    from graphs import graph_average_k_incoming_edges_w_self_loops
+    from graphs import generate_graph_w_k_avg_incoming_edges
     from luts import lut_random
 
     batch_size = 5
     n_nodes = 10
-    max_connectivity = 2
-    avg_k = 2
+    k_avg = 2
+    k_max = 10 
+    p = 0.5
+    self_loops = None
+
     n_inputs = 2
     bits_per_feature = 2
     n_outputs = 2
 
-    graph = graph_average_k_incoming_edges_w_self_loops(n_nodes, avg_k)
-    lut = lut_random(n_nodes, 2**max_connectivity)
+    graph = generate_graph_w_k_avg_incoming_edges(n_nodes, k_avg, k_max=k_max, self_loops=self_loops)
+    lut = lut_random(n_nodes, k_max, p=p)
 
-    model = BooleanReservoir(graph, lut, batch_size, max_connectivity, n_inputs, bits_per_feature, n_outputs)
+    model = BooleanReservoir(graph, lut, batch_size, k_max, n_inputs, bits_per_feature, n_outputs)
 
     # data with s steps per sample
     s = 3
