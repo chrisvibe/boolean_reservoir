@@ -27,7 +27,7 @@ def add_legend(f, n_nodes, hsv_map, min_val=0, max_val=1):
     for i in range(n_nodes):
         val = unnormalize(i / (n_nodes - 1), min_val, max_val)
         node_i = '{:.2f}'.format(val)
-        f.node(node_i, fillcolor='{} 1 1'.format(hsv_map(i / (n_nodes - 1))), fontcolor='black')
+        f.node(node_i, label=node_i, fillcolor='{} 1 1'.format(hsv_map(i / (n_nodes - 1))), fontcolor='black')
     for i in range(n_nodes - 1):
         val = unnormalize(i / (n_nodes - 1), min_val, max_val)
         node_i = '{:.2f}'.format(val)
@@ -56,5 +56,6 @@ def plot_graph_with_weight_coloring_1D(model, output_path='/out/visualizations/o
         f.edge(str(u), str(v))
     add_legend(f, 11, hsv_temp_map, min_val, max_val)
     f.render(output_path, format='svg', view=False)
+    f.render(output_path, format='pdf', view=False)
     print(f"Graph SVG rendered at: {output_path}")
 

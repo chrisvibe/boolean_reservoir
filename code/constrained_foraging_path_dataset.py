@@ -43,7 +43,7 @@ class ConstrainedForagingPathDataset(Dataset):
             'y': torch.stack(data_y),
         }
 
-    def split_dataset(self, split=(0.6, 0.3, 0.1)):
+    def split_dataset(self, split=(0.8, 0.1, 0.1)):
         assert sum(split) == 1, "Split ratios must sum to 1."
 
         x, y = self.data['x'], self.data['y']

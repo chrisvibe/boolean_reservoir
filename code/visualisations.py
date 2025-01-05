@@ -3,10 +3,16 @@ import matplotlib.patches as patches
 import matplotlib
 import numpy as np
 from copy import deepcopy
+from parameters import ModelParams
 from encoding import bin2dec
 from utils import make_folders
 import seaborn as sns
 import pandas as pd
+from datetime import datetime
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from pathlib import Path
 matplotlib.use('Agg')
 
 make_folders('/out', ['visualizations']) 
@@ -172,3 +178,76 @@ def plot_train_history(history):
     fig.suptitle("Loss and Accuracy")
     fig.tight_layout()
     plt.savefig(f"/out/visualizations/training.png", bbox_inches='tight')
+
+def plot_grid_search(data_file_path: Path):
+    out_path = data_file_path.parent / 'visualizations'
+    out_path.mkdir()
+    df = pd.read_hdf(data_file_path, 'df') 
+    df['model_params'] = df['model_params'].apply(lambda p_dict: ModelParams(**p_dict))
+    df['k_avg'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_avg)
+    df['k_max'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_max)
+    df['p'] = df['model_params'].apply(lambda x: x.reservoir_layer.p)
+    df['self_loops'] = df['model_params'].apply(lambda x: x.reservoir_layer.self_loops)
+    df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops']]
+    features = df.drop(columns=['accuracy'])
+    # features = df # TODO keep accuracy/loss in PCA? df.drop(columns=['accuracy'])
+    
+    # Identify categorical and numerical columns
+    categorical_cols = features.select_dtypes(include=['object']).columns.tolist()
+    numerical_cols = features.select_dtypes(exclude=['object']).columns.tolist()
+    
+    transformers = [('num', StandardScaler(), numerical_cols)]
+    if categorical_cols:
+        transformers.append(('cat', OneHotEncoder(sparse_output=False), categorical_cols))
+    
+    # Create a preprocessing pipeline
+    preprocessor = ColumnTransformer(transformers=transformers)
+    
+    # Apply the transformations
+    features_processed = preprocessor.fit_transform(features)
+    
+    # Applying PCA
+    pca = PCA(n_components=2)
+    principal_components = pca.fit_transform(features_processed)
+    principal_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+    
+    # Visualization of PCA
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(data=principal_df.join(df[['accuracy']]), x='PC1', y='PC2', hue='accuracy', palette='viridis', s=100, alpha=0.7)
+    plt.title('PCA of Parameters with Accuracy as Hue')
+    plt.savefig(out_path / 'pca.png', bbox_inches='tight')
+    
+    # Creating a heatmap of parameter contributions
+    loadings = pca.components_.T
+    feature_names = numerical_cols
+    if categorical_cols:
+        feature_names += preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
+    loading_df = pd.DataFrame(loadings, index=feature_names, columns=['PC1', 'PC2'])
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(loading_df, annot=True, cmap='coolwarm', cbar=True)
+    plt.title('Heatmap of Parameter Contributions to Principal Components')
+    plt.savefig(out_path / 'heatmap.png', bbox_inches='tight')
+    
+    # Correlation matrix, including categorical variables
+    features_with_performance = pd.concat([features, df[['accuracy']]], axis=1)
+    correlation_matrix = features_with_performance.corr(method='spearman', numeric_only=True)
+    
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', cbar=True)
+    plt.title('Correlation Matrix including Performance Metrics')
+    plt.savefig(out_path / 'correlation.png', bbox_inches='tight')
+
+    num_vars = len(df.columns) - 1
+    fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
+    for i, column in enumerate(df.columns[1:]):  # Skip 'accuracy' column
+        sns.scatterplot(ax=axes[i], data=df, x=column, y='accuracy')
+        axes[i].set_title(f'Scatter plot accuracy vs {column}')
+        axes[i].set_xlabel(column)
+        axes[i].set_ylabel('Accuracy')
+    plt.tight_layout()
+    plt.savefig(out_path / 'accuracy_tuning_subplots.png', bbox_inches='tight')
+
+if __name__ == '__main__':
+    # TODO file naming changed...
+    plot_grid_search(Path('/out/grid_search/1D/test_sweep/log.h5'))

@@ -5,9 +5,11 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime, timezone
 from encoding import bin2dec
-from graphs import graph2adjacency_list_incoming
 import networkx as nx
-from utils import make_folders
+import gzip
+from parameters import * 
+from luts import lut_random 
+from graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming
 
 
 class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
@@ -58,80 +60,152 @@ class PathIntegrationVerificationModel(nn.Module):
         pass
 
 
-
 class BooleanReservoir(nn.Module):
-    def __init__(self, graph: nx.Graph, lut, batch_size, max_connectivity, n_inputs, bits_per_feature, n_outputs, out_path='/out', record=False, max_history_buffer_size=10000):
+    def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
         super(BooleanReservoir, self).__init__()
-        self.graph = graph
-        self.adj_list = graph2adjacency_list_incoming(graph)
-        self.lut = lut
+        if load_path:
+            paths = self.make_load_paths(load_path)
+            self.load(paths=paths)
+            if 'weights' in load_dict:
+                self.load_state_dict(load_dict['weights'], weights_only=True)
+        else:
+            self.P = params
+            self.I = self.P.model.input_layer
+            self.R = self.P.model.reservoir_layer
+            self.O = self.P.model.output_layer
+            self.T = self.P.model.training
 
-        self.n_nodes = graph.number_of_nodes()
-        self.n_parallel = batch_size
-        self.max_connectivity = max_connectivity
-        self.bits_per_feature = bits_per_feature
-        self.n_inputs = n_inputs
-        self.n_outputs = n_outputs
+            self.graph = self.optional_load('graph', load_dict, 
+                generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
+            )
+            self.lut = self.optional_load('lut', load_dict,
+                lut_random(self.R.n_nodes, self.R.k_max, p=self.R.p)
+            )
+            self.adj_list = graph2adjacency_list_incoming(self.graph)
+            self.n_nodes = self.graph.number_of_nodes()
+            self.n_parallel = self.T.batch_size
+            self.bits_per_feature = self.I.bits_per_feature
+            self.n_inputs = self.I.n_inputs
+            self.n_outputs = self.O.n_outputs
 
-        # Initialize state
-        # self.states_paralell = torch.randint(0, 2, (self.n_parallel, self.n_nodes), dtype=torch.bool) # random init per sample
-        self.states_paralell = torch.randint(0, 2, (1, self.n_nodes), dtype=torch.bool).repeat(self.n_parallel, 1) # same init per sample
-        self.initial_states_paralell = self.states_paralell.clone()
+            # Initialize state
+            self.states_paralell = None
+            self.initial_states = self.optional_load('init_state', load_dict,
+                torch.randint(0, 2, (1, self.n_nodes), dtype=torch.uint8)
+            )
 
-        # Dense readout layer
-        self.readout = nn.Linear(self.n_nodes, self.n_inputs)
+            # Dense readout layer
+            self.readout = nn.Linear(self.n_nodes, self.n_inputs)
 
-        # Preselect which reservoir nodes will be perturbed for input
-        # TODO confine features to certain areas of the reservoir??? Now they are mixing...
-        input_bits = self.n_inputs * self.bits_per_feature
-        assert input_bits <= self.n_nodes
-        self.input_nodes = torch.randperm(self.n_nodes)[:input_bits]
+            # Preselect which reservoir nodes will be perturbed for input
+            # TODO confine features to certain areas of the reservoir???
+            input_bits = self.n_inputs * self.bits_per_feature
+            assert input_bits <= self.n_nodes
+            self.input_nodes = self.optional_load('input_nodes', load_dict,
+                torch.randperm(self.n_nodes)[:input_bits]
+            )
+            
+            # Precompute adj_list and expand it to the batch size
+            self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max) 
+            self.max_connectivity = self.adj_list.shape[-1] 
+            self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1)
+
+            # other precomputations
+            self.node_indices = torch.arange(self.n_nodes)
+            bits = self.adj_list.shape[1]
+            self.powers_of_2 = 2 ** torch.arange(bits) # left endian
+            assert bits <= 24 # bin2int overflows if too large
+
+            # Logging
+            logging_params = self.P.logging
+            self.out_path = Path(logging_params.out_path)
+            self.record_history = logging_params.history.record_history
+            self.history_buffer_size = logging_params.history.history_buffer_size
+            self.history = list() 
+            self.history_file_count = 0
+            self.timestamp_utc = self.get_timestamp_utc()
+            self.P.logging.train_log.timestamp_utc = self.timestamp_utc
+            self.save_folder = self.out_path / 'models' / self.timestamp_utc
         
-        # Precompute adj_list and expand it to the batch size
-        self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.max_connectivity) 
-        self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1)
-
-        # other precomputations
-        self.node_indices = torch.arange(self.n_nodes)
-        bits = self.adj_list.shape[1]
-        self.mask = 2 ** torch.arange(bits) # left endian
-
-        # Logging
-        self.out_path = Path(out_path)
-        self.folders = ['reservoir_history']
-        make_folders(self.out_path, self.folders) 
-        self.record = record
-        self.max_history_buffer_size = max_history_buffer_size
-        self.history_buffer = list() 
-        self.history_buffer_file_count = 0
-
     def flush_history(self):
-        if self.record and self.history_buffer:
-            time = datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M")
-            f = str(self.history_buffer_file_count) + '_' + time + '.csv'
-            df = pd.DataFrame(self.history_buffer)
-            df.to_csv(self.out_path / 'reservoir_history' / f, index=False) # TODO consider np.savez_compressed
-            self.history_buffer = list()
-            self.history_buffer_file_count += 1
+        if self.record_history and self.history:
+            df = pd.DataFrame(self.history)
+            f = str(self.history_file_count) + '.csv'
+            path = self.out_path / 'history' / self.timestamp_utc / f
+            path.mkdir(parents=True, exist_ok=True)
+            df.to_csv(path, index=False) # TODO consider np.savez_compressed
+            self.history = list()
+            self.history_file_count += 1
     
+    @staticmethod 
+    def optional_load(load_key: str, load_dict: dict, default):
+        if load_key in load_dict:
+            return load_dict[load_key]
+        else:
+            return default
+
     @staticmethod
-    def homogenize_adj_list(adj_list, max_length):
+    def homogenize_adj_list(adj_list, max_length): # Note that this operation doesnt guarantee max_length columns
         adj_list_tensors = [torch.tensor(sublist, dtype=torch.long) for sublist in adj_list]
         padded_tensor = pad_sequence(adj_list_tensors, batch_first=True, padding_value=-1)
         padded_tensor = padded_tensor[:, :max_length]
         mask = padded_tensor != -1
         padded_tensor[padded_tensor == -1] = 0
         return padded_tensor, mask
+    
+    @staticmethod
+    def get_timestamp_utc():
+        return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S")
 
-        
-    def bin2int(self, x):
+    def save(self):
+        self.save_folder.mkdir(parents=True, exist_ok=False)
+        paths = self.make_load_paths(self.save_folder)
+        save_yaml_config(self.P, paths['parameters'])
+        with gzip.open(paths['graph'], 'wb') as f:
+            nx.write_graphml(self.graph, f)
+        torch.save(self.lut, paths['lut'])
+        torch.save(self.input_nodes, paths['input_nodes'])
+        torch.save(self.initial_states, paths['init_state'])
+        torch.save(self.state_dict(), paths['weights'])
+        return paths 
+
+    def load(self, paths=None):
+        if paths is None:
+            paths = self.make_load_paths(self.save_folder)
+        p = load_yaml_config(paths['parameters'])
+        d = dict() 
+        with gzip.open(paths['graph'], 'rb') as f:
+            d['graph'] = nx.read_graphml(f) 
+            d['graph'] = nx.relabel_nodes(d['graph'], lambda x: int(x)) 
+        d['lut'] = torch.load(paths['lut'], weights_only=True)
+        d['input_nodes'] = torch.load(paths['input_nodes'], weights_only=True)
+        d['init_state'] = torch.load(paths['init_state'], weights_only=True)
+        d['weights'] = torch.load(paths['weights'], weights_only=True)
+        self.__init__(p, load_dict=d)
+
+    @staticmethod
+    def make_load_paths(folder_path):
+        folder_path = Path(folder_path)
+        paths = dict()
+        files = []
+        files.append(('parameters', 'yaml'))
+        files.append(('graph', 'graphml.gz'))
+        files.append(('lut', 'pt'))
+        files.append(('input_nodes', 'pt'))
+        files.append(('weights', 'pt'))
+        files.append(('init_state', 'pt'))
+        for file, filetype in files:
+            paths[file] = folder_path / f'{file}.{filetype}'
+        return paths
+    
+    def bin2int(self, x):  # TODO check if GPU has data
         # left endian
-        vals = torch.sum(self.mask * x, -1).long()
+        vals = (x * self.powers_of_2).sum(dim=-1).long()
         return vals
 
     def reset_reservoir(self):
         # TODO reset output layer too?
-        self.states_paralell = self.initial_states_paralell.clone()
+        self.states_paralell = self.initial_states.repeat(self.n_parallel, 1).clone() # same init per sample
         # TODO warmup reservoir?
     
     def forward(self, x):
@@ -181,14 +255,13 @@ class BooleanReservoir(nn.Module):
 
         for j in range(s):
             # Perturb specific reservoir nodes with input
-            self.states_paralell[:m, self.input_nodes] ^= x[:, j].view(m, -1)
+            self.states_paralell[:m, self.input_nodes] ^= x[:m, j].view(m, -1)
 
             # RESERVOIR LAYER
             # ----------------------------------------------------
             # Gather the states based on the expanded adj_list (note that this is maybe not efficient...)
             state_expanded = self.states_paralell[:m].unsqueeze(-1).expand(-1, -1, self.max_connectivity)
-            states_paralell = torch.gather(state_expanded, 1, self.adj_list_expanded[:m])
-
+            states_paralell = torch.gather(state_expanded, dim=1, index=self.adj_list_expanded[:m])
 
             # Apply mask as the adj_list has invalid connections due to homogenized tensor
             states_paralell &= self.adj_list_mask
@@ -214,26 +287,30 @@ class BooleanReservoir(nn.Module):
 
 
 if __name__ == '__main__':
-    from graphs import generate_graph_w_k_avg_incoming_edges
-    from luts import lut_random
-
-    batch_size = 5
-    n_nodes = 10
-    k_avg = 2
-    k_max = 10 
-    p = 0.5
-    self_loops = None
-
-    n_inputs = 2
-    bits_per_feature = 2
-    n_outputs = 2
-
-    graph = generate_graph_w_k_avg_incoming_edges(n_nodes, k_avg, k_max=k_max, self_loops=self_loops)
-    lut = lut_random(n_nodes, k_max, p=p)
-
-    model = BooleanReservoir(graph, lut, batch_size, k_max, n_inputs, bits_per_feature, n_outputs)
+    from utils import set_seed
+    set_seed(0)
+    I = InputParams(encoding='binary', 
+                        n_inputs=1,
+                        bits_per_feature=10,
+                        redundancy=2
+            )
+    R = ReservoirParams(
+                        n_nodes=100,
+                        k_avg=2,
+                        k_max=5,
+                        p=0.5,
+                        self_loops=0.1
+                )
+    O = OutputParams(n_outputs=1)
+    T = TrainingParams(batch_size=32,
+                       epochs=10,
+                       radius_threshold=0.05,
+                       learning_rate=0.001)
+    model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
+    params = Params(model=model_params)
+    model = BooleanReservoir(params)
 
     # data with s steps per sample
     s = 3
-    x = torch.randint(0, 2, (batch_size, s, n_inputs, bits_per_feature,), dtype=torch.bool)
+    x = torch.randint(0, 2, (T.batch_size, s, I.n_inputs, I.bits_per_feature,), dtype=torch.uint8)
     print(model(x).detach().numpy())

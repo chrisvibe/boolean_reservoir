@@ -57,7 +57,7 @@ def balance_dataset(dataset, num_bins=100):
     print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100}% reduction)')
 
 def euclidean_distance_accuracy(y_hat, y, radius_threshold, normalize=True):
-    distances = torch.sqrt(torch.sum((y_hat- y) ** 2, dim=1))
+    distances = torch.sqrt(torch.sum((y_hat - y) ** 2, dim=1))
     correct_predictions = (distances < radius_threshold).sum().item()
     if normalize:
         return correct_predictions / len(y)

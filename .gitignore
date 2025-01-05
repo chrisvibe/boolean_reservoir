@@ -1,4 +1,5 @@
 # directories and files
+cluster/
 out/
 data/
 docker/docker.sh

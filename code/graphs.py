@@ -21,8 +21,8 @@ def graph2adjacency_list_incoming(graph: nx.DiGraph):
         adj_list[node] = list(graph.predecessors(node))
     return adj_list
 
-def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None, adj_matrix=None):
-    # n_nodes is the number of nodes in the graphk
+def generate_adjacency_matrix_old(n_nodes, k_avg, k_max=None, self_loops=None, adj_matrix=None):
+    # n_nodes is the number of nodes in the graph
     # k_avg is the average incoming edges
     # k_max is the max incoming edges
     # self_loops is the number of edges where i==j, this is normalized by n_nodes [0, 1]
@@ -39,7 +39,10 @@ def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None, adj_m
     total_edges = round(n_nodes * k_avg)
     self_loops = round(self_loops * n_nodes)
     if adj_matrix is None:
-        adj_matrix = np.zeros((n_nodes, n_nodes), dtype=bool)
+        adj_matrix = np.zeros(n_nodes * n_nodes, dtype=bool)
+        rand_indices = np.random.permutation(indices)[:total_edges]
+        adj_matrix[rand_indices] = True
+        adj_matrix = adj_matrix.reshape((n_nodes, n_nodes))
     flat_adj_matrix = adj_matrix.ravel()
     k_per_node = adj_matrix.sum(axis=0) 
     n_edges = k_per_node.sum()
@@ -64,7 +67,7 @@ def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None, adj_m
     # print('1')
     # print(flat_adj_matrix.reshape(n_nodes, -1).astype(int), flat_adj_matrix.sum(), diagonal(flat_adj_matrix).sum())
 
-    # enforce k_max
+    # enforce k_max # TODO better to iterate through cols
     visited_mask[diagonal(indices)] = False 
     while (k_per_node > k_max).any():
         pool = visited_mask
@@ -79,7 +82,7 @@ def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None, adj_m
     # print('2')
     # print(flat_adj_matrix.reshape(n_nodes, -1).astype(int), flat_adj_matrix.sum(), diagonal(flat_adj_matrix).sum())
 
-    # set rest of edges
+    # set rest of edges # TODO better to iterate through cols
     add_edges = n_edges <= total_edges
     adjustment = 1 if add_edges else -1
     visited_mask = visited_mask if add_edges else ~visited_mask
@@ -103,6 +106,72 @@ def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None, adj_m
     assert (adj_matrix.sum(axis=0) <= k_max).all()
     return adj_matrix
 
+def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None):
+    # init adjacency matrix but may not respect requested properties
+    k_max = n_nodes if k_max is None else k_max
+    self_loops = random.uniform(0, 1) if self_loops is None else self_loops
+    assert 0 <= k_avg <= n_nodes
+    assert 0 <= k_avg <= k_max
+    assert 0 <= self_loops <= 1
+    diagonal = lambda x: x[::n_nodes+1]
+    total_edges = round(n_nodes * k_avg)
+    self_loops = round(self_loops * n_nodes)
+    flat_adj_matrix = np.zeros(n_nodes * n_nodes, dtype=bool)
+    indices = np.arange(n_nodes)
+
+    # calculate k for self-loops
+    k_self_loop = np.zeros(n_nodes, dtype=bool)
+    pool = indices
+    random_indices = np.random.permutation(indices)[:self_loops]
+    k_self_loop[random_indices] = True
+
+    # calculate k 
+    k = np.random.rand(n_nodes)
+    k *= total_edges / k.sum()
+    k = np.floor(k).astype(int)
+    k = np.minimum(k, k_max)
+
+    # make sure k - k_self_loop > 0
+    mask = k - k_self_loop < 0
+    k[mask] = 1 
+
+    # Note errors introduced above: from rounding, self-loops, and k_max is not respected
+    # Correct errors so the sum to be exactly total_edges
+
+    # adjust for overshoot
+    difference = total_edges - k.sum()
+    if difference < 0:
+        pool = indices[~mask]
+        selected_indices = np.random.choice(pool, difference, replace=False)
+        k[selected_indices] -= 1
+        
+    # adjust for undershoot
+    difference = total_edges - k.sum()
+    if difference > 0:
+        mask = k < k_max
+        pool = indices[mask]
+        selected_indices = np.random.choice(pool, difference, replace=False)
+        k[selected_indices] += 1
+    
+    # set k
+    k_eff = k - k_self_loop
+    adj_matrix = flat_adj_matrix.reshape(n_nodes, n_nodes)
+    for i in range(adj_matrix.shape[1]):
+        adj_matrix[:k_eff[i], i] = True
+        np.random.shuffle(adj_matrix[:, i])
+        if adj_matrix[i, i]:
+            mask = adj_matrix[:, i] == False 
+            mask[i] = False
+            pool = indices[mask]
+            idx = np.random.choice(pool)
+            adj_matrix[idx, i] = True 
+        adj_matrix[i, i] = k_self_loop[i]
+
+    assert adj_matrix.sum() == total_edges
+    assert diagonal(adj_matrix.ravel()).sum() == self_loops
+    assert (adj_matrix.sum(axis=0) <= k_max).all()
+    return adj_matrix
+
 
 if __name__ == '__main__':
     n_nodes = 10
@@ -111,6 +180,8 @@ if __name__ == '__main__':
     self_loops = 0.3
     # g = graph_average_k_incoming_edges_w_self_loops(reservoir_size, k_avg, k_max=k_max, self_loops=self_loops)
     # print(graph2adjacency_list_incoming(g))
-    matrix = generate_adjacency_matrix(n_nodes, k_avg, k_max=k_max, self_loops=self_loops, adj_matrix=None)
-    matrix = generate_adjacency_matrix(n_nodes, k_avg, k_max=k_max-1, self_loops=self_loops, adj_matrix=matrix)
-    print(matrix.astype(int), matrix.sum(), matrix.ravel()[::n_nodes+1].sum())
+    # matrix = generate_adjacency_matrix_old(n_nodes, k_avg, k_max=k_max, self_loops=self_loops, adj_matrix=None)
+    # matrix = generate_adjacency_matrix_old(n_nodes, k_avg, k_max=k_max-1, self_loops=self_loops, adj_matrix=matrix)
+    # print(matrix.astype(int), matrix.sum(), matrix.ravel()[::n_nodes+1].sum())
+
+    generate_graph_w_k_avg_incoming_edges(1000, 2)

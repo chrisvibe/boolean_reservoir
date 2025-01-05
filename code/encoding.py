@@ -25,7 +25,7 @@ def float_array_to_boolean(values, encoding_type='binary', bits=8, redundancy=1)
     else:
         raise ValueError(f"encoding {encoding_type} is not an option!")
 
-    return bin_values.to(torch.bool)
+    return bin_values.to(torch.uint8)
 
 def dec2bin(x, bits):
     '''
@@ -94,7 +94,7 @@ class BinaryEmbedding:
         batch_size, seq_length, n_inputs = data.size()
         
         # Convert normalized data to binary representation
-        binary_tensors = dec2bin(data, self.b).to(torch.bool)
+        binary_tensors = dec2bin(data, self.b).to(torch.uint8)
         
         # Expand dimensions for broadcasting
         binary_tensors = binary_tensors.unsqueeze(3).expand(-1, -1, -1, self.n, -1)  # Output shape: (batch_size, seq_length, n_inputs, self.n, self.b)
@@ -116,7 +116,7 @@ class BinaryEmbedding:
         """
         self.n = new_n if new_n is not None else self.n
         self.b = new_b if new_b is not None else self.b
-        self.random_boolean_keys = torch.randint(0, 2, (1, 1, 1, self.n, self.b)).bool()
+        self.random_boolean_keys = torch.randint(0, 2, (1, 1, 1, self.n, self.b)).to(torch.uint8)
 
 
  

@@ -10,5 +10,10 @@
         "source=${localWorkspaceFolder}/code,target=/code,type=bind",
         "source=${localWorkspaceFolder}/data,target=/data,type=bind",
         "source=${localWorkspaceFolder}/out,target=/out,type=bind"
-    ]
+    ],
+    "postStartCommand": "/bin/bash /root/repo/activate_env.sh",
+    "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/envs/boolean_reservoir/bin/python"
+    }
 }
+
