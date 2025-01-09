@@ -1,6 +1,3 @@
-from utils import set_seed
-set_seed(42)
-
 import torch
 from torch.utils.data import Dataset, DataLoader
 from encoding import float_array_to_boolean, min_max_normalization
@@ -59,7 +56,7 @@ class ConstrainedForagingPathDataset(Dataset):
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
-
+    
     def save_data(self):
         self.data_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.data, self.data_path)
@@ -92,7 +89,6 @@ class ConstrainedForagingPathDataset(Dataset):
     
     def encode_x(self):
         self.data['x'] = self.encoder_x(self.data['x'])
-    
 
 
 if __name__ == '__main__':
@@ -107,7 +103,7 @@ if __name__ == '__main__':
     boundary = PolygonBoundary(points=rectangle)
     
     # Parameters: Input Layer
-    encoding = 'binary'
+    encoding = 'base2'
     bits_per_feature = 3  # Number of bits per dimension
     n_features = 2  # Number of dimensions
 

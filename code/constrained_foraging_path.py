@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import math
 from shapely.geometry import Point, Polygon
 from abc import ABC, abstractmethod

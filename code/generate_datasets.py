@@ -1,8 +1,11 @@
 from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from constrained_foraging_path import generate_polygon_points, stretch_polygon, LevyFlightStrategy, PolygonBoundary, IntervalBoundary
 from numpy import pi
+from utils import set_seed
 
 def generate_dataset_2D_levy_square():
+    set_seed(0)
+
     # Parameters: Dataset
     data_path = '/data/2D/levy_walk/n_steps/square_boundary/dataset.pt'
     samples = 10000
@@ -18,6 +21,8 @@ def generate_dataset_2D_levy_square():
     dataset.save_data()
 
 def generate_dataset_1D_levy_interval():
+    set_seed(0)
+
     # Parameters: Dataset
     data_path = '/data/1D/levy_walk/n_steps/interval_boundary/dataset.pt'
     samples = 10000

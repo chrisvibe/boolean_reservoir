@@ -5,6 +5,7 @@ import random
 def generate_graph_w_k_avg_incoming_edges(n_nodes, k_avg, k_max=None, self_loops=None):
     adj_matrix = generate_adjacency_matrix(n_nodes, k_avg, k_max=k_max, self_loops=self_loops)
     graph = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
+    print(calc_spectral_radius(graph))
     return graph
 
 def graph2adjacency_list_outgoing(graph: nx.Graph):
@@ -172,6 +173,12 @@ def generate_adjacency_matrix(n_nodes, k_avg, k_max=None, self_loops=None):
     assert (adj_matrix.sum(axis=0) <= k_max).all()
     return adj_matrix
 
+def calc_spectral_radius(graph: nx.DiGraph):
+    adj_matrix = nx.adjacency_matrix(graph).todense()
+    eigenvalues = np.linalg.eigvals(adj_matrix)
+    rho = max(abs(eigenvalues))
+    return rho
+
 
 if __name__ == '__main__':
     n_nodes = 10
@@ -184,4 +191,13 @@ if __name__ == '__main__':
     # matrix = generate_adjacency_matrix_old(n_nodes, k_avg, k_max=k_max-1, self_loops=self_loops, adj_matrix=matrix)
     # print(matrix.astype(int), matrix.sum(), matrix.ravel()[::n_nodes+1].sum())
 
-    generate_graph_w_k_avg_incoming_edges(1000, 2)
+    # generate_graph_w_k_avg_incoming_edges(1000, 2)
+
+    G = generate_graph_w_k_avg_incoming_edges(n_nodes=1000, k_avg=1, k_max=6, self_loops=0)
+    adj_matrix = nx.adjacency_matrix(G).todense()
+    eigenvalues = np.linalg.eigvals(adj_matrix)
+    rho = max(abs(eigenvalues))
+    print(rho)
+    eigenvalue_magnitudes = np.abs(eigenvalues)
+    eigenvalue_magnitudes = eigenvalue_magnitudes[np.argsort(-eigenvalue_magnitudes,)]
+    print("Eigenvalues (first 10):\n", eigenvalue_magnitudes[:10])

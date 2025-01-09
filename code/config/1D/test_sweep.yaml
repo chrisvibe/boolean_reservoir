@@ -5,11 +5,12 @@ model:
     bits_per_feature: 48
     redundancy: 6
   reservoir_layer:
-    n_nodes: 100
+    n_nodes: 1000
     k_avg: 2
     k_max: 6
     p: 0.5
     self_loops: [0, 0.1]
+    init: 'random' 
   output_layer:
     n_outputs: 1
   training:

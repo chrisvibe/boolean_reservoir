@@ -12,10 +12,12 @@ yaml.add_representer(PosixPath, represent_pathlib_path)
 yaml.add_representer(WindowsPath, represent_pathlib_path)
 
 class InputParams(BaseModel):
+    seed: int = Field(0, description="Random seed")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
     n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
     bits_per_feature: Union[int, List[int]] = Field(..., description="Dimension per input data after binary encoding")
-    redundancy: Union[int, List[int]] = Field(..., description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
+    redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
+    interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
 
 class ReservoirParams(BaseModel):
     n_nodes: Union[int, List[int]] = Field(..., description="Number of nodes in the reservoir graph")
@@ -23,6 +25,7 @@ class ReservoirParams(BaseModel):
     k_max: Union[int, List[int]] = Field(..., description="Maximum degree of incoming nodes")
     p: Union[float, List[float]] = Field(..., description="Probability for 1 in LUT (look up table)")
     self_loops: Union[float, List[float]] = Field(..., description="Probability of self-loops in graph; normalized by number of nodes")
+    init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
 class OutputParams(BaseModel):
     n_outputs: Union[int, List[int]] = Field(..., description="Dimension of output data")
@@ -110,9 +113,3 @@ def generate_param_combinations(model_params: ModelParams):
         }
         model_params_list.append(ModelParams(**new_params))
     return model_params_list
-
-def multi_config_in_parameters(input_params: InputParams) -> bool:
-    for value in input_params.model_dump().values():
-        if isinstance(value, list) and len(value) > 1:
-            return True
-    return False

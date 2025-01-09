@@ -10,6 +10,7 @@ import gzip
 from parameters import * 
 from luts import lut_random 
 from graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming
+from utils import set_seed
 
 
 class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
@@ -62,24 +63,27 @@ class PathIntegrationVerificationModel(nn.Module):
 
 class BooleanReservoir(nn.Module):
     def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
-        super(BooleanReservoir, self).__init__()
         if load_path:
-            paths = self.make_load_paths(load_path)
-            self.load(paths=paths)
-            if 'weights' in load_dict:
-                self.load_state_dict(load_dict['weights'], weights_only=True)
+            load_path = Path(load_path)
+            if load_path.suffix in ['.yaml', '.yml']:
+                P = load_yaml_config(load_path)
+                self.__init__(params=P)
+            elif load_path.is_dir():
+                paths = self.make_load_paths(load_path)
+                self.load(paths=paths, parameter_override=params)
+            else:
+                raise AssertionError('load_path error')
         else:
+            super(BooleanReservoir, self).__init__()
             self.P = params
             self.I = self.P.model.input_layer
             self.R = self.P.model.reservoir_layer
             self.O = self.P.model.output_layer
             self.T = self.P.model.training
+            set_seed(self.T.seed)
 
             self.graph = self.optional_load('graph', load_dict, 
                 generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
-            )
-            self.lut = self.optional_load('lut', load_dict,
-                lut_random(self.R.n_nodes, self.R.k_max, p=self.R.p)
             )
             self.adj_list = graph2adjacency_list_incoming(self.graph)
             self.n_nodes = self.graph.number_of_nodes()
@@ -88,33 +92,42 @@ class BooleanReservoir(nn.Module):
             self.n_inputs = self.I.n_inputs
             self.n_outputs = self.O.n_outputs
 
-            # Initialize state
-            self.states_paralell = None
-            self.initial_states = self.optional_load('init_state', load_dict,
-                torch.randint(0, 2, (1, self.n_nodes), dtype=torch.uint8)
-            )
-
             # Dense readout layer
             self.readout = nn.Linear(self.n_nodes, self.n_inputs)
+            if 'weights' in load_dict:
+                self.load_state_dict(load_dict['weights'])
+
 
             # Preselect which reservoir nodes will be perturbed for input
             # TODO confine features to certain areas of the reservoir???
             input_bits = self.n_inputs * self.bits_per_feature
             assert input_bits <= self.n_nodes
             self.input_nodes = self.optional_load('input_nodes', load_dict,
-                torch.randperm(self.n_nodes)[:input_bits]
+                # assumes input nodes are dedicated to their feature (no repeats)
+                torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
             )
             
             # Precompute adj_list and expand it to the batch size
             self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max) 
-            self.max_connectivity = self.adj_list.shape[-1] 
+            self.max_connectivity = self.adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
             self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1)
+
+            # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
+            self.lut = self.optional_load('lut', load_dict,
+                lut_random(self.R.n_nodes, self.max_connectivity, p=self.R.p)
+            )
 
             # other precomputations
             self.node_indices = torch.arange(self.n_nodes)
-            bits = self.adj_list.shape[1]
-            self.powers_of_2 = 2 ** torch.arange(bits) # left endian
+            bits = self.max_connectivity 
+            self.powers_of_2 = 2 ** torch.arange(bits).flip(dims=(0,))
             assert bits <= 24 # bin2int overflows if too large
+
+            # Initialize state
+            self.states_paralell = None
+            self.initial_states = self.optional_load('init_state', load_dict,
+                self.initialization_strategy(self.R.init)
+            )
 
             # Logging
             logging_params = self.P.logging
@@ -126,7 +139,7 @@ class BooleanReservoir(nn.Module):
             self.timestamp_utc = self.get_timestamp_utc()
             self.P.logging.train_log.timestamp_utc = self.timestamp_utc
             self.save_folder = self.out_path / 'models' / self.timestamp_utc
-        
+            
     def flush_history(self):
         if self.record_history and self.history:
             df = pd.DataFrame(self.history)
@@ -145,13 +158,31 @@ class BooleanReservoir(nn.Module):
             return default
 
     @staticmethod
-    def homogenize_adj_list(adj_list, max_length): # Note that this operation doesnt guarantee max_length columns
+    def homogenize_adj_list(adj_list, max_length): # tensor may have less than max_length columns if not needed
         adj_list_tensors = [torch.tensor(sublist, dtype=torch.long) for sublist in adj_list]
         padded_tensor = pad_sequence(adj_list_tensors, batch_first=True, padding_value=-1)
         padded_tensor = padded_tensor[:, :max_length]
-        mask = padded_tensor != -1
-        padded_tensor[padded_tensor == -1] = 0
-        return padded_tensor, mask
+        valid_mask = padded_tensor != -1
+        padded_tensor[~valid_mask] = 0
+        return padded_tensor, valid_mask.to(torch.uint8)
+    
+    def initialization_strategy(self, strategy:str):
+        if strategy == 'random':
+            return torch.randint(0, 2, (1, self.n_nodes), dtype=torch.uint8)
+        elif strategy == 'zeros':
+            return torch.zeros((1, self.n_nodes), dtype=torch.uint8)
+        elif strategy == 'ones':
+            return torch.ones((1, self.n_nodes), dtype=torch.uint8)
+        elif strategy == 'every_other':
+            states = self.initialization_strategy('zeros')
+            states[::2] = 1
+            return states
+        elif strategy == 'first_lut_state': # warmup reservoir with first state from LUT 
+            return self.lut[self.node_indices, 0]
+        elif strategy == 'random_lut_state': # warmup reservoir with random states from LUT
+            idx = torch.randint(low=0, high=2**self.max_connectivity, size=(self.n_nodes,))
+            return self.lut[self.node_indices, idx]
+        raise ValueError
     
     @staticmethod
     def get_timestamp_utc():
@@ -169,10 +200,12 @@ class BooleanReservoir(nn.Module):
         torch.save(self.state_dict(), paths['weights'])
         return paths 
 
-    def load(self, paths=None):
+    def load(self, paths=None, parameter_override:Params=None):
         if paths is None:
             paths = self.make_load_paths(self.save_folder)
-        p = load_yaml_config(paths['parameters'])
+        p = parameter_override
+        if p is None:
+            p = load_yaml_config(paths['parameters'])
         d = dict() 
         with gzip.open(paths['graph'], 'rb') as f:
             d['graph'] = nx.read_graphml(f) 
@@ -181,7 +214,7 @@ class BooleanReservoir(nn.Module):
         d['input_nodes'] = torch.load(paths['input_nodes'], weights_only=True)
         d['init_state'] = torch.load(paths['init_state'], weights_only=True)
         d['weights'] = torch.load(paths['weights'], weights_only=True)
-        self.__init__(p, load_dict=d)
+        self.__init__(params=p, load_dict=d)
 
     @staticmethod
     def make_load_paths(folder_path):
@@ -199,15 +232,12 @@ class BooleanReservoir(nn.Module):
         return paths
     
     def bin2int(self, x):  # TODO check if GPU has data
-        # left endian
-        vals = (x * self.powers_of_2).sum(dim=-1).long()
+        vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 
     def reset_reservoir(self):
-        # TODO reset output layer too?
-        self.states_paralell = self.initial_states.repeat(self.n_parallel, 1).clone() # same init per sample
-        # TODO warmup reservoir?
-    
+        self.states_paralell = self.initial_states.repeat(self.n_parallel, 1)
+   
     def forward(self, x):
         '''
         Accepts the decomposed velocities encoded in boolean format. In 2d: x = dx, dy
@@ -221,8 +251,6 @@ class BooleanReservoir(nn.Module):
         1. input the encoded velocity data in s steps
         2. the reservoir should is hopefully able to represent the integral of these steps
         3. readout interprets the reservoir and outputs the integral; the final position coordinate
-
-        TODO order of operations below: input step vs state index calculation!! good?
         '''
         m, s, d, b = x.shape
         self.reset_reservoir()
@@ -252,10 +280,9 @@ class BooleanReservoir(nn.Module):
 
         # INPUT LAYER
         # ----------------------------------------------------
-
         for j in range(s):
             # Perturb specific reservoir nodes with input
-            self.states_paralell[:m, self.input_nodes] ^= x[:m, j].view(m, -1)
+            self.states_paralell[:m, self.input_nodes] ^= x[:m, j]
 
             # RESERVOIR LAYER
             # ----------------------------------------------------
@@ -270,7 +297,7 @@ class BooleanReservoir(nn.Module):
             idx = self.bin2int(states_paralell)
 
             # Update the state with LUT
-            self.states_paralell[:m] = self.lut[self.node_indices, idx].clone()
+            self.states_paralell[:m] = self.lut[self.node_indices, idx]
 
         # Record states # TODO what granularity do we want?
         # if self.record:
@@ -288,7 +315,6 @@ class BooleanReservoir(nn.Module):
 
 if __name__ == '__main__':
     from utils import set_seed
-    set_seed(0)
     I = InputParams(encoding='binary', 
                         n_inputs=1,
                         bits_per_feature=10,
@@ -302,7 +328,7 @@ if __name__ == '__main__':
                         self_loops=0.1
                 )
     O = OutputParams(n_outputs=1)
-    T = TrainingParams(batch_size=32,
+    T = TrainingParams(batch_size=64,
                        epochs=10,
                        radius_threshold=0.05,
                        learning_rate=0.001)

@@ -1,7 +1,8 @@
 import torch
+from parameters import InputParams
 
 
-def float_array_to_boolean(values, encoding_type='binary', bits=8, redundancy=1):
+def float_array_to_boolean(values, I:InputParams):
     '''
     accepts a point tensor with dimensions as columns and points are rows
     returns a boolean encoding of this
@@ -10,21 +11,25 @@ def float_array_to_boolean(values, encoding_type='binary', bits=8, redundancy=1)
     2. rescaling based on bit representation
     3. convert to bits
     '''
+    bin_values = None
     assert torch.is_floating_point(values)
     assert torch.max(values) <= 1
     assert torch.min(values) >= 0
-    b = bits // redundancy
-    assert bits % redundancy == 0
-    if encoding_type == 'base2':
+    b = I.bits_per_feature // I.redundancy
+    assert I.bits_per_feature % I.redundancy == 0
+    if I.encoding == 'base2':
         bin_values = dec2bin(values, b)
-    elif encoding_type == 'tally':
+        bin_values = bin_values.repeat(1, 1, I.redundancy)
+    elif I.encoding == 'tally':
         bin_values = dec2tally(values, b)
-    elif encoding_type == 'binary_embedding':
-        encoder = BinaryEmbedding(b=b, n=redundancy)
+        bin_values = bin_values.repeat(1, 1, I.redundancy)
+    elif I.encoding == 'binary_embedding':
+        encoder = BinaryEmbedding(b=b, n=I.redundancy)
         bin_values = encoder.encode(values)
     else:
-        raise ValueError(f"encoding {encoding_type} is not an option!")
-
+        raise ValueError(f"encoding {I.encoding} is not an option!")
+    if I.interleaving:
+        bin_values = interleave_features(bin_values, group_size=I.interleaving) # Note: no effect at 1D with grouping=1
     return bin_values.to(torch.uint8)
 
 def dec2bin(x, bits):
@@ -54,6 +59,15 @@ def bin2dec(x, bits, small_endian=False):
     mask.to(x.device, x.dtype)
     vals = torch.sum(mask * x, -1).long()
     return vals / (2**bits - 1)
+
+def interleave_features(x, group_size=1):
+    # interleave between dimension d (dim 2) mxsxdxb
+    # group_size is grouping when interleaving f.ex N=2 → [012, 345] → [(01)(34)(25)]
+    shape = x.shape
+    x = x.reshape(x.shape[0], x.shape[1], x.shape[2], -1, group_size)
+    x = torch.transpose(x, 2, 3).reshape(shape)
+    return x
+
 
 def min_max_normalization(data):
     data = data.to(torch.float)
@@ -134,7 +148,8 @@ if __name__ == '__main__':
     print((p * (2**bits - 1)).numpy())
 
     print("Boolean representation:")
-    boolean_representation = float_array_to_boolean(p, bits=bits, encoding_type='base2')
+    I = InputParams(bits_per_feature=bits, encoding='base2', n_inputs=p.shape[-1])
+    boolean_representation = float_array_to_boolean(p, I)
     print(boolean_representation.to(torch.int).numpy())
 
     ##########################################################
