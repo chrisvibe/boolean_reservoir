@@ -13,14 +13,14 @@ from graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_i
 from utils import set_seed
 
 
-class PathIntegrationVerificationModelBinaryEncoding(nn.Module):
+class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
     # Linear model for sanity check to verify:
     # a) Base 2 binary encoding is relatively lossless with a decent number of bits
     # b) Path integration task can be computed by summing steps
     # Note that x values should be in the range [0, 1] for use of bin2dec
     # Encoding assumed to be binary base 2
     def __init__(self, n_dims):
-        super(PathIntegrationVerificationModelBinaryEncoding, self).__init__()
+        super(PathIntegrationVerificationModelBaseTwoEncoding, self).__init__()
         self.scale = nn.Linear(n_dims, n_dims)
 
     def forward(self, x):

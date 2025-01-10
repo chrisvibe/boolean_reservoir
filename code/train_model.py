@@ -1,6 +1,6 @@
 from utils import set_seed, balance_dataset, euclidean_distance_accuracy
 import torch
-from reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBinaryEncoding
+from reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
 from encoding import float_array_to_boolean, min_max_normalization
 from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader
@@ -35,10 +35,6 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     P = model.P
     I = P.model.input_layer
     T = P.model.training
-
-    # uncomment for verification models
-    # model = PathIntegrationVerificationModel(I.bits_per_feature, I.n_inputs).to(device)
-    # model = PathIntegrationVerificationModelBinaryEncoding(I.n_inputs).to(device)
 
     # Training setup
     torch.cuda.empty_cache()
@@ -98,16 +94,13 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     # plot_graph_with_weight_coloring_1D(model, layout='dot')
     return P, model, dataset
 
-def train_and_evaluate(params: Params, device, dataset):
-    T = params.model.training
-    model = BooleanReservoir(params).to(device)
+def train_and_evaluate(p:Params, model: BooleanReservoir, dataset):
+    T = p.model.training
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
-    dataset.data['x'].to(device)
-    dataset.data['y'].to(device)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
-    x_dev = dataset.data['x_dev'].to(device)
-    y_dev = dataset.data['y_dev'].to(device)
+    x_dev = dataset.data['x_dev']
+    y_dev = dataset.data['y_dev']
 
     best_accuracy, best_loss, best_epoch = 0, float('inf'), 0
     for epoch in range(T.epochs):
@@ -137,7 +130,7 @@ def grid_search(yaml_path):
     yaml_path = Path(yaml_path)
     P = load_yaml_config(yaml_path)
     L = P.logging
-    assert not P.logging.out_path.exists()
+    assert not P.logging.out_path.exists(), 'Grid search already exists (path taken)'
     param_combinations = generate_param_combinations(P.model)
     history = list() 
     best_accuracy = 0
@@ -155,15 +148,20 @@ def grid_search(yaml_path):
         for j in range(n_sample):
             print('#'*60)
             p.model.training.seed = L.grid_search.seed + j
-            if dataset is None or p.model.input_layer != last_input_layer_params:
+            if last_input_layer_params != p.model.input_layer:
                 if dataset:
                     dataset.data['x'].to(cpu_device)
                     dataset.data['y'].to(cpu_device)
                     dataset.data['x_dev'].to(cpu_device)
                     dataset.data['y_dev'].to(cpu_device)
                 dataset = dataset_init(p.model.input_layer)
+                dataset.data['x'].to(device)
+                dataset.data['y'].to(device)
+                dataset.data['x_dev'].to(device)
+                dataset.data['y_dev'].to(device)
                 last_input_layer_params = p.model.input_layer
-            accuracy, loss, epoch, model = train_and_evaluate(p, device, dataset)
+            model = BooleanReservoir(p).to(device)
+            accuracy, loss, epoch, model = train_and_evaluate(p, model, dataset)
             model.to(cpu_device)
             print(f"{model.timestamp_utc}: Config: {i+1:0{len(str(n_config))}d}/{n_config}, Sample: {j+1:0{len(str(n_sample))}d}/{n_sample}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}, Epoch: {epoch}")
             print(p.model)
@@ -186,13 +184,15 @@ def grid_search(yaml_path):
             log_data['model_save_paths'] = model.save()
             history.append(log_data)
             pbar.update(1)
- 
     pbar.close()
+    save_yaml_config(P, L.out_path / 'parameters.yaml')
     history_df = pd.DataFrame(history)
     file_path = L.out_path / 'log.h5'
     history_df.to_hdf(file_path, key='df', mode='w')
     plot_grid_search(file_path)
-    return best_params, best_accuracy, best_loss, best_epoch
+    print('#'*60)
+    print(f'Best accuracy: {best_accuracy}, Best loss: {best_loss}, Best epoch: {best_epoch}')
+    print(f'Best parameters: {best_params}')
 
 def test_saving_and_loading_models():
     p, model, dataset = train_single_model('config/2D/test_single_run.yaml')
@@ -224,30 +224,32 @@ if __name__ == '__main__':
     # #####################################
     # test_saving_and_loading_models()
 
+    # # Verification models
+    #############################################################
+    # P = load_yaml_config('config/1D/verification_model.yaml')
+    # P = load_yaml_config('config/2D/verification_model.yaml')
+    # I = P.model.input_layer
+    # model = PathIntegrationVerificationModelBaseTwoEncoding(n_dims=I.n_inputs)
+    # model = PathIntegrationVerificationModel(I.bits_per_feature, I.n_inputs)
+    # model.P = P
+    # p, model, dataset = train_single_model(model=model)
+
     # # Simple run
     # #####################################
     # p, model, dataset = train_single_model('config/1D/test_single_run.yaml')
-    # p, model, dataset = train_single_model('config/2D/test_single_run.yaml')
+    p, model, dataset = train_single_model('config/2D/test_single_run.yaml')
 
     # # Grid search stuff 
     # #####################################
-    # best_params, best_accuracy, best_loss, best_epoch = grid_search('config/1D/test_sweep.yaml')
-    # best_params, best_accuracy, best_loss, best_epoch = grid_search('config/1D/initial_sweep.yaml')
-    best_params, best_accuracy, best_loss, best_epoch = grid_search('config/2D/initial_sweep.yaml')
-
-    print('#'*60)
-    print(f'Best accuracy: {best_accuracy}, Best loss: {best_loss}, Best epoch: {best_epoch}')
-    print(f'Best parameters: {best_params}')
+    # grid_search('config/1D/test_sweep.yaml')
+    # grid_search('config/1D/initial_sweep.yaml')
+    # grid_search('config/2D/initial_sweep.yaml')
 
     # # Load checkpoint, override stuff, and continue training
     #############################################################
-    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_09_102657')
+    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_09_203821')
     # p = load_yaml_config(checkpoint_path / 'parameters.yaml')
     # p.model.training.epochs = 100
-    # p.logging.out_path = '/out/single_run/test'
     # model = BooleanReservoir(params=p, load_path=checkpoint_path)
-    # model.initial_states[:] = 0
-    # idx = 0 
-    # idx = torch.randint(low=0, high=2**model.max_connectivity, size=(model.n_nodes,)) 
-    # model.initial_states = model.lut[model.node_indices, idx]
     # p, model, dataset = train_single_model(model=model)
+    # p, model, dataset = train_single_model(parameter_override=p)

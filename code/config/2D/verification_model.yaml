@@ -1,0 +1,23 @@
+model:
+  input_layer:
+    encoding: 'base2'
+    n_inputs: 2
+    bits_per_feature: 8
+    redundancy: 1
+  reservoir_layer:
+    n_nodes: 100
+    k_avg: 2
+    k_max: 6
+    p: 0.5
+    self_loops: 0
+    init: 'random' 
+  output_layer:
+    n_outputs: 2
+  training:
+    seed: 0
+    batch_size: 100
+    epochs: 100
+    radius_threshold: 0.05
+    learning_rate: 0.01
+logging:
+  out_path: '/out/single_run/2D/verification_model'

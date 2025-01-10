@@ -19,10 +19,10 @@ def float_array_to_boolean(values, I:InputParams):
     assert I.bits_per_feature % I.redundancy == 0
     if I.encoding == 'base2':
         bin_values = dec2bin(values, b)
-        bin_values = bin_values.repeat(1, 1, I.redundancy)
+        bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
     elif I.encoding == 'tally':
         bin_values = dec2tally(values, b)
-        bin_values = bin_values.repeat(1, 1, I.redundancy)
+        bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
     elif I.encoding == 'binary_embedding':
         encoder = BinaryEmbedding(b=b, n=I.redundancy)
         bin_values = encoder.encode(values)

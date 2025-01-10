@@ -181,16 +181,20 @@ def plot_train_history(history):
 
 def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
-    out_path.mkdir()
+    out_path.mkdir(exist_ok=True)
     df = pd.read_hdf(data_file_path, 'df') 
     df['model_params'] = df['model_params'].apply(lambda p_dict: ModelParams(**p_dict))
     df['k_avg'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_avg)
     df['k_max'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_max)
     df['p'] = df['model_params'].apply(lambda x: x.reservoir_layer.p)
     df['self_loops'] = df['model_params'].apply(lambda x: x.reservoir_layer.self_loops)
-    df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops']]
+    df['n_nodes'] = df['model_params'].apply(lambda x: x.reservoir_layer.n_nodes)
+    df['init'] = df['model_params'].apply(lambda x: x.reservoir_layer.init)
+    df['interleaving'] = df['model_params'].apply(lambda x: x.input_layer.interleaving)
+    # df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops']]
+    df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops', 'n_nodes', 'init', 'interleaving']]
     features = df.drop(columns=['accuracy'])
-    # features = df # TODO keep accuracy/loss in PCA? df.drop(columns=['accuracy'])
+    # features = df.drop(columns=['accuracy', 'loss'])
     
     # Identify categorical and numerical columns
     categorical_cols = features.select_dtypes(include=['object']).columns.tolist()
@@ -227,7 +231,7 @@ def plot_grid_search(data_file_path: Path):
     plt.figure(figsize=(8, 6))
     sns.heatmap(loading_df, annot=True, cmap='coolwarm', cbar=True)
     plt.title('Heatmap of Parameter Contributions to Principal Components')
-    plt.savefig(out_path / 'heatmap.png', bbox_inches='tight')
+    plt.savefig(out_path / 'pca_legend.png', bbox_inches='tight')
     
     # Correlation matrix, including categorical variables
     features_with_performance = pd.concat([features, df[['accuracy']]], axis=1)
@@ -240,14 +244,29 @@ def plot_grid_search(data_file_path: Path):
 
     num_vars = len(df.columns) - 1
     fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
-    for i, column in enumerate(df.columns[1:]):  # Skip 'accuracy' column
-        sns.scatterplot(ax=axes[i], data=df, x=column, y='accuracy')
+    for i, column in enumerate(df.columns[df.columns != 'accuracy']):
+        if len(df[column].unique()) > 10:
+            sns.scatterplot(ax=axes[i], data=df, x=column, y='accuracy')
+        else:
+            sns.boxplot(ax=axes[i], data=df, x=column, y='accuracy')
         axes[i].set_title(f'Scatter plot accuracy vs {column}')
         axes[i].set_xlabel(column)
         axes[i].set_ylabel('Accuracy')
     plt.tight_layout()
-    plt.savefig(out_path / 'accuracy_tuning_subplots.png', bbox_inches='tight')
+    plt.savefig(out_path / 'accuracy_vs_parameters.png', bbox_inches='tight')
+
+    df2 = df[df['accuracy'] >= .3]
+    fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
+    for i, column in enumerate(df2.columns[df2.columns != 'accuracy']):
+        if len(df2[column].unique()) > 10:
+            sns.scatterplot(ax=axes[i], data=df2, x=column, y='accuracy')
+        else:
+            sns.boxplot(ax=axes[i], data=df2, x=column, y='accuracy')
+        axes[i].set_title(f'Scatter plot accuracy vs {column}')
+        axes[i].set_xlabel(column)
+        axes[i].set_ylabel('Accuracy')
+    plt.tight_layout()
+    plt.savefig(out_path / 'accuracy_vs_parameters_gt30p.png', bbox_inches='tight')
 
 if __name__ == '__main__':
-    # TODO file naming changed...
-    plot_grid_search(Path('/out/grid_search/1D/test_sweep/log.h5'))
+    plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))
