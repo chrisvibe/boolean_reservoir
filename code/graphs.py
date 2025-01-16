@@ -5,7 +5,7 @@ import random
 def generate_graph_w_k_avg_incoming_edges(n_nodes, k_avg, k_max=None, self_loops=None):
     adj_matrix = generate_adjacency_matrix(n_nodes, k_avg, k_max=k_max, self_loops=self_loops)
     graph = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
-    print(calc_spectral_radius(graph))
+    #print(calc_spectral_radius(graph))
     return graph
 
 def graph2adjacency_list_outgoing(graph: nx.Graph):

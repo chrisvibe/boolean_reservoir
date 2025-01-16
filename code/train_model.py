@@ -35,6 +35,7 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     P = model.P
     I = P.model.input_layer
     T = P.model.training
+    set_seed(T.seed)
 
     # Training setup
     torch.cuda.empty_cache()
@@ -45,11 +46,11 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 
     # Init data
     dataset = dataset_init(I)
-    dataset.data['x'].to(device)
-    dataset.data['y'].to(device)
+    dataset.data['x'] = dataset.data['x'].to(device)
+    dataset.data['y'] = dataset.data['y'].to(device)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
-    x_test = dataset.data['x_test'].to(device)
-    y_test = dataset.data['y_test'].to(device)
+    dataset.data['x_test'] = dataset.data['x_test'].to(device)
+    dataset.data['y_test'] = dataset.data['y_test'].to(device)
     y_hat_test = None
     history = list()
     best_accuracy, best_loss, best_epoch = 0, float('inf'), 0
@@ -72,10 +73,10 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 
         model.eval()
         with torch.no_grad():
-            y_hat_test = model(x_test)
+            y_hat_test = model(dataset.data['x_test'])
             stats['epoch'] = epoch + 1
             stats['loss_test'] = loss.item()
-            stats['accuracy_test'] = euclidean_distance_accuracy(y_hat_test, y_test, T.radius_threshold) 
+            stats['accuracy_test'] = euclidean_distance_accuracy(y_hat_test, dataset.data['y_test'], T.radius_threshold) 
             if stats['accuracy_test'] > best_accuracy:
                 best_accuracy = stats['accuracy_test']
                 best_loss = stats['loss_test']
@@ -96,11 +97,10 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 
 def train_and_evaluate(p:Params, model: BooleanReservoir, dataset):
     T = p.model.training
+    set_seed(T.seed)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
-    x_dev = dataset.data['x_dev']
-    y_dev = dataset.data['y_dev']
 
     best_accuracy, best_loss, best_epoch = 0, float('inf'), 0
     for epoch in range(T.epochs):
@@ -115,9 +115,9 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset):
             epoch_train_loss += loss.item()
         model.eval()
         with torch.no_grad():
-            y_hat_dev = model(x_dev)
-            dev_loss = criterion(y_hat_dev, y_dev).item()
-            dev_accuracy = euclidean_distance_accuracy(y_hat_dev, y_dev, T.radius_threshold)
+            y_hat_dev = model(dataset.data['x_dev'])
+            dev_loss = criterion(y_hat_dev, dataset.data['y_dev']).item()
+            dev_accuracy = euclidean_distance_accuracy(y_hat_dev, dataset.data['y_dev'], T.radius_threshold)
             if dev_accuracy > best_accuracy:
                 best_accuracy = dev_accuracy
                 best_loss = dev_loss
@@ -130,6 +130,7 @@ def grid_search(yaml_path):
     yaml_path = Path(yaml_path)
     P = load_yaml_config(yaml_path)
     L = P.logging
+    set_seed(P.logging.grid_search.seed)
     assert not P.logging.out_path.exists(), 'Grid search already exists (path taken)'
     param_combinations = generate_param_combinations(P.model)
     history = list() 
@@ -140,7 +141,6 @@ def grid_search(yaml_path):
     n_sample = L.grid_search.n_samples
     last_input_layer_params = dataset = None
     torch.cuda.empty_cache()
-    set_seed(P.logging.grid_search.seed)
 
     pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
     for i in range(n_config):
@@ -148,6 +148,8 @@ def grid_search(yaml_path):
         for j in range(n_sample):
             print('#'*60)
             p.model.training.seed = L.grid_search.seed + j
+            p.model.reservoir_layer.seed = L.grid_search.seed + j
+            p.model.output_layer.seed = L.grid_search.seed + j
             if last_input_layer_params != p.model.input_layer:
                 if dataset:
                     dataset.data['x'].to(cpu_device)
@@ -155,10 +157,10 @@ def grid_search(yaml_path):
                     dataset.data['x_dev'].to(cpu_device)
                     dataset.data['y_dev'].to(cpu_device)
                 dataset = dataset_init(p.model.input_layer)
-                dataset.data['x'].to(device)
-                dataset.data['y'].to(device)
-                dataset.data['x_dev'].to(device)
-                dataset.data['y_dev'].to(device)
+                dataset.data['x'] = dataset.data['x'].to(device)
+                dataset.data['y'] = dataset.data['y'].to(device)
+                dataset.data['x_dev'] = dataset.data['x_dev'].to(device)
+                dataset.data['y_dev'] = dataset.data['y_dev'].to(device)
                 last_input_layer_params = p.model.input_layer
             model = BooleanReservoir(p).to(device)
             accuracy, loss, epoch, model = train_and_evaluate(p, model, dataset)
@@ -237,13 +239,14 @@ if __name__ == '__main__':
     # # Simple run
     # #####################################
     # p, model, dataset = train_single_model('config/1D/test_single_run.yaml')
-    p, model, dataset = train_single_model('config/2D/test_single_run.yaml')
+    # p, model, dataset = train_single_model('config/2D/test_single_run.yaml')
 
     # # Grid search stuff 
     # #####################################
     # grid_search('config/1D/test_sweep.yaml')
-    # grid_search('config/1D/initial_sweep.yaml')
-    # grid_search('config/2D/initial_sweep.yaml')
+    grid_search('config/1D/initial_sweep.yaml')
+    grid_search('config/2D/initial_sweep.yaml')
+    #python -u train_model.py | tee /out/logging/1d_and_2d_2025-01-16.log
 
     # # Load checkpoint, override stuff, and continue training
     #############################################################
@@ -253,3 +256,14 @@ if __name__ == '__main__':
     # model = BooleanReservoir(params=p, load_path=checkpoint_path)
     # p, model, dataset = train_single_model(model=model)
     # p, model, dataset = train_single_model(parameter_override=p)
+
+    # delete
+    # p = load_yaml_config('config/2D/test_single_run.yaml')
+    # p.model.training.epochs = 40
+    # dataset = dataset_init(p.model.input_layer)
+    # for i in range(1000):
+    #     p.model.training.seed = i
+    #     a, _, _, model = train_and_evaluate(p, model=BooleanReservoir(params=p), dataset=dataset)
+    #     if a > 0.3:
+    #         save_yaml_config(p, f'/out/test_single_run_{int(a*100):03d}_{i}.yaml')
+

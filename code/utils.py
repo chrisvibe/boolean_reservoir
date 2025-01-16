@@ -6,11 +6,12 @@ from pathlib import Path
 
 # Ensure reproducibility by setting seeds globally
 def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+    if seed:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
 
 def make_folders(out_path: Path | str, folders: Iterable[str]):
     if isinstance(out_path, str):
@@ -19,6 +20,15 @@ def make_folders(out_path: Path | str, folders: Iterable[str]):
         p = out_path / f 
         if not p.exists():
             p.mkdir(parents=True)
+
+def gpu_check():
+    if torch.cuda.is_available():
+        print("CUDA is available. PyTorch version:", torch.__version__)
+        print("CUDA version:", torch.version.cuda)
+        print("CUDA device count:", torch.cuda.device_count())
+        print("CUDA devices:", torch.cuda.get_device_name(0))
+    else:
+        print("CUDA is not available.")
 
 def balance_dataset(dataset, num_bins=100):
     x = dataset.data['x']
@@ -63,3 +73,6 @@ def euclidean_distance_accuracy(y_hat, y, radius_threshold, normalize=True):
         return correct_predictions / len(y)
     else:
         return correct_predictions
+
+if __name__ == '__main__':
+    gpu_check()

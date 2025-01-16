@@ -80,54 +80,58 @@ class BooleanReservoir(nn.Module):
             self.R = self.P.model.reservoir_layer
             self.O = self.P.model.output_layer
             self.T = self.P.model.training
-            set_seed(self.T.seed)
+            set_seed(self.R.seed)
 
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.graph = self.optional_load('graph', load_dict, 
                 generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
             )
             self.adj_list = graph2adjacency_list_incoming(self.graph)
             self.n_nodes = self.graph.number_of_nodes()
+            self.node_indices = torch.arange(self.n_nodes).to(self.device)
             self.n_parallel = self.T.batch_size
             self.bits_per_feature = self.I.bits_per_feature
             self.n_inputs = self.I.n_inputs
             self.n_outputs = self.O.n_outputs
 
-            # Dense readout layer
-            self.readout = nn.Linear(self.n_nodes, self.n_inputs)
-            if 'weights' in load_dict:
-                self.load_state_dict(load_dict['weights'])
-
-
-            # Preselect which reservoir nodes will be perturbed for input
-            # TODO confine features to certain areas of the reservoir???
-            input_bits = self.n_inputs * self.bits_per_feature
-            assert input_bits <= self.n_nodes
-            self.input_nodes = self.optional_load('input_nodes', load_dict,
-                # assumes input nodes are dedicated to their feature (no repeats)
-                torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
-            )
-            
             # Precompute adj_list and expand it to the batch size
             self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max) 
             self.max_connectivity = self.adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
-            self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1)
+            self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1).to(self.device)
+            self.adj_list_mask = self.adj_list_mask.to(self.device)
 
             # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
             self.lut = self.optional_load('lut', load_dict,
                 lut_random(self.R.n_nodes, self.max_connectivity, p=self.R.p)
-            )
+            ).to(self.device)
 
-            # other precomputations
-            self.node_indices = torch.arange(self.n_nodes)
+            # Precompute bins2int conversion mask 
             bits = self.max_connectivity 
-            self.powers_of_2 = 2 ** torch.arange(bits).flip(dims=(0,))
+            self.powers_of_2 = 2 ** torch.arange(bits).flip(dims=(0,)).to(self.device)
             assert bits <= 24 # bin2int overflows if too large
 
             # Initialize state
             self.states_paralell = None
             self.initial_states = self.optional_load('init_state', load_dict,
                 self.initialization_strategy(self.R.init)
-            )
+            ).to(self.device)
+            self.reset_reservoir()
+            self.states_paralell.to(self.device)
+            
+            # Preselect which reservoir nodes will be perturbed for input
+            input_bits = self.n_inputs * self.bits_per_feature
+            assert input_bits <= self.n_nodes
+            self.input_nodes = self.optional_load('input_nodes', load_dict,
+                # assumes input nodes are dedicated to their feature (no repeats)
+                torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
+            ).to(self.device)
+
+            # Dense readout layer
+            set_seed(self.O.seed)
+            self.readout = nn.Linear(self.n_nodes, self.n_inputs).to(self.device)
+            if 'weights' in load_dict:
+                self.load_state_dict(load_dict['weights'])
+            set_seed(self.R.seed)
 
             # Logging
             logging_params = self.P.logging

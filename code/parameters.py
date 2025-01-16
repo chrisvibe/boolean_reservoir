@@ -12,7 +12,7 @@ yaml.add_representer(PosixPath, represent_pathlib_path)
 yaml.add_representer(WindowsPath, represent_pathlib_path)
 
 class InputParams(BaseModel):
-    seed: int = Field(0, description="Random seed")
+    seed: int = Field(0, description="Random seed, 0 disables seed")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
     n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
     bits_per_feature: Union[int, List[int]] = Field(..., description="Dimension per input data after binary encoding")
@@ -20,6 +20,7 @@ class InputParams(BaseModel):
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
 
 class ReservoirParams(BaseModel):
+    seed: int = Field(0, description="Random seed, 0 disables seed")
     n_nodes: Union[int, List[int]] = Field(..., description="Number of nodes in the reservoir graph")
     k_avg: Union[float, List[float]] = Field(..., description="Average degree of incoming nodes")
     k_max: Union[int, List[int]] = Field(..., description="Maximum degree of incoming nodes")
@@ -28,10 +29,11 @@ class ReservoirParams(BaseModel):
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
 class OutputParams(BaseModel):
+    seed: int = Field(0, description="Random seed, 0 disables seed")
     n_outputs: Union[int, List[int]] = Field(..., description="Dimension of output data")
 
 class TrainingParams(BaseModel):
-    seed: int = Field(0, description="Random seed")
+    seed: int = Field(0, description="Random seed, 0 disables seed")
     batch_size: Union[int, List[int]] = Field(..., description="Number of samples per forward pass")
     epochs: Union[int, List[int]] = Field(..., description="Number of epochs")
     radius_threshold: Union[float, List[float]] = Field(..., description="Euclidian radius from target prediction. Assumes data is [0, 1]")
@@ -44,7 +46,7 @@ class ModelParams(BaseModel):
     training: TrainingParams
 
 class GridSearchParams(BaseModel):
-    seed: int = Field(0, description="Random seed")
+    seed: int = Field(0, description="Random seed, 0 disables seed")
     n_samples: Optional[int] = Field(1, ge=1, description="Number of samples per configuration in grid search")
 
 class HistoryParams(BaseModel):

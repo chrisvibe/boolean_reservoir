@@ -218,7 +218,7 @@ def plot_grid_search(data_file_path: Path):
     # Visualization of PCA
     plt.figure(figsize=(10, 8))
     sns.scatterplot(data=principal_df.join(df[['accuracy']]), x='PC1', y='PC2', hue='accuracy', palette='viridis', s=100, alpha=0.7)
-    plt.title('PCA of Parameters with Accuracy as Hue')
+    plt.title('PCA of Parameters')
     plt.savefig(out_path / 'pca.png', bbox_inches='tight')
     
     # Creating a heatmap of parameter contributions
@@ -228,9 +228,9 @@ def plot_grid_search(data_file_path: Path):
         feature_names += preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
     loading_df = pd.DataFrame(loadings, index=feature_names, columns=['PC1', 'PC2'])
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(3, 6))
     sns.heatmap(loading_df, annot=True, cmap='coolwarm', cbar=True)
-    plt.title('Heatmap of Parameter Contributions to Principal Components')
+    plt.title('Parameter Contributions')
     plt.savefig(out_path / 'pca_legend.png', bbox_inches='tight')
     
     # Correlation matrix, including categorical variables
@@ -242,20 +242,24 @@ def plot_grid_search(data_file_path: Path):
     plt.title('Correlation Matrix including Performance Metrics')
     plt.savefig(out_path / 'correlation.png', bbox_inches='tight')
 
-    num_vars = len(df.columns) - 1
+    col_list = ['accuracy', 'loss', 'k_avg', 'self_loops', 'init', 'interleaving']
+    df1 = df[col_list]
+    num_vars = len(df1.columns) - 1
     fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
-    for i, column in enumerate(df.columns[df.columns != 'accuracy']):
-        if len(df[column].unique()) > 10:
-            sns.scatterplot(ax=axes[i], data=df, x=column, y='accuracy')
+    for i, column in enumerate(df1.columns[df1.columns != 'accuracy']):
+        if len(df1[column].unique()) > 10:
+            sns.scatterplot(ax=axes[i], data=df1, x=column, y='accuracy')
         else:
-            sns.boxplot(ax=axes[i], data=df, x=column, y='accuracy')
+            sns.boxplot(ax=axes[i], data=df1, x=column, y='accuracy')
         axes[i].set_title(f'Scatter plot accuracy vs {column}')
         axes[i].set_xlabel(column)
         axes[i].set_ylabel('Accuracy')
     plt.tight_layout()
     plt.savefig(out_path / 'accuracy_vs_parameters.png', bbox_inches='tight')
 
-    df2 = df[df['accuracy'] >= .3]
+    df2 = df[col_list]
+    df2 = df2[df2['accuracy'] >= .3]
+    num_vars = len(df2.columns) - 1
     fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
     for i, column in enumerate(df2.columns[df2.columns != 'accuracy']):
         if len(df2[column].unique()) > 10:
@@ -266,7 +270,8 @@ def plot_grid_search(data_file_path: Path):
         axes[i].set_xlabel(column)
         axes[i].set_ylabel('Accuracy')
     plt.tight_layout()
-    plt.savefig(out_path / 'accuracy_vs_parameters_gt30p.png', bbox_inches='tight')
+    plt.savefig(out_path / f'accuracy_vs_parameters_gt30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
 
 if __name__ == '__main__':
+    plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))
     plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))
