@@ -90,7 +90,7 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
         model.flush_history()
         model.record_history = False # only need history from first epoch if the process is deterministic...
 
-    plot_predictions_and_labels(y_hat_test[:500], y_test[:500], tolerance=T.radius_threshold, axis_limits=[0, 1])
+    plot_predictions_and_labels(y_hat_test[:500], dataset.data['y_test'][:500], tolerance=T.radius_threshold, axis_limits=[0, 1])
     plot_train_history(history)
     # plot_graph_with_weight_coloring_1D(model, layout='dot')
     return P, model, dataset
@@ -244,18 +244,18 @@ if __name__ == '__main__':
     # # Grid search stuff 
     # #####################################
     # grid_search('config/1D/test_sweep.yaml')
-    grid_search('config/1D/initial_sweep.yaml')
-    grid_search('config/2D/initial_sweep.yaml')
+    # grid_search('config/1D/initial_sweep.yaml')
+    # grid_search('config/2D/initial_sweep.yaml')
     #python -u train_model.py | tee /out/logging/1d_and_2d_2025-01-16.log
 
     # # Load checkpoint, override stuff, and continue training
     #############################################################
-    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_09_203821')
-    # p = load_yaml_config(checkpoint_path / 'parameters.yaml')
-    # p.model.training.epochs = 100
+    checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_16_091842')
+    p = load_yaml_config(checkpoint_path / 'parameters.yaml')
+    p.model.training.epochs = 75
     # model = BooleanReservoir(params=p, load_path=checkpoint_path)
     # p, model, dataset = train_single_model(model=model)
-    # p, model, dataset = train_single_model(parameter_override=p)
+    p, model, dataset = train_single_model(parameter_override=p)
 
     # delete
     # p = load_yaml_config('config/2D/test_single_run.yaml')

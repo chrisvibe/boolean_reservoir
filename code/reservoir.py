@@ -63,6 +63,7 @@ class PathIntegrationVerificationModel(nn.Module):
 
 class BooleanReservoir(nn.Module):
     def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if load_path:
             load_path = Path(load_path)
             if load_path.suffix in ['.yaml', '.yml']:
@@ -82,7 +83,6 @@ class BooleanReservoir(nn.Module):
             self.T = self.P.model.training
             set_seed(self.R.seed)
 
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.graph = self.optional_load('graph', load_dict, 
                 generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
             )
@@ -214,10 +214,10 @@ class BooleanReservoir(nn.Module):
         with gzip.open(paths['graph'], 'rb') as f:
             d['graph'] = nx.read_graphml(f) 
             d['graph'] = nx.relabel_nodes(d['graph'], lambda x: int(x)) 
-        d['lut'] = torch.load(paths['lut'], weights_only=True)
-        d['input_nodes'] = torch.load(paths['input_nodes'], weights_only=True)
-        d['init_state'] = torch.load(paths['init_state'], weights_only=True)
-        d['weights'] = torch.load(paths['weights'], weights_only=True)
+        d['lut'] = torch.load(paths['lut'], weights_only=True, map_location=self.device)
+        d['input_nodes'] = torch.load(paths['input_nodes'], weights_only=True, map_location=self.device)
+        d['init_state'] = torch.load(paths['init_state'], weights_only=True, map_location=self.device)
+        d['weights'] = torch.load(paths['weights'], weights_only=True, map_location=self.device)
         self.__init__(params=p, load_dict=d)
 
     @staticmethod
@@ -318,7 +318,6 @@ class BooleanReservoir(nn.Module):
 
 
 if __name__ == '__main__':
-    from utils import set_seed
     I = InputParams(encoding='binary', 
                         n_inputs=1,
                         bits_per_feature=10,
@@ -344,3 +343,4 @@ if __name__ == '__main__':
     s = 3
     x = torch.randint(0, 2, (T.batch_size, s, I.n_inputs, I.bits_per_feature,), dtype=torch.uint8)
     print(model(x).detach().numpy())
+    # TODO fix bugg: make sure this has the same result, seeds in model should guarantee this...
