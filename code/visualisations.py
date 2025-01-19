@@ -245,30 +245,34 @@ def plot_grid_search(data_file_path: Path):
     col_list = ['accuracy', 'loss', 'k_avg', 'self_loops', 'init', 'interleaving']
     df1 = df[col_list]
     num_vars = len(df1.columns) - 1
-    fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
+    fig, axes = plt.subplots(1, num_vars, figsize=(8*num_vars, 10))
+    axes = axes.flatten()
     for i, column in enumerate(df1.columns[df1.columns != 'accuracy']):
         if len(df1[column].unique()) > 10:
             sns.scatterplot(ax=axes[i], data=df1, x=column, y='accuracy')
         else:
             sns.boxplot(ax=axes[i], data=df1, x=column, y='accuracy')
-        axes[i].set_title(f'Scatter plot accuracy vs {column}')
-        axes[i].set_xlabel(column)
-        axes[i].set_ylabel('Accuracy')
+        axes[i].set_title(f'accuracy vs {column}', fontsize=16)
+        axes[i].set_xlabel(column, fontsize=16)
+        axes[i].set_ylabel('Accuracy', fontsize=16)
+
     plt.tight_layout()
     plt.savefig(out_path / 'accuracy_vs_parameters.png', bbox_inches='tight')
+
 
     df2 = df[col_list]
     df2 = df2[df2['accuracy'] >= .3]
     num_vars = len(df2.columns) - 1
-    fig, axes = plt.subplots(num_vars, 1, figsize=(10, 8*num_vars))
+    fig, axes = plt.subplots(1, num_vars, figsize=(8*num_vars, 10))
+    axes = axes.flatten()
     for i, column in enumerate(df2.columns[df2.columns != 'accuracy']):
         if len(df2[column].unique()) > 10:
             sns.scatterplot(ax=axes[i], data=df2, x=column, y='accuracy')
         else:
             sns.boxplot(ax=axes[i], data=df2, x=column, y='accuracy')
-        axes[i].set_title(f'Scatter plot accuracy vs {column}')
-        axes[i].set_xlabel(column)
-        axes[i].set_ylabel('Accuracy')
+        axes[i].set_title(f'accuracy vs {column}', fontsize=20)
+        axes[i].set_xlabel(column, fontsize=16)
+        axes[i].set_ylabel('Accuracy', fontsize=16)
     plt.tight_layout()
     plt.savefig(out_path / f'accuracy_vs_parameters_gt30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
 

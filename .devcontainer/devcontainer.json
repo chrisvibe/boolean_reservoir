@@ -11,9 +11,14 @@
         "source=${localWorkspaceFolder}/data,target=/data,type=bind",
         "source=${localWorkspaceFolder}/out,target=/out,type=bind"
     ],
-    "postStartCommand": "/bin/bash /root/repo/activate_env.sh",
-    "settings": {
-        "python.defaultInterpreterPath": "/opt/conda/envs/boolean_reservoir/bin/python"
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/opt/conda/envs/boolean_reservoir/bin/python"
+            }
+        }
+    },
+    "hostRequirements": {
+        "gpu": "optional"
     }
 }
-
