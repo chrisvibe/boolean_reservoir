@@ -46,13 +46,6 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     dataset.data['x_test'] = dataset.data['x_test'].to(device)
     dataset.data['y_test'] = dataset.data['y_test'].to(device)
 
-    # TODO DELETE
-    dataset.data['x_test'] = dataset.data['x_dev'].to(device)
-    dataset.data['y_test'] = dataset.data['y_dev'].to(device)
-    # model.state_dict()
-# OrderedDict([('readout.weight', tensor([[-0.0222, -0.0316, -0.0093,  ..., -0.0105,  0.0191, -0.0138],
-        # [ 0.021...0.0176,  ...,  0.0183,  0.0115, -0.0097]])), ('readout.bias', tensor([0.0193, 0.0226]))])
-
     _, model, history = train_and_evaluate(P, model, dataset, evaluation='test', verbose=True)
 
     y_test = dataset.data['y_test'][:500]
@@ -251,12 +244,11 @@ if __name__ == '__main__':
     # grid_search('config/1D/test_sweep.yaml')
     # grid_search('config/1D/initial_sweep.yaml')
     # grid_search('config/2D/initial_sweep.yaml')
-    #python -u train_model.py | tee /out/logging/1d_and_2d_2025-01-16.log
+    # # python -u train_model.py | tee /out/logging/1d_and_2d_2025-01-16.log
+    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_16_091842')
+    # p, model, dataset = train_single_model(checkpoint_path)
 
     # Test
     #####################################
     test_saving_and_loading_models()
     test_reproducibility_of_loaded_grid_search_checkpoint()
-
-    # TODO test this:
-    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_16_091842')
