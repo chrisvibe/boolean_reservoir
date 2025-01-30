@@ -1,0 +1,29 @@
+model:
+  input_layer:
+    encoding: 'binary_embedding'
+    n_inputs: 2
+    bits_per_feature: 48
+    redundancy: 6
+    interleaving: [0]
+  reservoir_layer:
+    n_nodes: [1000, 2000]
+    k_avg: [2]
+    k_max: [6]
+    p: [.5]
+    self_loops: [0]
+    init: ['zeros']
+  output_layer:
+    n_outputs: 2
+  training:
+    batch_size: 100
+    epochs: 3
+    radius_threshold: 0.05
+    learning_rate: 0.001
+logging:
+  out_path: '/tmp/boolean_reservoir/out/grid_search/2D/test'
+  grid_search:
+    seed: 0
+    n_samples: 2
+  history:
+    record_history: False
+    history_buffer_size: 10000

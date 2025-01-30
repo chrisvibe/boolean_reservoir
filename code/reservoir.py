@@ -62,6 +62,9 @@ class PathIntegrationVerificationModel(nn.Module):
 
 
 class BooleanReservoir(nn.Module):
+    # load_path can be a yaml file or a checkpoint directory
+    # a yaml file doesnt load any parameters while a checkpoint does
+    # params can be used to override stuff in conjunction with load_path
     def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if load_path:
@@ -108,7 +111,7 @@ class BooleanReservoir(nn.Module):
             # Precompute bins2int conversion mask 
             bits = self.max_connectivity 
             self.powers_of_2 = 2 ** torch.arange(bits).flip(dims=(0,)).to(self.device)
-            assert bits <= 24 # bin2int overflows if too large
+            assert bits <= 24, 'too many bits! (overflow)' # bin2int overflows if too large
 
             # Initialize state
             self.states_paralell = None
@@ -120,7 +123,7 @@ class BooleanReservoir(nn.Module):
             
             # Preselect which reservoir nodes will be perturbed for input
             input_bits = self.n_inputs * self.bits_per_feature
-            assert input_bits <= self.n_nodes
+            assert input_bits <= self.n_nodes, 'more inputs bits than nodes in graph!'
             self.input_nodes = self.optional_load('input_nodes', load_dict,
                 # assumes input nodes are dedicated to their feature (no repeats)
                 torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
@@ -190,10 +193,10 @@ class BooleanReservoir(nn.Module):
     
     @staticmethod
     def get_timestamp_utc():
-        return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S")
+        return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S_%f")
 
     def save(self):
-        self.save_folder.mkdir(parents=True, exist_ok=False)
+        self.save_folder.mkdir(parents=True, exist_ok=True)
         paths = self.make_load_paths(self.save_folder)
         save_yaml_config(self.P, paths['parameters'])
         with gzip.open(paths['graph'], 'wb') as f:
@@ -202,6 +205,7 @@ class BooleanReservoir(nn.Module):
         torch.save(self.input_nodes, paths['input_nodes'])
         torch.save(self.initial_states, paths['init_state'])
         torch.save(self.state_dict(), paths['weights'])
+        self.P.logging.checkpoint_path = self.save_folder
         return paths 
 
     def load(self, paths=None, parameter_override:Params=None):
@@ -229,8 +233,8 @@ class BooleanReservoir(nn.Module):
         files.append(('graph', 'graphml.gz'))
         files.append(('lut', 'pt'))
         files.append(('input_nodes', 'pt'))
-        files.append(('weights', 'pt'))
         files.append(('init_state', 'pt'))
+        files.append(('weights', 'pt'))
         for file, filetype in files:
             paths[file] = folder_path / f'{file}.{filetype}'
         return paths

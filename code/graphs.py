@@ -31,9 +31,9 @@ def generate_adjacency_matrix_old(n_nodes, k_avg, k_max=None, self_loops=None, a
     # note that avk_k for incoming or outcoming edges is the same here...
     k_max = n_nodes if k_max is None else k_max
     self_loops = random.uniform(0, 1) if self_loops is None else self_loops
-    assert 0 <= k_avg <= n_nodes
-    assert 0 <= k_avg <= k_max
-    assert 0 <= self_loops <= 1
+    assert 0 <= k_avg <= n_nodes, '0 <= k_avg <= n_nodes'
+    assert 0 <= k_avg <= k_max, '0 <= k_avg <= k_max'
+    assert 0 <= self_loops <= 1, '0 <= self_loops <= 1'
     idx2col = lambda idx: idx % n_nodes
     diagonal = lambda x: x[::n_nodes+1]
     indices = np.arange(n_nodes ** 2)

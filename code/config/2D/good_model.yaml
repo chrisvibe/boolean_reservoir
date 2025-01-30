@@ -22,4 +22,4 @@ model:
     radius_threshold: 0.05
     seed: 0
 logging:
-  out_path: '/out/single_run/2D/good_model'
+  out_path: '/out/single_run/2D/test_run'

@@ -61,6 +61,7 @@ class TrainLog(BaseModel):
 
 class LoggingParams(BaseModel):
     out_path: Path = Field('/out', description="Where to save logs")
+    checkpoint_path: Optional[Path] = Field(None, description="Where to save last checkpoint")
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams())
     train_log: TrainLog = Field(TrainLog())

@@ -3,7 +3,7 @@ import matplotlib.patches as patches
 import matplotlib
 import numpy as np
 from copy import deepcopy
-from parameters import ModelParams
+from parameters import Params
 from encoding import bin2dec
 from utils import make_folders
 import seaborn as sns
@@ -183,7 +183,7 @@ def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
     out_path.mkdir(exist_ok=True)
     df = pd.read_hdf(data_file_path, 'df') 
-    df['model_params'] = df['model_params'].apply(lambda p_dict: ModelParams(**p_dict))
+    df['model_params'] = df['params'].apply(lambda p_dict: Params(**p_dict).model)
     df['k_avg'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_avg)
     df['k_max'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_max)
     df['p'] = df['model_params'].apply(lambda x: x.reservoir_layer.p)
