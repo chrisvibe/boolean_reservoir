@@ -51,7 +51,7 @@ class GridSearchParams(BaseModel):
 
 class HistoryParams(BaseModel):
     record_history: Optional[bool] = Field(False, description="Detailed state recoding of reservoir")
-    history_buffer_size: Optional[int] = Field(10000, description="Number of log entries before saving")
+    buffer_size: Optional[int] = Field(64, description="Number of batches before saving")
 
 class TrainLog(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")

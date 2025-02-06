@@ -6,13 +6,14 @@ from copy import deepcopy
 from parameters import Params
 from encoding import bin2dec
 from utils import make_folders
+from pathlib import Path
 import seaborn as sns
 import pandas as pd
-from datetime import datetime
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
-from pathlib import Path
+from reservoir import BatchedTensorHistoryWriter
+from scipy.stats import zscore
 matplotlib.use('Agg')
 
 make_folders('/out', ['visualizations']) 
@@ -276,6 +277,34 @@ def plot_grid_search(data_file_path: Path):
     plt.tight_layout()
     plt.savefig(out_path / f'accuracy_vs_parameters_gt30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
 
+def plot_history_pca(out_path='/tmp/boolean_reservoir/out/history'):
+    out_path = Path(out_path)
+    history, expanded_meta, meta = BatchedTensorHistoryWriter(out_path).reload_history()
+    # filter history
+    print(meta)
+    print('full history:', history.shape)
+    expanded_meta = expanded_meta[expanded_meta['phase'] == 'reservoir_layer']
+    history = history[expanded_meta.index].numpy()
+    print('filtered history:', history.shape)
+
+    # normalize and perform dimension reduction
+    history_normalized = zscore(history, axis=0)
+    history_normalized = np.nan_to_num(history_normalized) # columns with all 0's or 1's will divide by zero as variance = 0
+    n_components = 2
+    pca = PCA(n_components=n_components)
+    history_pca = pca.fit_transform(history_normalized)
+    df = pd.DataFrame(history_pca, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
+    df = pd.concat([df, expanded_meta], axis=1)
+
+    print("Explained variance by each component:")
+    print(pca.explained_variance_ratio_)
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
+    plt.title('PCA of Parameters')
+    plt.savefig(out_path / 'pca.png', bbox_inches='tight')
+    
+
 if __name__ == '__main__':
-    plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))
-    plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))
+    # plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))
+    # plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))
+    plot_history_pca()

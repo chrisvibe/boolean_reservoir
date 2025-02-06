@@ -76,5 +76,6 @@ def euclidean_distance_accuracy(y_hat, y, radius_threshold, normalize=True):
     else:
         return correct_predictions
 
+
 if __name__ == '__main__':
     gpu_check()

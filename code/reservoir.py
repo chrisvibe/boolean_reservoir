@@ -80,6 +80,7 @@ class BooleanReservoir(nn.Module):
         else:
             super(BooleanReservoir, self).__init__()
             self.P = params
+            self.L = self.P.logging
             self.I = self.P.model.input_layer
             self.R = self.P.model.reservoir_layer
             self.O = self.P.model.output_layer
@@ -137,25 +138,12 @@ class BooleanReservoir(nn.Module):
             set_seed(self.R.seed)
 
             # Logging
-            logging_params = self.P.logging
-            self.out_path = Path(logging_params.out_path)
-            self.record_history = logging_params.history.record_history
-            self.history_buffer_size = logging_params.history.history_buffer_size
-            self.history = list() 
-            self.history_file_count = 0
+            self.out_path = Path(self.L.out_path)
             self.timestamp_utc = self.get_timestamp_utc()
             self.P.logging.train_log.timestamp_utc = self.timestamp_utc
             self.save_folder = self.out_path / 'models' / self.timestamp_utc
-            
-    def flush_history(self):
-        if self.record_history and self.history:
-            df = pd.DataFrame(self.history)
-            f = str(self.history_file_count) + '.csv'
-            path = self.out_path / 'history' / self.timestamp_utc / f
-            path.mkdir(parents=True, exist_ok=True)
-            df.to_csv(path, index=False) # TODO consider np.savez_compressed
-            self.history = list()
-            self.history_file_count += 1
+            self.record_history = self.L.history.record_history
+            self.history = BatchedTensorHistoryWriter(folderpath=self.out_path, buffer_size=self.L.history.buffer_size) 
     
     @staticmethod 
     def optional_load(load_key: str, load_dict: dict, default):
@@ -223,6 +211,9 @@ class BooleanReservoir(nn.Module):
         d['init_state'] = torch.load(paths['init_state'], weights_only=True, map_location=self.device)
         d['weights'] = torch.load(paths['weights'], weights_only=True, map_location=self.device)
         self.__init__(params=p, load_dict=d)
+    
+    def flush_history(self):
+        self.history.flush()
 
     @staticmethod
     def make_load_paths(folder_path):
@@ -239,7 +230,7 @@ class BooleanReservoir(nn.Module):
             paths[file] = folder_path / f'{file}.{filetype}'
         return paths
     
-    def bin2int(self, x):  # TODO check if GPU has data
+    def bin2int(self, x):
         vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 
@@ -263,7 +254,7 @@ class BooleanReservoir(nn.Module):
         m, s, d, b = x.shape
         self.reset_reservoir()
 
-        # handle large batch size
+        # handle small batch size
         # note that the :m is to handle batch sizes smaller than the number of parallel reservoirs handy
         if m > self.n_parallel:
             outputs_list = list()
@@ -278,19 +269,15 @@ class BooleanReservoir(nn.Module):
                 outputs_list.append(outputs)
             return torch.cat(outputs_list, dim=0)
 
-        # Record states # TODO what granularity do we want?
-        # if self.record:
-        #     record = dict()
-        #     record['sample'] = i 
-        #     record['step'] = j + 1 
-        #     record['reservoir_states'] = (torch.clone(self.node_states).to(torch.int).numpy())
-        #     self.save_record(record)
+        self.batch_record(phase='init', step=0)
 
         # INPUT LAYER
         # ----------------------------------------------------
         for j in range(s):
             # Perturb specific reservoir nodes with input
             self.states_paralell[:m, self.input_nodes] ^= x[:m, j]
+
+            self.batch_record(phase='input_layer', step=j)
 
             # RESERVOIR LAYER
             # ----------------------------------------------------
@@ -307,18 +294,73 @@ class BooleanReservoir(nn.Module):
             # Update the state with LUT
             self.states_paralell[:m] = self.lut[self.node_indices, idx]
 
-        # Record states # TODO what granularity do we want?
-        # if self.record:
-        #     record = dict()
-        #     record['sample'] = i 
-        #     record['step'] = j + 1 
-        #     record['reservoir_states'] = (torch.clone(self.node_states).to(torch.int).numpy())
-        #     self.save_record(record)
-    
+            self.batch_record(phase='reservoir_layer', step=j)
+
+        self.batch_record(phase='output_layer', step=0)
+
         # READOUT LAYER
         # ----------------------------------------------------
         outputs = self.readout(self.states_paralell[:m].float())
         return outputs 
+
+    def batch_record(self, **meta_data):
+        if self.record_history and meta_data:
+            self.history.append_batch(self.states_paralell, meta_data)
+
+
+class BatchedTensorHistoryWriter:
+    def __init__(self, folderpath='history', buffer_size=64):
+        self.dir_path = Path(folderpath)
+        self.dir_path.mkdir(parents=True, exist_ok=True)
+        self.file_index = 0
+        self.buffer_size = buffer_size
+        self.buffer = []
+        self.meta_buffer = []
+
+    def append_batch(self, batch_tensor, meta_data):
+        self.buffer.append(batch_tensor.clone().cpu())
+        self.meta_buffer.append(meta_data)
+        meta_data['file_idx'] = self.file_index 
+        meta_data['batch_number'] = len(self.meta_buffer)
+        meta_data['samples'] = len(batch_tensor)
+        if len(self.buffer) >= self.buffer_size:
+            self._write_buffer()
+
+    def _write_buffer(self):
+        if not self.buffer:
+            return
+        data = torch.cat(self.buffer, dim=0)
+        tensor_path = self.dir_path / f'tensor_{self.file_index}.pt'
+        torch.save(data, tensor_path)
+        meta_path = self.dir_path / f'meta_{self.file_index}.csv'
+        pd.DataFrame(self.meta_buffer).to_csv(meta_path, index=False)
+        self.buffer = []
+        self.meta_buffer = []
+        self.file_index += 1
+
+    def flush(self):
+        self._write_buffer()
+
+    def reload_history(self, history_dir=None):
+        dir_path = Path(history_dir) if history_dir else self.dir_path
+        all_data = []
+        all_meta_data = []
+        idx = 0
+        for _ in dir_path.glob('*.pt'):
+            tensor_path = dir_path / f'tensor_{idx}.pt'
+            tensor_data = torch.load(tensor_path, weights_only=True)
+            meta_path = dir_path / f'meta_{idx}.csv'
+            meta_data = pd.read_csv(meta_path)
+            all_data.append(tensor_data)
+            all_meta_data.append(meta_data)
+            idx += 1
+        combined_data = torch.cat(all_data, dim=0)
+        combined_meta_data = pd.concat(all_meta_data, ignore_index=True, axis=0)
+
+        df = combined_meta_data
+        expanded_meta_data = df.loc[df.index.repeat(df['samples'])].reset_index(drop=True)
+        expanded_meta_data.drop(columns=['samples'], inplace=True)
+        return combined_data, expanded_meta_data, combined_meta_data
 
 
 if __name__ == '__main__':
@@ -335,16 +377,23 @@ if __name__ == '__main__':
                         self_loops=0.1
                 )
     O = OutputParams(n_outputs=1)
-    T = TrainingParams(batch_size=64,
+    T = TrainingParams(batch_size=32,
                        epochs=10,
                        radius_threshold=0.05,
                        learning_rate=0.001)
+    L = LoggingParams(out_path='/tmp/boolean_reservoir/out/history', history=HistoryParams(record_history=True, buffer_size=10))
+
     model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
-    params = Params(model=model_params)
+    params = Params(model=model_params, logging=L)
     model = BooleanReservoir(params)
 
     # data with s steps per sample
     s = 3
     x = torch.randint(0, 2, (T.batch_size, s, I.n_inputs, I.bits_per_feature,), dtype=torch.uint8)
+    model(x)
     print(model(x).detach().numpy())
-    # TODO fix bugg: make sure this has the same result, seeds in model should guarantee this...
+    model.flush_history()
+    history, meta, expanded_meta = BatchedTensorHistoryWriter(L.out_path).reload_history()
+    print(history[expanded_meta[expanded_meta['phase'] == 'init'].index].shape)
+    print(history.shape)
+    print(meta)
