@@ -63,11 +63,9 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
     x_eval = 'x_' + evaluation
     y_eval = 'y_' + evaluation
-    if verbose:
-        print(f"Evaluation: {evaluation}")
-
     best = {'eval': evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
     history = list()
+
     for epoch in range(T.epochs):
         epoch_correct_train_predictions = epoch_train_loss = 0
         model.train()
@@ -100,13 +98,14 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
         model.flush_history()
         model.record_history = False
     if verbose:
-        print(f'Evaluation: {evaluation}, Best accuracy: {best['accuracy']}, Best loss: {best['loss']}, Best epoch: {best['epoch']}')
+        print(f'Best accuracy: {best}')
+    model.P.logging.train_log.evaluation = evaluation
     model.P.logging.train_log.accuracy = best['accuracy']
     model.P.logging.train_log.loss = best['loss']
     model.P.logging.train_log.epoch = best['epoch']
     return best, model, history
 
-def grid_search(yaml_path):
+def grid_search(yaml_path, evaluation='dev'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
@@ -123,12 +122,11 @@ def grid_search(yaml_path):
     last_input_layer_params = dataset = None
     torch.cuda.empty_cache()
 
-    evaluation = 'dev'
-    best_model = {'eval': evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf'), 'params': None}
+    best_params = None 
     pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
     for i in range(n_config):
-        p = Params(model=param_combinations[i], logging=deepcopy(P.logging))
         for j in range(n_sample):
+            p = Params(model=deepcopy(param_combinations[i]), logging=deepcopy(P.logging))
             print('#'*60)
             k = L.grid_search.seed*4 + i*2 + j
             p.model.training.seed = k 
@@ -151,16 +149,13 @@ def grid_search(yaml_path):
             model.to(cpu_device)
             print(f"{model.timestamp_utc}: Config: {i+1:0{len(str(n_config))}d}/{n_config}, Sample: {j+1:0{len(str(n_sample))}d}/{n_sample}, Loss: {best_epoch['loss']:.4f}, Accuracy: {best_epoch['accuracy']:.4f}, Epoch: {best_epoch['epoch']}")
             print(p.model)
-            if best_epoch['accuracy'] > best_model['accuracy']:
-                best_model.update(best_epoch)
-                best_model['params'] = p
+            if best_params is None or (best_epoch['accuracy'] > best_params.logging.train_log.accuracy):
+                best_params = model.P
             log_data = dict()
             log_data['timestamp_utc'] = model.timestamp_utc 
             log_data['config'] = i+1
             log_data['sample'] = j+1 
-            log_data['accuracy'] = best_epoch['accuracy'] 
-            log_data['loss'] = best_epoch['loss'] 
-            log_data['epoch'] = best_epoch['epoch'] 
+            log_data.update(best_epoch)
             log_data['params'] = p.model_dump() 
             model.save()
             history.append(log_data)
@@ -173,9 +168,8 @@ def grid_search(yaml_path):
     print('making plots...')
     plot_grid_search(file_path)
     print('#'*60)
-    print(f'Best accuracy: {best_model['accuracy']}, Best loss: {best_model['loss']}, Best epoch: {best_model['epoch']}')
-    print(f'Best parameters: {best_model['params']}')
-    return P, best_model['params']
+    print(f'Best parameters:\n{best_params}')
+    return P, best_params
 
 def test_saving_and_loading_models():
     path = Path('/tmp/boolean_reservoir/out') 
@@ -191,9 +185,9 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     path = Path('/tmp/boolean_reservoir/out') 
     if path.exists():
         rmtree(path)
-    _, P = grid_search('config/2D/test_sweep.yaml')
-    print('-'*10, '\n', P, '\n', '-'*10)
-    model = BooleanReservoir(load_path=P.logging.checkpoint_path)
+    _, p = grid_search('config/2D/test_sweep.yaml')
+    print('-'*10, '\n', p, '\n', '-'*10)
+    model = BooleanReservoir(load_path=p.logging.checkpoint_path)
     #################################################################
     p2 = deepcopy(model.P)
     p2, model2, dataset2 = train_single_model(parameter_override=p2)
@@ -250,5 +244,5 @@ if __name__ == '__main__':
 
     # Test
     #####################################
-    test_saving_and_loading_models()
+    # test_saving_and_loading_models()
     test_reproducibility_of_loaded_grid_search_checkpoint()

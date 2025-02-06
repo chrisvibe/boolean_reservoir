@@ -55,6 +55,7 @@ class HistoryParams(BaseModel):
 
 class TrainLog(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
+    evaluation: Optional[str] = Field(None, description="test, dev, train etc")
     accuracy: Optional[float] = Field(None, description="accuracy")
     loss: Optional[float] = Field(None, description="loss")
     epoch: Optional[int] = Field(None, description="epoch")
