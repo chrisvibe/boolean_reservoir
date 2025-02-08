@@ -2,24 +2,29 @@ model:
   input_layer:
     bits_per_feature: 48
     encoding: binary_embedding
-    interleaving: 0
+    interleaving: 1
     n_inputs: 2
     redundancy: 6
-    seed: 312
+    seed: 0
   output_layer:
     n_outputs: 2
+    seed: 531
   reservoir_layer:
-    init: random_lut_state
-    k_avg: 2
+    init: zeros
+    k_avg: 2.1
     k_max: 6
     n_nodes: 3000
     p: 0.5
-    self_loops: 0.3
+    seed: 531
+    self_loops: 0.0
   training:
     batch_size: 100
     epochs: 100
     learning_rate: 0.001
     radius_threshold: 0.05
-    seed: 0
+    seed: 531
 logging:
-  out_path: '/out/single_run/2D/test_run'
+  out_path: '/out/single_run/2D/good_model'
+  history:
+    record_history: true
+    buffer_size: 64

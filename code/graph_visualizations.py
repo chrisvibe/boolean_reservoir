@@ -1,7 +1,5 @@
 import graphviz
 import networkx as nx
-from utils import make_folders
-make_folders('/out', ['visualizations']) 
 
 def normalize(x, min_val, max_val):
     assert min_val < max_val

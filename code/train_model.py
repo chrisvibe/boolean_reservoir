@@ -5,7 +5,7 @@ from encoding import float_array_to_boolean, min_max_normalization
 from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
-from visualisations import plot_predictions_and_labels, plot_train_history, plot_grid_search
+from visualisations import plot_predictions_and_labels, plot_train_history, plot_history_pca, plot_grid_search
 from graph_visualizations import plot_graph_with_weight_coloring_1D
 from parameters import * 
 import pandas as pd
@@ -50,9 +50,10 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 
     y_test = dataset.data['y_test'][:500]
     y_hat_test = model(dataset.data['x_test'][:500])
-    plot_predictions_and_labels(y_hat_test, y_test, tolerance=T.radius_threshold, axis_limits=[0, 1])
-    plot_train_history(history)
-    # plot_graph_with_weight_coloring_1D(model, layout='dot')
+    plot_predictions_and_labels(model.save_dir, y_hat_test, y_test, tolerance=T.radius_threshold, axis_limits=[0, 1])
+    plot_train_history(model.save_dir, history)
+    plot_history_pca(model.save_dir)
+    # plot_graph_with_weight_coloring_1D(path, model, layout='dot')
     return P, model, dataset
 
 def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, evaluation='test', verbose=False):
@@ -63,8 +64,8 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
     x_eval = 'x_' + evaluation
     y_eval = 'y_' + evaluation
-    best = {'eval': evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
-    history = list()
+    best_stats = {'eval': evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
+    train_history = list()
 
     for epoch in range(T.epochs):
         epoch_correct_train_predictions = epoch_train_loss = 0
@@ -76,6 +77,7 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
             loss.backward()
             optimizer.step()
             epoch_train_loss += loss.item()
+            epoch_correct_train_predictions += euclidean_distance_accuracy(y_hat, y, T.radius_threshold, normalize=False)
         model.eval()
         with torch.no_grad():
             stats = dict()
@@ -87,23 +89,24 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
             stats['epoch'] = epoch + 1
             stats['loss_' + evaluation] = eval_loss 
             stats['accuracy_' + evaluation] = eval_accuracy 
-            if eval_accuracy > best['accuracy']:
-                best['epoch'] = epoch + 1
-                best['accuracy'] = eval_accuracy
-                best['loss'] = eval_loss
-            history.append(stats)
+            if eval_accuracy > best_stats['accuracy']:
+                best_stats['epoch'] = epoch + 1
+                best_stats['accuracy'] = eval_accuracy
+                best_stats['loss'] = eval_loss
+            train_history.append(stats)
             if verbose:
                 print(f"Epoch: {stats['epoch']:0{len(str(T.epochs))}d}/{T.epochs}, Loss: {stats['loss_' + evaluation]:.4f}, Accuracy: {stats['accuracy_' + evaluation]:.4f}")
-        # only need reservoir dynamics history from first epoch if the process is deterministic...
-        model.flush_history()
-        model.record_history = False
+        # deterministic reservoirs only need history from the first epoch
+        if hasattr(model, 'flush_history'):
+            model.flush_history()
+            model.record_history = False
     if verbose:
-        print(f'Best accuracy: {best}')
+        print(f'Best accuracy: {best_stats}')
     model.P.logging.train_log.evaluation = evaluation
-    model.P.logging.train_log.accuracy = best['accuracy']
-    model.P.logging.train_log.loss = best['loss']
-    model.P.logging.train_log.epoch = best['epoch']
-    return best, model, history
+    model.P.logging.train_log.accuracy = best_stats['accuracy']
+    model.P.logging.train_log.loss = best_stats['loss']
+    model.P.logging.train_log.epoch = best_stats['epoch']
+    return best_stats, model, train_history
 
 def grid_search(yaml_path, evaluation='dev'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -187,7 +190,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
         rmtree(path)
     _, p = grid_search('config/2D/test_sweep.yaml')
     print('-'*10, '\n', p, '\n', '-'*10)
-    model = BooleanReservoir(load_path=p.logging.checkpoint_path)
+    model = BooleanReservoir(load_path=p.logging.last_checkpoint)
     #################################################################
     p2 = deepcopy(model.P)
     p2, model2, dataset2 = train_single_model(parameter_override=p2)
@@ -219,7 +222,7 @@ if __name__ == '__main__':
     # test_saving_and_loading_models()
 
     # # Verification models
-    #############################################################
+    # ############################################################
     # P = load_yaml_config('config/1D/verification_model.yaml')
     # P = load_yaml_config('config/2D/verification_model.yaml')
     # I = P.model.input_layer
@@ -228,21 +231,22 @@ if __name__ == '__main__':
     # model.P = P
     # p, model, dataset = train_single_model(model=model)
 
-    # # Simple run
-    # #####################################
-    # p, model, dataset = train_single_model('config/1D/good_model.yaml')
-    # p, model, dataset = train_single_model('config/2D/good_model.yaml') # TODO not good
-
     # # Grid search stuff 
     # #####################################
-    # grid_search('config/1D/test_sweep.yaml')
-    # grid_search('config/1D/initial_sweep.yaml')
-    # grid_search('config/2D/initial_sweep.yaml')
-    # # python -u train_model.py | tee /out/logging/1d_and_2d_2025-01-16.log
-    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_01_16_091842')
+    # grid_search('config/2D/test_sweep.yaml')
+    grid_search('config/1D/initial_sweep.yaml')
+    grid_search('config/2D/initial_sweep.yaml')
+    # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_02_06_170914_833986')
     # p, model, dataset = train_single_model(checkpoint_path)
+
+    # # Simple run
+    # #####################################
+    p, model, dataset = train_single_model('config/1D/good_model.yaml')
+    model.save()
+    p, model, dataset = train_single_model('config/2D/good_model.yaml')
+    model.save()
 
     # Test
     #####################################
     # test_saving_and_loading_models()
-    test_reproducibility_of_loaded_grid_search_checkpoint()
+    # test_reproducibility_of_loaded_grid_search_checkpoint()

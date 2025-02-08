@@ -33,9 +33,6 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
         x = torch.sum(x, dim=1)            # sum over s time steps
         return x
 
-    def flush_history(self):
-        pass
-
 
 class PathIntegrationVerificationModel(nn.Module):
     # Linear model for sanity check to verify:
@@ -56,9 +53,6 @@ class PathIntegrationVerificationModel(nn.Module):
         x = self.scale(x)                  # scale to y range
         x = torch.sum(x, dim=1)            # sum over s time steps
         return x
-
-    def flush_history(self):
-        pass
 
 
 class BooleanReservoir(nn.Module):
@@ -138,12 +132,14 @@ class BooleanReservoir(nn.Module):
             set_seed(self.R.seed)
 
             # Logging
-            self.out_path = Path(self.L.out_path)
+            self.out_path = self.L.out_path
             self.timestamp_utc = self.get_timestamp_utc()
-            self.P.logging.train_log.timestamp_utc = self.timestamp_utc
-            self.save_folder = self.out_path / 'models' / self.timestamp_utc
+            self.save_dir = self.out_path / self.timestamp_utc 
+            self.checkpoint_folder = self.L.last_checkpoint
+            self.L.save_dir = self.save_dir
+            self.L.timestamp_utc = self.timestamp_utc
             self.record_history = self.L.history.record_history
-            self.history = BatchedTensorHistoryWriter(folderpath=self.out_path, buffer_size=self.L.history.buffer_size) 
+            self.history = BatchedTensorHistoryWriter(folderpath=self.save_dir / 'history', buffer_size=self.L.history.buffer_size) if self.record_history else None
     
     @staticmethod 
     def optional_load(load_key: str, load_dict: dict, default):
@@ -184,8 +180,9 @@ class BooleanReservoir(nn.Module):
         return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S_%f")
 
     def save(self):
-        self.save_folder.mkdir(parents=True, exist_ok=True)
-        paths = self.make_load_paths(self.save_folder)
+        self.checkpoint_folder = self.save_dir / 'checkpoints' / self.get_timestamp_utc()
+        self.checkpoint_folder.mkdir(parents=True, exist_ok=False)
+        paths = self.make_load_paths(self.checkpoint_folder)
         save_yaml_config(self.P, paths['parameters'])
         with gzip.open(paths['graph'], 'wb') as f:
             nx.write_graphml(self.graph, f)
@@ -193,12 +190,12 @@ class BooleanReservoir(nn.Module):
         torch.save(self.input_nodes, paths['input_nodes'])
         torch.save(self.initial_states, paths['init_state'])
         torch.save(self.state_dict(), paths['weights'])
-        self.P.logging.checkpoint_path = self.save_folder
+        self.L.last_checkpoint = self.checkpoint_folder 
         return paths 
 
     def load(self, paths=None, parameter_override:Params=None):
         if paths is None:
-            paths = self.make_load_paths(self.save_folder)
+            paths = self.make_load_paths(self.checkpoint_folder)
         p = parameter_override
         if p is None:
             p = load_yaml_config(paths['parameters'])
@@ -213,7 +210,8 @@ class BooleanReservoir(nn.Module):
         self.__init__(params=p, load_dict=d)
     
     def flush_history(self):
-        self.history.flush()
+        if self.history:
+            self.history.flush()
 
     @staticmethod
     def make_load_paths(folder_path):
@@ -381,7 +379,7 @@ if __name__ == '__main__':
                        epochs=10,
                        radius_threshold=0.05,
                        learning_rate=0.001)
-    L = LoggingParams(out_path='/tmp/boolean_reservoir/out/history', history=HistoryParams(record_history=True, buffer_size=10))
+    L = LoggingParams(out_path='/tmp/boolean_reservoir/out/test/', history=HistoryParams(record_history=True, buffer_size=10))
 
     model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
     params = Params(model=model_params, logging=L)
@@ -393,7 +391,7 @@ if __name__ == '__main__':
     model(x)
     print(model(x).detach().numpy())
     model.flush_history()
-    history, meta, expanded_meta = BatchedTensorHistoryWriter(L.out_path).reload_history()
+    history, meta, expanded_meta = BatchedTensorHistoryWriter(L.save_dir / 'history').reload_history()
     print(history[expanded_meta[expanded_meta['phase'] == 'init'].index].shape)
     print(history.shape)
     print(meta)

@@ -50,21 +50,22 @@ class GridSearchParams(BaseModel):
     n_samples: Optional[int] = Field(1, ge=1, description="Number of samples per configuration in grid search")
 
 class HistoryParams(BaseModel):
-    record_history: Optional[bool] = Field(False, description="Detailed state recoding of reservoir")
-    buffer_size: Optional[int] = Field(64, description="Number of batches before saving")
+    record_history: Optional[bool] = Field(False, description="Reservoir dynamics state recording")
+    buffer_size: Optional[int] = Field(64, description="Number of batched snapshots per output file")
 
 class TrainLog(BaseModel):
-    timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
     evaluation: Optional[str] = Field(None, description="test, dev, train etc")
     accuracy: Optional[float] = Field(None, description="accuracy")
     loss: Optional[float] = Field(None, description="loss")
     epoch: Optional[int] = Field(None, description="epoch")
 
 class LoggingParams(BaseModel):
-    out_path: Path = Field('/out', description="Where to save logs")
-    checkpoint_path: Optional[Path] = Field(None, description="Where to save last checkpoint")
+    timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
+    out_path: Path = Field('/out', description="Where to save all logs")
+    save_dir: Optional[Path] = Field('/out', description="Where to save stuff for a specific run")
+    last_checkpoint: Optional[Path] = Field(None, description="Where to save last checkpoint")
     grid_search: Optional[GridSearchParams] = Field(None)
-    history: HistoryParams = Field(HistoryParams())
+    history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
     train_log: TrainLog = Field(TrainLog())
 
 class Params(BaseModel):

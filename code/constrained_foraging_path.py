@@ -18,7 +18,7 @@ class Boundary(ABC):
     
     def generate_polygon_points(self):
         return self.points
-
+    
 
 class PolygonBoundary(Boundary):
     def __init__(self, points):
@@ -175,4 +175,4 @@ if __name__ == '__main__':
     # Simulate the walk
     steps = 5
     positions = random_walk(dim, steps, strategy, boundary)
-    plot_random_walk(positions, boundary)
+    plot_random_walk('/out/', positions, strategy, boundary)

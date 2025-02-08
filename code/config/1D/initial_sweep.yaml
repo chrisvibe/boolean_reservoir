@@ -24,6 +24,3 @@ logging:
   grid_search:
     seed: 0
     n_samples: 5
-  history:
-    record_history: False
-    history_buffer_size: 10000

@@ -5,7 +5,6 @@ import numpy as np
 from copy import deepcopy
 from parameters import Params
 from encoding import bin2dec
-from utils import make_folders
 from pathlib import Path
 import seaborn as sns
 import pandas as pd
@@ -16,12 +15,10 @@ from reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 matplotlib.use('Agg')
 
-make_folders('/out', ['visualizations']) 
-
-def plot_random_walk(positions, boundary):
+def plot_random_walk(dir_path, positions, strategy, boundary):
     zero_row = np.zeros_like((positions[0, :]))
     positions = np.vstack((zero_row, positions))
-    dimensions = positions.shape[1]
+    steps, dimensions = positions.shape
     time = np.arange(positions.shape[0])
     
     fig = plt.figure(figsize=(10, 10))
@@ -59,12 +56,13 @@ def plot_random_walk(positions, boundary):
     plt.ion()
     
     # Save the plot to an image file
-    plt.savefig("/out/visualizations/constrained_foraging_path.png")
+    path = Path(dir_path) / 'visualizations/random_walk'
+    path.mkdir(parents=True, exist_ok=True)
+    file_name = f'{dimensions}D-s={steps}-{strategy}-{boundary}.png'
+    # TODO add strategy and boundary alias so that it pritns nicely here with __str__ method or __repr___
+    plt.savefig(path / file_name, bbox_inches='tight')
 
-    # Display the plot (optional, for interactive environments)
-    # plt.show()
-
-def plot_random_walk_model(x: np.array, model, y: np.array):
+def plot_random_walk_model(dir_path, x: np.array, model, y: np.array):
     # TODO problems with normalization. Sum x over steps is not y if scaled differently
     m, s, d, _ = x.shape
     # incrementally consideres more steps to visualize error divergence
@@ -91,10 +89,13 @@ def plot_random_walk_model(x: np.array, model, y: np.array):
     ax.set_ylabel('Y Position')
     plt.ion()
     
-    plt.savefig("/out/visualizations/incremental_error.png")
+    path = Path(dir_path) / 'visualizations/random_walk'
+    path.mkdir(parents=True, exist_ok=True)
+    file_name = 'todo'
+    plt.savefig(path / file_name, bbox_inches='tight')
 
 
-def plot_binary_encoding_error_hist_and_boxplotplot(dataset, bins):
+def plot_binary_encoding_error_hist_and_boxplotplot(path, dataset, bins):
     x0 = deepcopy(dataset.data['x']).numpy()
     # distances = np.sqrt((dataset.data['y'].numpy() ** 2).sum(axis=1))
     dataset.encode_x()
@@ -113,13 +114,15 @@ def plot_binary_encoding_error_hist_and_boxplotplot(dataset, bins):
     axes[1].set_title("Boxplot")
 
     # Save the plot to an image file
-    plt.savefig("/out/visualizations/binary_ecoding_error_hist_and_boxplot.png")
-    plt.show()
+    path = Path(path) / 'visualizations'
+    path.mkdir(parents=True, exist_ok=True)
+    file = f"binary_ecoding_error_hist_and_boxplot.png"
+    plt.savefig(path / file, bbox_inches='tight')
 
 
-def plot_predictions_and_labels(y_hat, y, tolerance=0.1, axis_limits=[0, 1]):
-    y_hat_np = y_hat.detach().numpy()
-    y_np = y.detach().numpy()
+def plot_predictions_and_labels(path, y_hat, y, tolerance=0.1, axis_limits=[0, 1]):
+    y_hat_np = y_hat.cpu().detach().numpy()
+    y_np = y.cpu().detach().numpy()
     num_dims = y_hat_np.shape[1]
     if num_dims == 1:
         sort_order = y_np[:, 0].argsort()
@@ -153,12 +156,13 @@ def plot_predictions_and_labels(y_hat, y, tolerance=0.1, axis_limits=[0, 1]):
     plt.xlim(axis_limits)
     if num_dims > 1:
         plt.ylim(axis_limits)
-    
-    # Save the figure
-    plt.savefig(f"/out/visualizations/{num_dims}D_predictions_versus_labels.png")
+    path = Path(path) / 'visualizations' 
+    path.mkdir(parents=True, exist_ok=True)
+    file = f"{num_dims}D_predictions_versus_labels.png"
+    plt.savefig(path / file, bbox_inches='tight')
 
 
-def plot_train_history(history):
+def plot_train_history(path, history):
     history_df = pd.DataFrame(history)
     history_melted = history_df.melt(id_vars=['epoch'], value_vars=['loss_train', 'loss_test', 'accuracy_train', 'accuracy_test'], 
                                     var_name='metric', value_name='value')
@@ -178,7 +182,10 @@ def plot_train_history(history):
     ax2.set_ylabel('Accuracy')
     fig.suptitle("Loss and Accuracy")
     fig.tight_layout()
-    plt.savefig(f"/out/visualizations/training.png", bbox_inches='tight')
+    path = Path(path) / 'visualizations' 
+    path.mkdir(parents=True, exist_ok=True)
+    file = f"training.png"
+    plt.savefig(path / file, bbox_inches='tight')
 
 def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
@@ -277,15 +284,15 @@ def plot_grid_search(data_file_path: Path):
     plt.tight_layout()
     plt.savefig(out_path / f'accuracy_vs_parameters_gt30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
 
-def plot_history_pca(out_path='/tmp/boolean_reservoir/out/history'):
-    out_path = Path(out_path)
-    history, expanded_meta, meta = BatchedTensorHistoryWriter(out_path).reload_history()
+def plot_history_pca(path):
+    path = Path(path)
+    history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
     # filter history
-    print(meta)
-    print('full history:', history.shape)
+    # print(meta)
+    # print('full history:', history.shape)
     expanded_meta = expanded_meta[expanded_meta['phase'] == 'reservoir_layer']
     history = history[expanded_meta.index].numpy()
-    print('filtered history:', history.shape)
+    # print('filtered history:', history.shape)
 
     # normalize and perform dimension reduction
     history_normalized = zscore(history, axis=0)
@@ -296,15 +303,17 @@ def plot_history_pca(out_path='/tmp/boolean_reservoir/out/history'):
     df = pd.DataFrame(history_pca, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)
 
-    print("Explained variance by each component:")
-    print(pca.explained_variance_ratio_)
+    # print("Explained variance by each component:")
+    # print(pca.explained_variance_ratio_)
     plt.figure(figsize=(10, 8))
     sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
     plt.title('PCA of Parameters')
-    plt.savefig(out_path / 'pca.png', bbox_inches='tight')
+    save_path = path / 'visualizations' 
+    save_path.mkdir(parents=True, exist_ok=True)
+    file = f"pca.png"
+    plt.savefig(save_path / file, bbox_inches='tight')
     
 
 if __name__ == '__main__':
-    # plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))
-    # plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))
-    plot_history_pca()
+    plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))
+    plot_grid_search(Path('/out/grid_search/2D/initial_sweep/log.h5'))

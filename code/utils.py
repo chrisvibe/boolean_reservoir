@@ -15,14 +15,6 @@ def set_seed(seed=42):
         # torch.backends.cudnn.deterministic = True
         # torch.backends.cudnn.benchmark = False
 
-def make_folders(out_path: Path | str, folders: Iterable[str]):
-    if isinstance(out_path, str):
-        out_path = Path(out_path)
-    for f in folders:
-        p = out_path / f 
-        if not p.exists():
-            p.mkdir(parents=True)
-
 def gpu_check():
     if torch.cuda.is_available():
         print("CUDA is available. PyTorch version:", torch.__version__)
