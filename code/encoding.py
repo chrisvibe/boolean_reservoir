@@ -15,16 +15,20 @@ def float_array_to_boolean(values, I:InputParams):
     assert torch.is_floating_point(values)
     assert torch.max(values) <= 1
     assert torch.min(values) >= 0
-    b = I.bits_per_feature // I.redundancy
-    assert I.bits_per_feature % I.redundancy == 0
+    if I.resolution:
+        I.bits_per_feature = I.resolution * I.redundancy
+        assert isinstance(I.bits_per_feature, int) 
+    else:
+        assert I.bits_per_feature % I.redundancy == 0
+        I.resolution = I.bits_per_feature // I.redundancy
     if I.encoding == 'base2':
-        bin_values = dec2bin(values, b)
+        bin_values = dec2bin(values, I.resolution)
         bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
     elif I.encoding == 'tally':
-        bin_values = dec2tally(values, b)
+        bin_values = dec2tally(values, I.resolution)
         bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
     elif I.encoding == 'binary_embedding':
-        encoder = BinaryEmbedding(b=b, n=I.redundancy)
+        encoder = BinaryEmbedding(b=I.resolution, n=I.redundancy)
         bin_values = encoder.encode(values)
     else:
         raise ValueError(f"encoding {I.encoding} is not an option!")

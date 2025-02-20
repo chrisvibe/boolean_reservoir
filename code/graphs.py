@@ -179,6 +179,13 @@ def calc_spectral_radius(graph: nx.DiGraph):
     rho = max(abs(eigenvalues))
     return rho
 
+def remove_isolated_nodes(graph: nx.Graph, remove_connected_to_self_only=False):
+    in_degree = graph.in_degree
+    non_isolated_nodes = {node for node in graph.nodes() if in_degree[node] > 0}
+    if remove_connected_to_self_only:
+        self_loops = {node for node in graph.nodes() if in_degree[node] == 1 and graph.has_edge(node, node)}
+        non_isolated_nodes = non_isolated_nodes - self_loops
+    return graph.subgraph(non_isolated_nodes).copy()
 
 if __name__ == '__main__':
     n_nodes = 10

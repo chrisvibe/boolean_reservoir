@@ -20,6 +20,7 @@ model:
     epochs: 3
     learning_rate: 0.001
     radius_threshold: 0.05
+    evaluation: 'test' 
     seed: 0
 logging:
   out_path: '/tmp/boolean_reservoir/out/single_run/2D/test'

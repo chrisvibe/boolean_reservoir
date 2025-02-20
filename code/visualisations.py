@@ -11,8 +11,10 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE, MDS
 from reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
+import networkx as nx
 matplotlib.use('Agg')
 
 def plot_random_walk(dir_path, positions, strategy, boundary):
@@ -161,7 +163,6 @@ def plot_predictions_and_labels(path, y_hat, y, tolerance=0.1, axis_limits=[0, 1
     file = f"{num_dims}D_predictions_versus_labels.png"
     plt.savefig(path / file, bbox_inches='tight')
 
-
 def plot_train_history(path, history):
     history_df = pd.DataFrame(history)
     history_melted = history_df.melt(id_vars=['epoch'], value_vars=['loss_train', 'loss_test', 'accuracy_train', 'accuracy_test'], 
@@ -185,11 +186,13 @@ def plot_train_history(path, history):
     path = Path(path) / 'visualizations' 
     path.mkdir(parents=True, exist_ok=True)
     file = f"training.png"
+    print('making train history plots:', path / file)
     plt.savefig(path / file, bbox_inches='tight')
 
 def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
     out_path.mkdir(exist_ok=True)
+    print('making grid search plots:', out_path)
     df = pd.read_hdf(data_file_path, 'df') 
     df['model_params'] = df['params'].apply(lambda p_dict: Params(**p_dict).model)
     df['k_avg'] = df['model_params'].apply(lambda x: x.reservoir_layer.k_avg)
@@ -199,14 +202,14 @@ def plot_grid_search(data_file_path: Path):
     df['n_nodes'] = df['model_params'].apply(lambda x: x.reservoir_layer.n_nodes)
     df['init'] = df['model_params'].apply(lambda x: x.reservoir_layer.init)
     df['interleaving'] = df['model_params'].apply(lambda x: x.input_layer.interleaving)
-    # df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops']]
     df = df[['accuracy', 'loss', 'k_avg', 'k_max', 'p', 'self_loops', 'n_nodes', 'init', 'interleaving']]
-    features = df.drop(columns=['accuracy'])
-    # features = df.drop(columns=['accuracy', 'loss'])
+    df['loss'] = df['loss'].apply(lambda x: x ** .5) # MSE to RMS
+    features = df.drop(columns=['accuracy', 'loss'])
+    # features = df.drop(columns=['accuracy'])
     
     # Identify categorical and numerical columns
     categorical_cols = features.select_dtypes(include=['object']).columns.tolist()
-    numerical_cols = features.select_dtypes(exclude=['object']).columns.tolist()
+    numerical_cols = features.select_dtypes(exclude=['object'], include='number').columns.tolist()
     
     transformers = [('num', StandardScaler(), numerical_cols)]
     if categorical_cols:
@@ -225,13 +228,13 @@ def plot_grid_search(data_file_path: Path):
     
     # Visualization of PCA
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=principal_df.join(df[['accuracy']]), x='PC1', y='PC2', hue='accuracy', palette='viridis', s=100, alpha=0.7)
+    sns.scatterplot(data=principal_df.join(df[['loss']]), x='PC1', y='PC2', hue='loss', palette='viridis', s=100, alpha=0.7)
     plt.title('PCA of Parameters')
     plt.savefig(out_path / 'pca.png', bbox_inches='tight')
     
     # Creating a heatmap of parameter contributions
     loadings = pca.components_.T
-    feature_names = numerical_cols
+    feature_names = deepcopy(numerical_cols)
     if categorical_cols:
         feature_names += preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
     loading_df = pd.DataFrame(loadings, index=feature_names, columns=['PC1', 'PC2'])
@@ -241,8 +244,12 @@ def plot_grid_search(data_file_path: Path):
     plt.title('Parameter Contributions')
     plt.savefig(out_path / 'pca_legend.png', bbox_inches='tight')
     
-    # Correlation matrix, including categorical variables
-    features_with_performance = pd.concat([features, df[['accuracy']]], axis=1)
+    # Correlation matrix, including categorical variables  # TODO FIX THIS!!!!
+    std = features[numerical_cols].std()
+    num_columns_to_keep = std[std != 0].index.tolist()
+    cat_columns_to_keep = features[categorical_cols].nunique().index.tolist()
+    columns_to_keep = num_columns_to_keep + cat_columns_to_keep
+    features_with_performance = pd.concat([features[columns_to_keep], df[['loss']]], axis=1)
     correlation_matrix = features_with_performance.corr(method='spearman', numeric_only=True)
     
     plt.figure(figsize=(10, 8))
@@ -255,39 +262,41 @@ def plot_grid_search(data_file_path: Path):
     num_vars = len(df1.columns) - 1
     fig, axes = plt.subplots(1, num_vars, figsize=(8*num_vars, 10))
     axes = axes.flatten()
-    for i, column in enumerate(df1.columns[df1.columns != 'accuracy']):
+    for i, column in enumerate(df1.columns[df1.columns != 'loss']):
+        c = column.capitalize()
         if len(df1[column].unique()) > 10:
-            sns.scatterplot(ax=axes[i], data=df1, x=column, y='accuracy')
+            sns.scatterplot(ax=axes[i], data=df1, x=column, y='loss')
         else:
-            sns.boxplot(ax=axes[i], data=df1, x=column, y='accuracy')
-        axes[i].set_title(f'accuracy vs {column}', fontsize=16)
-        axes[i].set_xlabel(column, fontsize=16)
-        axes[i].set_ylabel('Accuracy', fontsize=16)
+            sns.boxplot(ax=axes[i], data=df1, x=column, y='loss')
+        axes[i].set_title(f'Loss vs {c}', fontsize=16)
+        axes[i].set_xlabel(c, fontsize=16)
+        axes[i].set_ylabel('Loss', fontsize=16)
 
     plt.tight_layout()
-    plt.savefig(out_path / 'accuracy_vs_parameters.png', bbox_inches='tight')
-
+    plt.savefig(out_path / 'loss_vs_parameters.png', bbox_inches='tight')
 
     df2 = df[col_list]
     df2 = df2[df2['accuracy'] >= .3]
     num_vars = len(df2.columns) - 1
     fig, axes = plt.subplots(1, num_vars, figsize=(8*num_vars, 10))
     axes = axes.flatten()
-    for i, column in enumerate(df2.columns[df2.columns != 'accuracy']):
+    for i, column in enumerate(df2.columns[df2.columns != 'loss']):
+        c = column.capitalize()
         if len(df2[column].unique()) > 10:
-            sns.scatterplot(ax=axes[i], data=df2, x=column, y='accuracy')
+            sns.scatterplot(ax=axes[i], data=df2, x=column, y='loss')
         else:
-            sns.boxplot(ax=axes[i], data=df2, x=column, y='accuracy')
-        axes[i].set_title(f'accuracy vs {column}', fontsize=20)
-        axes[i].set_xlabel(column, fontsize=16)
-        axes[i].set_ylabel('Accuracy', fontsize=16)
+            sns.boxplot(ax=axes[i], data=df2, x=column, y='loss')
+        axes[i].set_title(f'Loss vs {c}', fontsize=20)
+        axes[i].set_xlabel(c, fontsize=16)
+        axes[i].set_ylabel('Loss', fontsize=16)
     plt.tight_layout()
-    plt.savefig(out_path / f'accuracy_vs_parameters_gt30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
+    plt.savefig(out_path / f'loss_vs_parameters_accuracy_gt_30p_{int(len(df2)/len(df)*100):03d}.png', bbox_inches='tight')
 
-def plot_history_pca(path):
+def plot_dynamics_history(path):
     path = Path(path)
+    save_path = path / 'visualizations' 
+    save_path.mkdir(parents=True, exist_ok=True)
     history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
-    # filter history
     # print(meta)
     # print('full history:', history.shape)
     expanded_meta = expanded_meta[expanded_meta['phase'] == 'reservoir_layer']
@@ -298,21 +307,61 @@ def plot_history_pca(path):
     history_normalized = zscore(history, axis=0)
     history_normalized = np.nan_to_num(history_normalized) # columns with all 0's or 1's will divide by zero as variance = 0
     n_components = 2
+
     pca = PCA(n_components=n_components)
-    history_pca = pca.fit_transform(history_normalized)
-    df = pd.DataFrame(history_pca, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
+    embedding = pca.fit_transform(history_normalized)
+    df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)
 
     # print("Explained variance by each component:")
-    # print(pca.explained_variance_ratio_)
+    # print(embedding.explained_variance_ratio_)
     plt.figure(figsize=(10, 8))
     sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
-    plt.title('PCA of Parameters')
-    save_path = path / 'visualizations' 
-    save_path.mkdir(parents=True, exist_ok=True)
+    plt.title('PCA of states over time')
     file = f"pca.png"
     plt.savefig(save_path / file, bbox_inches='tight')
-    
+
+    tsne = TSNE(n_components=n_components, perplexity=30, learning_rate=200)
+    embedding = tsne.fit_transform(history_normalized)
+    df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
+    df = pd.concat([df, expanded_meta], axis=1)
+
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
+    plt.title('tSNE of states over time')
+    file = f"tsne.png"
+    plt.savefig(save_path / file, bbox_inches='tight')
+
+def plot_reconstructed_manifold(path, adjacency_matrix):
+    path = Path(path)
+    save_path = path / 'visualizations' 
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    # Create a figure and a 3D Axes
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Create a color map object from Seaborn
+    cmap = sns.color_palette("viridis", as_cmap=True)
+
+    # Plot the point cloud
+    mds = MDS(n_components=3, dissimilarity="precomputed")
+    reconstructed_points = mds.fit_transform(adjacency_matrix)
+    x, y, z = reconstructed_points
+    sc = ax.scatter(x, y, z, c=np.sqrt(x**2 + y**2 + z**2), cmap=cmap, s=20)
+
+    # Add color bar which maps values to colors
+    cbar = plt.colorbar(sc, ax=ax, shrink=0.5)
+    cbar.set_label('Color intensity')
+
+    # Set labels
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
+    ax.set_title('3D Point Cloud Visualization with Seaborn colormap')
+    file = f"reconstructed_manifold.png"
+    plt.savefig(save_path / file, bbox_inches='tight')
+        
 
 if __name__ == '__main__':
     plot_grid_search(Path('/out/grid_search/1D/initial_sweep/log.h5'))

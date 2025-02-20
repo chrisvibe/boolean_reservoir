@@ -19,6 +19,7 @@ model:
     epochs: 40
     radius_threshold: 0.05
     learning_rate: 0.001
+    evaluation: 'dev' 
 logging:
   out_path: '/out/grid_search/1D/initial_sweep'
   grid_search:

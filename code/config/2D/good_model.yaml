@@ -22,6 +22,7 @@ model:
     epochs: 100
     learning_rate: 0.001
     radius_threshold: 0.05
+    evaluation: 'test' 
     seed: 531
 logging:
   out_path: '/out/single_run/2D/good_model'

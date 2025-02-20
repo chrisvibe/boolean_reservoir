@@ -131,6 +131,7 @@ dependencies:
   - pillow=11.0.0=py312hcea889d_1
   - pip=24.2=py312h06a4308_0
   - pixman=0.40.0=h7f8727e_1
+  - plotly=5.24.1=py312he106c6f_0
   - poppler=24.09.0=hcf11d46_1
   - poppler-data=0.4.11=h06a4308_1
   - py-cpuinfo=9.0.0=py312h06a4308_0
@@ -157,6 +158,7 @@ dependencies:
   - sqlite=3.45.3=h5eee18b_0
   - sympy=1.13.3=py312h06a4308_0
   - tbb=2021.8.0=hdb19cb5_0
+  - tenacity=9.0.0=py312h06a4308_0
   - threadpoolctl=3.5.0=py312he106c6f_0
   - tk=8.6.14=h39e8969_0
   - torchtriton=3.1.0=py312

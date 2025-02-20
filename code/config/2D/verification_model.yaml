@@ -19,5 +19,6 @@ model:
     epochs: 100
     radius_threshold: 0.05
     learning_rate: 0.01
+    evaluation: 'test' 
 logging:
   out_path: '/out/single_run/2D/verification_model'

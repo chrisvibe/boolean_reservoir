@@ -15,8 +15,9 @@ class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, 0 disables seed")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
     n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
-    bits_per_feature: Union[int, List[int]] = Field(..., description="Dimension per input data after binary encoding")
+    bits_per_feature: Union[int, List[int]] = Field(..., description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
     redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
+    resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
 
 class ReservoirParams(BaseModel):
@@ -38,6 +39,7 @@ class TrainingParams(BaseModel):
     epochs: Union[int, List[int]] = Field(..., description="Number of epochs")
     radius_threshold: Union[float, List[float]] = Field(..., description="Euclidian radius from target prediction. Assumes data is [0, 1]")
     learning_rate: Union[float, List[float]] = Field(..., description="Learning rate")
+    evaluation: Optional[str] = Field('test', description="test, dev, train etc")
 
 class ModelParams(BaseModel):
     input_layer: InputParams
@@ -54,7 +56,6 @@ class HistoryParams(BaseModel):
     buffer_size: Optional[int] = Field(64, description="Number of batched snapshots per output file")
 
 class TrainLog(BaseModel):
-    evaluation: Optional[str] = Field(None, description="test, dev, train etc")
     accuracy: Optional[float] = Field(None, description="accuracy")
     loss: Optional[float] = Field(None, description="loss")
     epoch: Optional[int] = Field(None, description="epoch")

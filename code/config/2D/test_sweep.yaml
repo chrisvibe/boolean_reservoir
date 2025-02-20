@@ -19,6 +19,7 @@ model:
     epochs: 3
     radius_threshold: 0.05
     learning_rate: 0.001
+    evaluation: 'dev' 
 logging:
   out_path: '/tmp/boolean_reservoir/out/grid_search/2D/test'
   grid_search:

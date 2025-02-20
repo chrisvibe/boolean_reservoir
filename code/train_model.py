@@ -5,8 +5,8 @@ from encoding import float_array_to_boolean, min_max_normalization
 from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
-from visualisations import plot_predictions_and_labels, plot_train_history, plot_history_pca, plot_grid_search
-from graph_visualizations import plot_graph_with_weight_coloring_1D
+from visualisations import * 
+from graph_visualizations_plotly import *
 from parameters import * 
 import pandas as pd
 from tqdm import tqdm
@@ -30,7 +30,7 @@ def dataset_init(I: InputParams):
     dataset.split_dataset()
     return dataset
 
-def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None):
+def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True):
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
     P = model.P
@@ -46,25 +46,27 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     dataset.data['x_test'] = dataset.data['x_test'].to(device)
     dataset.data['y_test'] = dataset.data['y_test'].to(device)
 
-    _, model, history = train_and_evaluate(P, model, dataset, evaluation='test', verbose=True)
+    _, model, history = train_and_evaluate(P, model, dataset, record_stats=True, verbose=True)
 
     y_test = dataset.data['y_test'][:500]
     y_hat_test = model(dataset.data['x_test'][:500])
     plot_predictions_and_labels(model.save_dir, y_hat_test, y_test, tolerance=T.radius_threshold, axis_limits=[0, 1])
     plot_train_history(model.save_dir, history)
-    plot_history_pca(model.save_dir)
-    # plot_graph_with_weight_coloring_1D(path, model, layout='dot')
+    plot_dynamics_history(model.save_dir)
+    plot_graph_with_weight_coloring_3D(model.save_dir, model.graph, model.readout)
+    if save_model:
+        model.save()
     return P, model, dataset
 
-def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, evaluation='test', verbose=False):
+def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False):
     T = p.model.training
     set_seed(T.seed)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True)
-    x_eval = 'x_' + evaluation
-    y_eval = 'y_' + evaluation
-    best_stats = {'eval': evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
+    x_eval = 'x_' + T.evaluation
+    y_eval = 'y_' + T.evaluation
+    best_stats = {'eval': T.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
     train_history = list()
 
     for epoch in range(T.epochs):
@@ -80,35 +82,35 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, eval
             epoch_correct_train_predictions += euclidean_distance_accuracy(y_hat, y, T.radius_threshold, normalize=False)
         model.eval()
         with torch.no_grad():
-            stats = dict()
-            stats['loss_train'] = epoch_train_loss / len(data_loader)
-            stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader) * data_loader.batch_size)
             y_hat_eval = model(dataset.data[x_eval])
             eval_loss = criterion(y_hat_eval, dataset.data[y_eval]).item()
             eval_accuracy = euclidean_distance_accuracy(y_hat_eval, dataset.data[y_eval], T.radius_threshold)
-            stats['epoch'] = epoch + 1
-            stats['loss_' + evaluation] = eval_loss 
-            stats['accuracy_' + evaluation] = eval_accuracy 
-            if eval_accuracy > best_stats['accuracy']:
+            if eval_loss < best_stats['loss']:
                 best_stats['epoch'] = epoch + 1
-                best_stats['accuracy'] = eval_accuracy
                 best_stats['loss'] = eval_loss
-            train_history.append(stats)
-            if verbose:
-                print(f"Epoch: {stats['epoch']:0{len(str(T.epochs))}d}/{T.epochs}, Loss: {stats['loss_' + evaluation]:.4f}, Accuracy: {stats['accuracy_' + evaluation]:.4f}")
+                best_stats['accuracy'] = eval_accuracy
+            if record_stats:
+                stats = dict()
+                stats['epoch'] = epoch + 1
+                stats['loss_train'] = epoch_train_loss / len(data_loader)
+                stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader) * data_loader.batch_size)
+                stats['loss_' + T.evaluation] = eval_loss 
+                stats['accuracy_' + T.evaluation] = eval_accuracy 
+                train_history.append(stats)
+                if verbose:
+                    print(f"Epoch: {stats['epoch']:0{len(str(T.epochs))}d}/{T.epochs}, Loss: {stats['loss_' + T.evaluation]:.4f}, Accuracy: {stats['accuracy_' + T.evaluation]:.4f}")
         # deterministic reservoirs only need history from the first epoch
         if hasattr(model, 'flush_history'):
             model.flush_history()
             model.record_history = False
     if verbose:
-        print(f'Best accuracy: {best_stats}')
-    model.P.logging.train_log.evaluation = evaluation
+        print(f'Best loss: {best_stats}')
     model.P.logging.train_log.accuracy = best_stats['accuracy']
     model.P.logging.train_log.loss = best_stats['loss']
     model.P.logging.train_log.epoch = best_stats['epoch']
     return best_stats, model, train_history
 
-def grid_search(yaml_path, evaluation='dev'):
+def grid_search(yaml_path):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
@@ -148,11 +150,11 @@ def grid_search(yaml_path, evaluation='dev'):
                 dataset.data['y_dev'] = dataset.data['y_dev'].to(device)
                 last_input_layer_params = p.model.input_layer
             model = BooleanReservoir(p).to(device)
-            best_epoch, model, _ = train_and_evaluate(p, model, dataset, evaluation=evaluation, verbose=False)
+            best_epoch, model, _ = train_and_evaluate(p, model, dataset, record_stats=False, verbose=False)
             model.to(cpu_device)
             print(f"{model.timestamp_utc}: Config: {i+1:0{len(str(n_config))}d}/{n_config}, Sample: {j+1:0{len(str(n_sample))}d}/{n_sample}, Loss: {best_epoch['loss']:.4f}, Accuracy: {best_epoch['accuracy']:.4f}, Epoch: {best_epoch['epoch']}")
             print(p.model)
-            if best_params is None or (best_epoch['accuracy'] > best_params.logging.train_log.accuracy):
+            if best_params is None or (best_epoch['loss'] < best_params.logging.train_log.loss):
                 best_params = model.P
             log_data = dict()
             log_data['timestamp_utc'] = model.timestamp_utc 
@@ -234,17 +236,16 @@ if __name__ == '__main__':
     # # Grid search stuff 
     # #####################################
     # grid_search('config/2D/test_sweep.yaml')
-    grid_search('config/1D/initial_sweep.yaml')
-    grid_search('config/2D/initial_sweep.yaml')
+    # grid_search('config/1D/initial_sweep.yaml')
+    # grid_search('config/2D/initial_sweep.yaml')
     # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_02_06_170914_833986')
     # p, model, dataset = train_single_model(checkpoint_path)
 
     # # Simple run
     # #####################################
     p, model, dataset = train_single_model('config/1D/good_model.yaml')
-    model.save()
     p, model, dataset = train_single_model('config/2D/good_model.yaml')
-    model.save()
+
 
     # Test
     #####################################
