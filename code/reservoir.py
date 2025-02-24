@@ -178,9 +178,9 @@ class BooleanReservoir(nn.Module):
     
     def input_pertubation_strategy(self, strategy:str):
         if strategy == 'override':
-            return lambda a, b: b
+            return lambda old, new: new
         elif strategy == 'xor':
-            return lambda a, b: a ^ b
+                return lambda old, new: new ^ old
         raise ValueError
 
     
@@ -371,23 +371,25 @@ class BatchedTensorHistoryWriter:
 
 
 if __name__ == '__main__':
-    I = InputParams(encoding='binary', 
-                        n_inputs=1,
-                        bits_per_feature=10,
-                        redundancy=2
-            )
+    I = InputParams(
+        pertubation_strategy='override', 
+        encoding='binary', 
+        n_inputs=1,
+        bits_per_feature=10,
+        redundancy=2
+        )
     R = ReservoirParams(
-                        n_nodes=100,
-                        k_avg=2,
-                        k_max=5,
-                        p=0.5,
-                        self_loops=0.1
-                )
+        n_nodes=100,
+        k_avg=2,
+        k_max=5,
+        p=0.5,
+        self_loops=0.1
+        )
     O = OutputParams(n_outputs=1)
     T = TrainingParams(batch_size=32,
-                       epochs=10,
-                       radius_threshold=0.05,
-                       learning_rate=0.001)
+        epochs=10,
+        radius_threshold=0.05,
+        learning_rate=0.001)
     L = LoggingParams(out_path='/tmp/boolean_reservoir/out/test/', history=HistoryParams(record_history=True, buffer_size=10))
 
     model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
