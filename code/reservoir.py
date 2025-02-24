@@ -182,7 +182,6 @@ class BooleanReservoir(nn.Module):
         elif strategy == 'xor':
                 return lambda old, new: new ^ old
         raise ValueError
-
     
     @staticmethod
     def get_timestamp_utc():
@@ -190,6 +189,7 @@ class BooleanReservoir(nn.Module):
 
     def save(self):
         self.checkpoint_folder = self.save_dir / 'checkpoints' / self.get_timestamp_utc()
+        self.L.last_checkpoint = self.checkpoint_folder 
         self.checkpoint_folder.mkdir(parents=True, exist_ok=False)
         paths = self.make_load_paths(self.checkpoint_folder)
         save_yaml_config(self.P, paths['parameters'])
@@ -199,7 +199,6 @@ class BooleanReservoir(nn.Module):
         torch.save(self.input_nodes, paths['input_nodes'])
         torch.save(self.initial_states, paths['init_state'])
         torch.save(self.state_dict(), paths['weights'])
-        self.L.last_checkpoint = self.checkpoint_folder 
         return paths 
 
     def load(self, paths=None, parameter_override:Params=None):
@@ -209,14 +208,30 @@ class BooleanReservoir(nn.Module):
         if p is None:
             p = load_yaml_config(paths['parameters'])
         d = dict() 
-        with gzip.open(paths['graph'], 'rb') as f:
-            d['graph'] = nx.read_graphml(f) 
-            d['graph'] = nx.relabel_nodes(d['graph'], lambda x: int(x)) 
-        d['lut'] = torch.load(paths['lut'], weights_only=True, map_location=self.device)
-        d['input_nodes'] = torch.load(paths['input_nodes'], weights_only=True, map_location=self.device)
-        d['init_state'] = torch.load(paths['init_state'], weights_only=True, map_location=self.device)
-        d['weights'] = torch.load(paths['weights'], weights_only=True, map_location=self.device)
+        if 'graph' in paths:
+            d['graph'] = BooleanReservoir.load_graph(paths['graph'])
+        if 'lut' in paths:
+            d['lut'] = BooleanReservoir.load_torch_tesor(paths['lut'], self.device)
+        if 'input_nodes' in paths:
+            d['input_nodes'] = BooleanReservoir.load_torch_tesor(paths['input_nodes'], self.device)
+        if 'init_state' in paths:
+            d['init_state'] = BooleanReservoir.load_torch_tesor(paths['init_state'], self.device)
+        if 'weights' in paths:
+            d['weights'] = BooleanReservoir.load_torch_tesor(paths['weights'], self.device)
         self.__init__(params=p, load_dict=d)
+        return d
+    
+    @staticmethod
+    def load_graph(path):
+        with gzip.open(path, 'rb') as f:
+            graph = nx.read_graphml(f) 
+            graph = nx.relabel_nodes(graph, lambda x: int(x)) 
+        return graph
+
+    @staticmethod
+    def load_torch_tesor(path, device):
+        tensor = torch.load(path, weights_only=True, map_location=device)
+        return tensor
     
     def flush_history(self):
         if self.history:

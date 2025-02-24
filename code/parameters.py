@@ -63,9 +63,9 @@ class TrainLog(BaseModel):
 
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
-    out_path: Path = Field('/out', description="Where to save all logs")
-    save_dir: Optional[Path] = Field('/out', description="Where to save stuff for a specific run")
-    last_checkpoint: Optional[Path] = Field(None, description="Where to save last checkpoint")
+    out_path: Path = Field('/out', description="Where to save all logs for this config")
+    save_dir: Optional[Path] = Field('/out', description="Where last run was saved")
+    last_checkpoint: Optional[Path] = Field(None, description="Where last checkpoint was saved")
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
     train_log: TrainLog = Field(TrainLog())

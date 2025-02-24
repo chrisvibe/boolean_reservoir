@@ -8,11 +8,11 @@ model:
     interleaving: 0
   reservoir_layer:
     n_nodes: [1000, 2000, 3000, 4000, 5000]
-    k_avg: [1.8, 1.9, 2, 2.1, 2.2]
+    k_avg: [2.15, 2.20, 2.25, 2.30, 2.35]
     k_max: 6
     p: .5
     self_loops: [0, .2, .4, .6, .8, 1]
-    init: ['zeros', 'random']
+    init: 'random'
   output_layer:
     n_outputs: 1
   training:

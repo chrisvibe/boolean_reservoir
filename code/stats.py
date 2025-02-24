@@ -1,5 +1,7 @@
 from pathlib import Path
 from parameters import load_yaml_config, Params
+from reservoir import BooleanReservoir
+from graphs import calc_spectral_radius
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal
 import statsmodels.api as sm
@@ -16,10 +18,11 @@ def init_get_data_and_make_groups(in_path, out_path):
 
     file_path = L.out_path / 'log.h5'
     df = pd.read_hdf(file_path, key='df', mode='r')
+    df['params'] = df['params'].apply(lambda p_dict: Params(**p_dict))
     df['loss'] = df['loss'].apply(lambda x: x ** .5) # MSE to RMS
     col = 'loss' # TODO do this for parameter fields?
     df[col] = (df[col]-df[col].mean())/(df[col].std())
-    df['model_params'] = df['params'].apply(lambda p_dict: Params(**p_dict).model)
+    df['model_params'] = df['params'].apply(lambda p: p.model)
     # input layer
     df['interleaving'] = df['model_params'].apply(lambda p: p.reservoir_layer.k_avg)
     # reservoir layer
@@ -27,6 +30,10 @@ def init_get_data_and_make_groups(in_path, out_path):
     df['k_avg'] = df['model_params'].apply(lambda p: p.reservoir_layer.k_avg)
     df['self_loops'] = df['model_params'].apply(lambda p: p.reservoir_layer.self_loops)
     df['init'] = df['model_params'].apply(lambda p: p.reservoir_layer.init)
+    # extra
+    # df['paths'] = df['params'].apply(lambda p: BooleanReservoir.make_load_paths(p.logging.last_checkpoint))
+    # df['spectral_radius'] = df['paths'].apply(lambda d: calc_spectral_radius(BooleanReservoir.load_graph(d['graph']))) # takes like 2hrs 5s/it
+
     vars = ['loss', 'interleaving', 'k_avg', 'self_loops', 'init']
     df = df[vars]
 
