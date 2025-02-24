@@ -123,6 +123,7 @@ class BooleanReservoir(nn.Module):
                 # assumes input nodes are dedicated to their feature (no repeats)
                 torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
             ).to(self.device)
+            self.input_pertubation_function = self.input_pertubation_strategy(self.I.pertubation_strategy)
 
             # Dense readout layer
             set_seed(self.O.seed)
@@ -174,6 +175,14 @@ class BooleanReservoir(nn.Module):
             idx = torch.randint(low=0, high=2**self.max_connectivity, size=(self.n_nodes,))
             return self.lut[self.node_indices, idx]
         raise ValueError
+    
+    def input_pertubation_strategy(self, strategy:str):
+        if strategy == 'override':
+            return lambda a, b: b
+        elif strategy == 'xor':
+            return lambda a, b: a ^ b
+        raise ValueError
+
     
     @staticmethod
     def get_timestamp_utc():
@@ -273,7 +282,7 @@ class BooleanReservoir(nn.Module):
         # ----------------------------------------------------
         for j in range(s):
             # Perturb specific reservoir nodes with input
-            self.states_paralell[:m, self.input_nodes] ^= x[:m, j]
+            self.states_paralell[:m, self.input_nodes] = self.input_pertubation_function(self.states_paralell[:m, self.input_nodes], x[:m, j])
 
             self.batch_record(phase='input_layer', step=j)
 

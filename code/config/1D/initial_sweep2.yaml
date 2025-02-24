@@ -3,16 +3,16 @@ model:
     pertubation_strategy: 'xor'
     encoding: 'binary_embedding'
     n_inputs: 1
-    bits_per_feature: 48
-    redundancy: 6
+    resolution: 8
+    redundancy: [1, 2, 3, 4, 5, 6]
     interleaving: 0
   reservoir_layer:
-    n_nodes: 1000
+    n_nodes: [1000, 2000, 3000, 4000, 5000]
     k_avg: [1.8, 1.9, 2, 2.1, 2.2]
     k_max: 6
     p: .5
-    self_loops: [0, 0.1, 0.2, 0.3, 0.4, .5, .6, .7, .8, .9, 1]
-    init: ['zeros', 'random', 'random_lut_state']
+    self_loops: [0, .2, .4, .6, .8, 1]
+    init: ['zeros', 'random']
   output_layer:
     n_outputs: 1
   training:
@@ -22,7 +22,7 @@ model:
     learning_rate: 0.001
     evaluation: 'dev' 
 logging:
-  out_path: '/out/grid_search/1D/initial_sweep'
+  out_path: '/out/grid_search/1D/initial_sweep2'
   grid_search:
     seed: 0
-    n_samples: 5
+    n_samples: 10

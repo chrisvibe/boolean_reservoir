@@ -6,7 +6,7 @@ from constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 from visualisations import * 
-from graph_visualizations_plotly import *
+from graph_visualizations_dash import *
 from parameters import * 
 import pandas as pd
 from tqdm import tqdm
@@ -53,7 +53,7 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     plot_predictions_and_labels(model.save_dir, y_hat_test, y_test, tolerance=T.radius_threshold, axis_limits=[0, 1])
     plot_train_history(model.save_dir, history)
     plot_dynamics_history(model.save_dir)
-    plot_graph_with_weight_coloring_3D(model.save_dir, model.graph, model.readout)
+    # plot_graph_with_weight_coloring_3D(model.graph, model.readout)
     if save_model:
         model.save()
     return P, model, dataset
@@ -238,14 +238,15 @@ if __name__ == '__main__':
     # grid_search('config/2D/test_sweep.yaml')
     # grid_search('config/1D/initial_sweep.yaml')
     # grid_search('config/2D/initial_sweep.yaml')
+    grid_search('config/1D/initial_sweep2.yaml')
+    grid_search('config/2D/initial_sweep2.yaml')
     # checkpoint_path = Path('/out/grid_search/2D/initial_sweep/models/2025_02_06_170914_833986')
     # p, model, dataset = train_single_model(checkpoint_path)
 
     # # Simple run
     # #####################################
-    p, model, dataset = train_single_model('config/1D/good_model.yaml')
-    p, model, dataset = train_single_model('config/2D/good_model.yaml')
-
+    # p, model, dataset = train_single_model('config/1D/good_model.yaml')
+    # p, model, dataset = train_single_model('config/2D/good_model.yaml')
 
     # Test
     #####################################

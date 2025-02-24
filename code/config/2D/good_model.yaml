@@ -1,11 +1,12 @@
 model:
   input_layer:
-    bits_per_feature: 48
-    encoding: binary_embedding
-    interleaving: 1
-    n_inputs: 2
-    redundancy: 6
     seed: 0
+    pertubation_strategy: 'xor'
+    encoding: binary_embedding
+    n_inputs: 2
+    bits_per_feature: 48
+    redundancy: 6
+    interleaving: 1
   output_layer:
     n_outputs: 2
     seed: 531

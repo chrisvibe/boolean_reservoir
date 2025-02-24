@@ -13,9 +13,10 @@ yaml.add_representer(WindowsPath, represent_pathlib_path)
 
 class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, 0 disables seed")
+    pertubation_strategy: Union[str, List[str]] = Field('xor', description="How to perturb input nodes")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
     n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
-    bits_per_feature: Union[int, List[int]] = Field(..., description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
+    bits_per_feature: Union[int, List[int]] = Field(8, description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
     redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
     resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
