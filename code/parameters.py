@@ -13,7 +13,7 @@ yaml.add_representer(WindowsPath, represent_pathlib_path)
 
 class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, 0 disables seed")
-    pertubation_strategy: Union[str, List[str]] = Field('xor', description="How to perturb input nodes given old and new states")
+    pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
     n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
     bits_per_feature: Union[int, List[int]] = Field(8, description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")

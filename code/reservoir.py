@@ -123,7 +123,7 @@ class BooleanReservoir(nn.Module):
                 # assumes input nodes are dedicated to their feature (no repeats)
                 torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
             ).to(self.device)
-            self.input_pertubation_function = self.input_pertubation_strategy(self.I.pertubation_strategy)
+            self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
 
             # Dense readout layer
             set_seed(self.O.seed)
@@ -282,7 +282,7 @@ class BooleanReservoir(nn.Module):
         # ----------------------------------------------------
         for j in range(s):
             # Perturb specific reservoir nodes with input
-            self.states_paralell[:m, self.input_nodes] = self.input_pertubation_function(self.states_paralell[:m, self.input_nodes], x[:m, j])
+            self.states_paralell[:m, self.input_nodes] = self.input_pertubation(self.states_paralell[:m, self.input_nodes], x[:m, j])
 
             self.batch_record(phase='input_layer', step=j)
 
@@ -372,7 +372,7 @@ class BatchedTensorHistoryWriter:
 
 if __name__ == '__main__':
     I = InputParams(
-        pertubation_strategy='override', 
+        pertubation='override', 
         encoding='binary', 
         n_inputs=1,
         bits_per_feature=10,

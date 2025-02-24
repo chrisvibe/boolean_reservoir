@@ -1,6 +1,6 @@
 model:
   input_layer:
-    pertubation_strategy: 'xor'
+    pertubation: 'xor'
     encoding: 'base2'
     n_inputs: 2
     bits_per_feature: 8

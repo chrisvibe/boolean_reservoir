@@ -1,7 +1,7 @@
 model:
   input_layer:
     seed: 0
-    pertubation_strategy: 'xor'
+    pertubation: 'xor'
     encoding: binary_embedding
     n_inputs: 1
     bits_per_feature: 48
