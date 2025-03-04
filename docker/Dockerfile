@@ -6,6 +6,7 @@ LABEL maintainer="vibechris@gmail.com"
 
 # Set the working directory
 WORKDIR /code
+ENV PYTHONPATH="/code"
 
 # Install necessary packages
 RUN apt-get update && apt-get install -y \

@@ -1,0 +1,34 @@
+model:
+  input_layer:
+    dataset: '/data/path_integration/2D/levy_walk/n_steps/square_boundary/dataset.pt'
+    seed: 0
+    pertubation: 'xor'
+    encoding: binary_embedding
+    n_inputs: 2
+    bits_per_feature: 48
+    redundancy: 6
+    interleaving: 1
+  output_layer:
+    n_outputs: 2
+    seed: 531
+  reservoir_layer:
+    init: zeros
+    k_avg: 2.1
+    k_max: 6
+    n_nodes: 3000
+    p: 0.5
+    seed: 531
+    self_loops: 0.0
+  training:
+    batch_size: 100
+    criterion: 'MSE'
+    epochs: 100
+    learning_rate: 0.001
+    accuracy_threshold: 0.05
+    evaluation: 'test' 
+    seed: 531
+logging:
+  out_path: '/out/single_run/path_integration/2D/good_model'
+  history:
+    record_history: true
+    buffer_size: 64

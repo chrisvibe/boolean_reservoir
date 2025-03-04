@@ -1,0 +1,36 @@
+model:
+  input_layer:
+    seed: 0
+    dataset: '/data/temporal/density/dataset.pt'
+    pertubation: 'xor'
+    encoding: binary_embedding
+    n_inputs: 1
+    bits_per_feature: 10
+    redundancy: 1
+    interleaving: 1
+  output_layer:
+    activation: 'sigmoid'
+    n_outputs: 1
+    seed: 531
+  reservoir_layer:
+    init: 'zeros'
+    k_avg: 2.1
+    k_max: 6
+    n_nodes: 500
+    p: 0.5
+    reset: False
+    seed: 531
+    self_loops: 0.0
+  training:
+    batch_size: 100
+    criterion: 'BCE'
+    epochs: 40
+    learning_rate: 0.001
+    accuracy_threshold: 0.5
+    evaluation: 'test' 
+    seed: 531
+logging:
+  out_path: '/out/single_run/temporal/density/good_model'
+  history:
+    record_history: true
+    buffer_size: 64
