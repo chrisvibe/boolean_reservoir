@@ -82,17 +82,17 @@ def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: i
     ]), "Parameters must be of correct types"
     assert 0 <= k_min <= k_avg <= k_max <= n_nodes, "Invalid k parameters: must have 0 ≤ k_min ≤ k_avg ≤ k_max ≤ n_nodes"
     assert 0 <= self_loops <= 1, "self_loops must be between 0 and 1"
-    assert n_self_loops + k_min * n_nodes <= total_edges, "Constraint violation: n_self_loops + k_min * n_nodes > total_edges"
-    assert k_min + self_loops <= k_max, "Constraint violation: k_min + self_loops > k_max"
-    assert total_edges <= (n_nodes * (n_nodes + 1)) // 2, "total_edges exceeds maximum possible edges in graph"
+    assert k_min + n_self_loops / n_nodes <= k_max, "Constraint violation: k_min + n_self_loops / n_nodes <= k_max"
+    assert total_edges <= n_nodes * n_nodes, "total_edges exceeds maximum possible edges in directed adjacency graph"
+    assert 0 < k_max, "Invalid k_max: must have 0 < k_max"
 
     # Initialize k
-    c_eff = k_max - k_min - 1 # reserver space for k_min and self_loops 
-    if c_eff > 0:
-        k = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(total_edges - k_min*n_nodes - n_self_loops, n_nodes, c_eff)
-    else:
-        k = np.zeros((n_nodes,), dtype=int)
-    k += k_min # guaranteed k_min <= k <= k_max - 1
+    edge_range = total_edges - k_min*n_nodes - n_self_loops
+    capacity_range = k_max - k_min
+    # reserve space for k_min and subtract self_loops 
+    k = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, n_nodes, capacity_range)
+    k += k_min
+    # guaranteed k_min <= k <= k_max
 
     # 1D to 2D matrix
     assert k.sum() == total_edges - n_self_loops
@@ -182,6 +182,8 @@ def randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time(pigeons, 
 def randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(pigeons, holes, capacity):
     # this returns a normally distributed hole occupance by CLT constrained by capacity [0, capacity]
     max_occupance = holes * capacity
+    if max_occupance == pigeons:
+        return np.full((n_nodes,), capacity, dtype=int)
     assert pigeons <= max_occupance, "Too many pigeons for the given number of holes and capacity"
     worst_case_capacity = min(capacity, pigeons)
     possible_hole_assignments = np.zeros((holes * worst_case_capacity), dtype=bool)

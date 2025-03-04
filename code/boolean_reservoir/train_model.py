@@ -120,7 +120,7 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, reco
     model.P.logging.train_log.epoch = best_stats['epoch']
     return best_stats, model, train_history
 
-def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None):
+def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
@@ -130,7 +130,8 @@ def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunct
     assert not L.out_path.exists(), 'Grid search already exists (path taken)'
     L.out_path.mkdir(parents=True, exist_ok=True)
     save_yaml_config(P, L.out_path / 'parameters.yaml')
-    param_combinations = generate_param_combinations(P.model)
+    if param_combinations is None:
+        param_combinations = generate_param_combinations(P.model)
     history = list() 
     n_config = len(param_combinations)
     n_sample = L.grid_search.n_samples
