@@ -1,5 +1,5 @@
 import torch
-from boolean_reservoir.parameters import InputParams
+from projects.boolean_reservoir.code.parameters import InputParams
 
 
 def float_array_to_boolean(values, I:InputParams):

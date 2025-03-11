@@ -6,7 +6,7 @@ from pathlib import Path
 import seaborn as sns
 import pandas as pd
 from collections import Counter
-from boolean_reservoir.graphs import generate_adjacency_matrix
+from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix
 matplotlib.use('Agg')
 
 def visualize_in_degree_distribution_from_adjacency_matrix_func(path, file_name_append, samples, adjacency_matrix_func, **func_params):
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     ###################################### compare old incorrect adjacency matrix function with new #############################################################################
 
-    from boolean_reservoir.graphs import old_generate_adjacency_matrix, generate_adjacency_matrix
+    from projects.boolean_reservoir.code.graphs import old_generate_adjacency_matrix, generate_adjacency_matrix
     samples = 100
     func_params = dict()
     func_params['n_nodes'] = 100
@@ -99,19 +99,19 @@ if __name__ == '__main__':
 
     ###################################### verify that underlying sub-routines are correct and roughly check run-time scaling #############################################################################
 
-    from boolean_reservoir.graphs import randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time, randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time, randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick, randomly_project_1d_to_2d_avoiding_diagonal
+    from projects.boolean_reservoir.code.graphs import randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time, randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time, randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick
     from time import time
     func_params = dict()
     parameter = 'pigeons'
 
-    print('\nmany nodes/holes...')
+    print('\nfew nodes/holes...')
     func_params['holes'] = 10
     func_params['capacity'] = 3
     samples = 1000
     parameter_iterable = range(1, func_params['holes'] * func_params['capacity'] + 1, 1) 
-    f_dimension_trick = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(**func_params))
-    f_1_row = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time(**func_params))
-    f_n_row = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time(**func_params))
+    f_dimension_trick = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(**func_params)
+    f_1_row = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time(**func_params)
+    f_n_row = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time(**func_params)
     start = time()
     visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', f'n_{func_params['holes']}_pidgeons_dimension_trick', samples, parameter, parameter_iterable, f_dimension_trick, **func_params)
     end = time()
@@ -130,9 +130,9 @@ if __name__ == '__main__':
     func_params['capacity'] = 3
     samples = 10
     parameter_iterable = range(1000, func_params['holes'] * func_params['capacity'] + 1, 100) 
-    f_dimension_trick = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(**func_params))
-    f_1_row = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time(**func_params))
-    f_n_row = lambda **func_params: randomly_project_1d_to_2d_avoiding_diagonal(randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time(**func_params))
+    f_dimension_trick = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(**func_params)
+    f_1_row = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_1_row_at_a_time(**func_params)
+    f_n_row = lambda **func_params: randomly_distribute_pigeons_to_holes_with_capacity_n_rows_at_a_time(**func_params)
     start = time()
     visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', f'n_{func_params['holes']}_pidgeons_dimension_trick', samples, parameter, parameter_iterable, f_dimension_trick, **func_params)
     end = time()

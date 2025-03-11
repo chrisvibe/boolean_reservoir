@@ -19,6 +19,9 @@ class Boundary(ABC):
     def generate_polygon_points(self):
         return self.points
     
+    def __str__(self):
+        return f'{self.__class__.__name__}'
+
 
 class PolygonBoundary(Boundary):
     def __init__(self, points):
@@ -33,7 +36,7 @@ class PolygonBoundary(Boundary):
         point = Point(p)
         return self.polygon.exterior.distance(point)
 
-class IntervalBoundary:
+class IntervalBoundary(Boundary):
     def __init__(self, interval):
         self.interval = interval
 
@@ -60,6 +63,9 @@ class WalkStrategy(ABC):
     @abstractmethod
     def compute_step(self, p, boundary):
         pass
+
+    def __str__(self):
+        return f'{self.__class__.__name__}'
 
 class SimpleRandomWalkStrategy(WalkStrategy):
     def compute_step(self, p, boundary):

@@ -1,6 +1,6 @@
 model:
   input_layer:
-    dataset: '/data/path_integration/1D/levy_walk/n_steps/interval_boundary/dataset.pt'
+    dataset: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
     seed: 0
     pertubation: 'xor'
     encoding: binary_embedding
@@ -28,7 +28,7 @@ model:
     evaluation: 'test' 
     seed: 132
 logging:
-  out_path: '/out/single_run/path_integration/1D/good_model'
+  out_path: 'out/single_run/path_integration/1D/good_model'
   history:
     record_history: true
     buffer_size: 64

@@ -6,7 +6,7 @@ import pandas as pd
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
-from boolean_reservoir.graphs import remove_isolated_nodes
+from projects.boolean_reservoir.code.graphs import remove_isolated_nodes
 
 def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=lambda g: nx.spring_layout(g, dim=3), metadata=None, draw_edges=True):
     def id_generator():

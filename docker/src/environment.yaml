@@ -22,7 +22,7 @@ dependencies:
   - bzip2=1.0.8=h5eee18b_6
   - c-ares=1.19.1=h5eee18b_0
   - c-blosc2=2.12.0=h80c7b02_0
-  - ca-certificates=2024.12.31=h06a4308_0
+  - ca-certificates=2025.2.25=h06a4308_0
   - cairo=1.16.0=hb05425b_5
   - certifi=2025.1.31=py312h06a4308_0
   - charset-normalizer=3.3.2=pyhd3eb1b0_0
@@ -67,6 +67,7 @@ dependencies:
   - icu=73.1=h6a678d5_0
   - idna=3.7=py312h06a4308_0
   - importlib-metadata=8.5.0=py312h06a4308_0
+  - iniconfig=1.1.1=pyhd3eb1b0_0
   - intel-openmp=2023.1.0=hdb19cb5_46306
   - itsdangerous=2.2.0=py312h06a4308_0
   - jinja2=3.1.4=py312h06a4308_1
@@ -136,7 +137,7 @@ dependencies:
   - numpy=1.26.4=py312hc5e2394_0
   - numpy-base=1.26.4=py312h0da6c21_0
   - openjpeg=2.5.2=he7f1fd0_0
-  - openssl=3.0.15=h5eee18b_0
+  - openssl=3.0.16=h5eee18b_0
   - packaging=24.2=py312h06a4308_0
   - pandas=2.2.3=py312h6a678d5_0
   - pango=1.50.7=h05da053_0
@@ -146,6 +147,7 @@ dependencies:
   - pip=24.2=py312h06a4308_0
   - pixman=0.40.0=h7f8727e_1
   - plotly=5.24.1=py312he106c6f_0
+  - pluggy=1.5.0=py312h06a4308_0
   - poppler=24.09.0=hcf11d46_1
   - poppler-data=0.4.11=h06a4308_1
   - py-cpuinfo=9.0.0=py312h06a4308_0
@@ -154,6 +156,7 @@ dependencies:
   - pyparsing=3.2.0=py312h06a4308_0
   - pysocks=1.7.1=py312h06a4308_0
   - pytables=3.10.1=py312h387d6ec_0
+  - pytest=8.3.4=py312h06a4308_0
   - python=3.12.8=h5148396_0
   - python-dateutil=2.9.0post0=py312h06a4308_2
   - python-graphviz=0.20.1=py312h06a4308_0

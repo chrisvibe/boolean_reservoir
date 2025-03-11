@@ -6,11 +6,11 @@ import pandas as pd
 from tqdm import tqdm
 from shutil import rmtree
 from copy import deepcopy
-from boolean_reservoir.utils import set_seed
-from boolean_reservoir.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
-from boolean_reservoir.graph_visualizations_dash import *
-from boolean_reservoir.parameters import * 
-from boolean_reservoir.visualizations import *
+from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
+from projects.boolean_reservoir.code.graph_visualizations_dash import *
+from projects.boolean_reservoir.code.parameters import * 
+from projects.boolean_reservoir.code.visualizations import *
 
 class AccuracyFunction(ABC):
     @abstractmethod
@@ -102,8 +102,8 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, reco
             if record_stats:
                 stats = dict()
                 stats['epoch'] = epoch + 1
-                stats['loss_train'] = epoch_train_loss / len(data_loader)
-                stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader) * data_loader.batch_size)
+                stats['loss_train'] = epoch_train_loss / len(data_loader.dataset)
+                stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader.dataset) * data_loader.batch_size)
                 stats['loss_' + T.evaluation] = eval_loss 
                 stats['accuracy_' + T.evaluation] = eval_accuracy 
                 train_history.append(stats)

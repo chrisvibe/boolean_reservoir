@@ -1,7 +1,7 @@
-from boolean_reservoir.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as a
-from boolean_reservoir.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
-from boolean_reservoir.visualizations import plot_train_history, plot_dynamics_history 
-from boolean_reservoir.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
+from projects.boolean_reservoir.code.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as a
+from projects.boolean_reservoir.code.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
+from projects.boolean_reservoir.code.visualizations import plot_train_history, plot_dynamics_history 
+from projects.boolean_reservoir.code.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 from projects.path_integration.code.visualizations import plot_many_things
 

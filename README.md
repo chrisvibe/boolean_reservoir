@@ -28,3 +28,8 @@ Optionally, there is a Conda environment file located in the `/docker/src` direc
    - Now you should be able to open the repository in VS Code 
    - Install recommended devcontainer add-ons 
    - Atm there are no tutorials but you can now tinker with the project
+
+### Testing
+TODO
+Example:
+pytest /code/projects/boolean_reservoir/test/test_graphs.py

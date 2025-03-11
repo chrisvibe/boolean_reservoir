@@ -1,6 +1,6 @@
 model:
   input_layer:
-    dataset: '/data/path_integration/2D/levy_walk/n_steps/square_boundary/dataset.pt'
+    dataset: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'
     pertubation: 'xor'
     encoding: 'binary_embedding'
     n_inputs: 2
@@ -23,7 +23,7 @@ model:
     learning_rate: 0.001
     evaluation: 'dev' 
 logging:
-  out_path: '/out/grid_search/path_integration/2D/initial_sweep'
+  out_path: 'out/grid_search/path_integration/2D/initial_sweep'
   grid_search:
     seed: 0
     n_samples: 5

@@ -3,16 +3,24 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from math import floor
 import numpy as np
-from boolean_reservoir.utils import set_seed
+from projects.boolean_reservoir.code.utils import set_seed
+from benchmarks.temporal.parameters import TemporalDatasetParams
 
 class TemporalDatasetBase(Dataset):
-    def __init__(self, task, samples=100, stream_length=10, window_size=4, tao=1, data_path='/data/test/dataset.pt', generate_data=False):
-        self.data_path = Path(data_path)
+    def __init__(self, task, p: TemporalDatasetParams):
+        # bit_stream_length i.e. 12: 101010111010
+        # window size (in the bit stream) i.e. 4: 10101011[1010]
+        # tao is the delay (for the window) i.e. 1: 1010101[1101]0
+        set_seed(p.seed)
+        self.data_path = Path(p.dataset)
         
-        if self.data_path.exists() and not generate_data:
+        if self.data_path.exists() and not p.generate_data:
             self.load_data()
         else:
-            self.data = self.generate_data(task, samples, stream_length, window_size, tao)
+            if p.bit_stream_length < p.window_size + p.tao:
+                print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
+                p.bit_stream_length = p.window_size + p.tao
+            self.data = self.generate_data(task, p.samples, p.bit_stream_length, p.tao, p.window_size)
 
     def generate_data(self, task, samples, stream_length, tao, window_size):
         data_x = []
@@ -22,7 +30,7 @@ class TemporalDatasetBase(Dataset):
         for _ in range(samples):
             arr = self.gen_boolean_array(stream_length)
             label = task(arr, tao, window_size)
-            data_x.append(torch.tensor(arr, dtype=torch.uint8).unsqueeze(0).unsqueeze(0))
+            data_x.append(torch.tensor(arr, dtype=torch.uint8).unsqueeze(-1).unsqueeze(-1)) # s, d, b
             data_y.append(torch.tensor(label, dtype=torch.float).unsqueeze(0))
 
         return {
@@ -64,7 +72,6 @@ class TemporalDatasetBase(Dataset):
         y = self.data['y'][idx]
         return x, y
 
-class BooleanDataGenerator():
     @staticmethod
     def gen_boolean_array(n):
         return np.random.randint(0, 2, size=n, dtype=bool)
@@ -128,56 +135,37 @@ class TemporalParity:
         return parity
 
 
-class TemporalDensityDataset(TemporalDatasetBase, TemporalDensity, BooleanDataGenerator):
-    def __init__(self, **kwargs):
-        super().__init__(self.temporal_density, **kwargs)
+class TemporalDensityDataset(TemporalDatasetBase, TemporalDensity):
+    def __init__(self, p: TemporalDatasetParams):
+        TemporalDatasetBase.__init__(self, self.temporal_density, p)
 
 
-class TemporalParityDataset(TemporalDatasetBase, TemporalParity, BooleanDataGenerator):
-    def __init__(self, **kwargs):
-        super().__init__(self.temporal_parity, **kwargs)
+class TemporalParityDataset(TemporalDatasetBase, TemporalParity):
+    def __init__(self, p: TemporalDatasetParams):
+        TemporalDatasetBase.__init__(self, self.temporal_parity, p)
 
 
-def generate_dataset_temporal_density():
-    set_seed(0)
+def color_the_stream(input_stream, tau, n):
+    # Prepare the stream for printing with the window in red
+    start_index = len(input_stream) - n - tau
+    end_index = len(input_stream) - tau
+    colored_stream = ""
+    for i in range(len(input_stream)):
+        if start_index <= i < end_index:
+            colored_stream += f"\033[91m{input_stream[i].astype(np.uint8)}\033[0m"  # Red color
+        else:
+            colored_stream += f"{input_stream[i].astype(np.uint8)}"
+    return colored_stream
 
-    # Parameters: Dataset
-    data_path = '/data/temporal/density/dataset.pt'
-    samples = 6000
-
-    # Parameters: Temporal density 
-    stream_length=10
-    window_size=4
-    tao=1
-
-    dataset = TemporalDensityDataset(samples=samples, stream_length=stream_length, window_size=window_size, tao=tao, data_path=data_path, generate_data=True)
-    dataset.save_data()
-
-def generate_dataset_temporal_parity():
-    set_seed(0)
-
-    # Parameters: Dataset
-    data_path = '/data/temporal/parity/dataset.pt'
-    samples = 6000
-
-    # Parameters: Temporal parity 
-    stream_length=10
-    window_size=4
-    tao=1
-
-    dataset = TemporalParityDataset(samples=samples, stream_length=stream_length, window_size=window_size, tao=tao, data_path=data_path, generate_data=True)
-    dataset.save_data()
-   
 
 if __name__ == '__main__':
-    input_stream = BooleanDataGenerator.gen_boolean_array(10) 
+    input_stream = TemporalDatasetBase.gen_boolean_array(10) 
     tau_value = 1
-    n_value = 3
-    parity = TemporalParity.temporal_parity(input_stream, tau_value, n_value)
-    print(f"Parity  Task - Stream: {input_stream.astype(np.uint8)}, Parity : {parity}")
+    n_value = 5
+    colored_stream = color_the_stream(input_stream, tau_value, n_value)
 
     density = TemporalDensity.temporal_density(input_stream, tau_value, n_value)
-    print(f"Density Task - Stream: {input_stream.astype(np.uint8)}, Density: {density}")
+    print(f"Density Task - Stream: {colored_stream}: {"more 1's than 0's" if density else "more 0's than 1's"}")
 
-    generate_dataset_temporal_density()
-    generate_dataset_temporal_parity()
+    parity = TemporalParity.temporal_parity(input_stream, tau_value, n_value)
+    print(f"Parity  Task - Stream: {colored_stream}: {"odd number of 1's" if parity else "even number of 1's"}")

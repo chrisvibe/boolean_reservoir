@@ -9,8 +9,9 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE, MDS
-from boolean_reservoir.reservoir import BatchedTensorHistoryWriter
+from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
+from matplotlib.colors import ListedColormap
 matplotlib.use('Agg')
 
 def plot_train_history(path, history):
@@ -47,15 +48,13 @@ def plot_grid_search(data_file_path: Path):
     df = pd.read_hdf(data_file_path, 'df') 
     df = df[df['loss'] != float('inf')] # filter out error configs (if they are illegal)
     df['loss'] = df['loss'].apply(lambda x: x ** .5) # MSE to RMS
-    flatten_params = lambda x: pd.Series({
-        'k_min': x.model.reservoir_layer.k_avg,
-        'k_avg': x.model.reservoir_layer.k_avg,
-        'k_max': x.model.reservoir_layer.k_max,
-        'p': x.model.reservoir_layer.p,
-        'self_loops': x.model.reservoir_layer.self_loops,
-        'n_nodes': x.model.reservoir_layer.n_nodes,
-        'init': x.model.reservoir_layer.init
-    })
+    plot_histogram_of_top_percentile_vs_config_id(out_path, df, top_percentile=0.1)
+    flatten_params = lambda x: pd.concat([
+        pd.Series({f"I.{k}": v for k, v in x.model.input_layer.model_dump().items()}),
+        pd.Series({f"R.{k}": v for k, v in x.model.reservoir_layer.model_dump().items()}),
+    # pd.Series({f"O.{k}": v for k, v in x.model.output_layer.model_dump().items()}),
+    # pd.Series({f"T.{k}": v for k, v in x.model.training.model_dump().items()})
+    ])
     df_flattend_params = df['params'].apply(lambda p: flatten_params(p))
     df = pd.concat([df, df_flattend_params], axis=1)
     df = df[['accuracy', 'loss'] + list(df_flattend_params.keys())]
@@ -148,6 +147,25 @@ def plot_grid_search(data_file_path: Path):
     nested_out_path.mkdir(exist_ok=True)
     loss_vs_parameter(nested_out_path, df2)
 
+def plot_histogram_of_top_percentile_vs_config_id(path, df, top_percentile=0.1):
+    threshold = df['accuracy'].quantile(1-top_percentile)
+    config_ids = df[df['accuracy'] >= threshold]['config']
+    config_counts = config_ids.value_counts().sort_index()
+    top_config_id = config_counts.idxmax()
+    print(f"Config ID with highest frequency: {top_config_id}, Count: {config_counts[top_config_id]}")
+    print(f"Checkpoint: {str(df.iloc[top_config_id].params.logging.last_checkpoint)}")
+    
+    plt.figure(figsize=(10, 6))
+    plt.bar(config_counts.index, config_counts.values, alpha=0.7, color='skyblue', edgecolor='black')
+    plt.xlabel('Config ID')
+    plt.ylabel('Frequency')
+    plt.title(f'Frequency of Config IDs in Top {int(top_percentile*100)}% of Accuracy (≥{threshold:.4f})')
+    plt.grid(axis='y', alpha=0.75)
+    plt.xticks(rotation=45 if len(config_counts) > 10 else 0)
+    plt.tight_layout()
+    plt.savefig(path / 'histogram_accuracy_vs_config.png', bbox_inches='tight')
+    plt.close()
+
 
 def plot_dynamics_history(path):
     path = Path(path)
@@ -188,6 +206,49 @@ def plot_dynamics_history(path):
     plt.title('tSNE of states over time')
     file = f"tsne.png"
     plt.savefig(save_path / file, bbox_inches='tight')
+
+
+def plot_activity_trace(path, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
+    path = Path(path)
+    save_path = path / 'visualizations'
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    # Load history and metadata
+    history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
+    expanded_meta = data_filter(expanded_meta)
+    expanded_meta = aggregation_handle(expanded_meta) 
+    history = history[expanded_meta.index]
+    expanded_meta = expanded_meta.set_index(['time'], drop=False)
+
+    # Create a DataFrame for phase and map to integer representations for plotting
+    phase_df = expanded_meta[['time', 'phase']].copy()
+    unique_phases = phase_df['phase'].unique()
+    phase_to_int = {phase: idx for idx, phase in enumerate(unique_phases)}
+    phase_df['phase'] = phase_df['phase'].map(phase_to_int)
+
+    # Plotting heatmaps
+    phase_colors = sns.color_palette("husl", len(unique_phases))
+    cmap_phase = ListedColormap(phase_colors)
+    colorbar_labels = {v: k for k, v in phase_to_int.items()}
+    fig, (ax_heatmap, ax_phase) = plt.subplots(nrows=2, figsize=(15, 12), gridspec_kw={'height_ratios': [10, 0.5], 'hspace': 0.2})
+
+    # Main activity trace heatmap
+    sns.heatmap(history.T, cmap='viridis', cbar=True, ax=ax_heatmap)
+    expanded_meta = expanded_meta.set_index(['time'], drop=False)
+    ax_heatmap.set_title('Activity trace of node states over time')
+    ax_heatmap.set_xlabel('')
+    ax_heatmap.set_ylabel('Nodes')
+
+    # Phase heatmap using integer mapping for consistent color representation
+    sns.heatmap(phase_df[['phase']].T, cmap=cmap_phase, cbar=True, ax=ax_phase, xticklabels=False, yticklabels=False, cbar_kws={'ticks': list(colorbar_labels.keys())})
+    cbar = ax_phase.collections[0].colorbar
+    cbar.ax.set_yticklabels([colorbar_labels[v] for v in cbar.get_ticks()])
+    ax_phase.set_title('Phases over Time')
+    ax_phase.set_xlabel('Time')
+    ax_phase.set_ylabel('')
+    file = save_path / "activity_trace_with_phase.png"
+    plt.savefig(file, bbox_inches='tight')
+    plt.close()
 
 def plot_reconstructed_manifold(path, adjacency_matrix):
     path = Path(path)
@@ -264,5 +325,8 @@ def plot_predictions_and_labels(path, y_hat, y, tolerance=0.1, axis_limits=[0, 1
 
 if __name__ == '__main__':
     pass
-    # plot_grid_search(Path('/out/grid_search/path_integation/1D/initial_sweep/log.h5'))
-    # plot_grid_search(Path('/out/grid_search/path_integation/2D/initial_sweep/log.h5'))
+    # plot_grid_search(Path('out/grid_search/path_integation/1D/initial_sweep/log.h5'))
+    # plot_grid_search(Path('out/grid_search/path_integation/2D/initial_sweep/log.h5'))
+    plot_grid_search('out/grid_search/temporal/density/initial_sweep/log.h5')
+    plot_grid_search('out/grid_search/temporal/parity/initial_sweep/log.h5')
+

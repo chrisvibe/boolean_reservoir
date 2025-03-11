@@ -1,0 +1,55 @@
+# attempt to reproduce figure 3:
+logging:
+  out_path: out/grid_search/temporal/density/initial_sweep
+  grid_search:
+    seed: 0
+    n_samples: 10
+model:
+  input_layer:
+    # dataset:
+    #   - data/temporal/density/u-10/w-3/t-1/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-2/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-3/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-4/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-5/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-6/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-7/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-8/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-9/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-10/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-11/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-12/m-6000/r-0/dataset.pt
+    #   - data/temporal/density/u-10/w-3/t-13/m-6000/r-0/dataset.pt
+    dataset: data/temporal/density/u-10/w-3/t-1/m-6000/r-0/dataset.pt
+    # stream: 10 (Note: stream >= window + tao so we need a dynamic stream length)
+    # window: 3 (Note: density window must be odd, parity window can be odd/even)
+    # tao: ranges from 1 to 13. (atm not accounted for above as only tao=1 is tested)
+    # samples: 6000 total (I have more samples), they use 150 for training and testing. 
+    encoding: base2
+    n_inputs: 1
+    pertubation: [xor, override] # not specified, assume override?
+    redundancy: 5 # should be random? assume 5
+    resolution: 1
+    seed: 0
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+    seed: 0
+  reservoir_layer:
+    init: random
+    k_min: 0
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8] # 2.25 (optimal for heterogenous) 2 (optimal for homogenous)
+    k_max: [10, 20] # no k_max in their paper (needed given scalability of current implementation)
+    n_nodes: 500 # N=500 for "task solving" and N=25 for kernel quality
+    p: 0.5
+    reset: [False, True] # "remember perturbations by an external input over time" suggests that the states are not reset
+    self_loops: null # no control over self-loops (random)
+    seed: 0
+  training: # optimizer is not specified but is gradient descent-based (i use adam optimizer on a sigmoid activated readout with binary-cross entropy cost function)
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    epochs: 40 # epochs is different
+    evaluation: dev # consider making this a list so we can get dev and test accuracy (they call this training and generalization accuracy) 
+    learning_rate: 0.001 # learning rate is different
+    seed: 0

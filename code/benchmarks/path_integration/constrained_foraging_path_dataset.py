@@ -1,14 +1,14 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from boolean_reservoir.encoding import float_array_to_boolean, min_max_normalization
-from boolean_reservoir.parameters import InputParams
+from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
+from projects.boolean_reservoir.code.parameters import InputParams
 from benchmarks.path_integration.constrained_foraging_path import random_walk, Boundary, NoBoundary, positions_to_p_v_pairs, generate_polygon_points, stretch_polygon, PolygonBoundary, LevyFlightStrategy 
 from numpy import pi
 from pathlib import Path
 from math import floor
 
 class ConstrainedForagingPathDataset(Dataset):
-    def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='/data/test/dataset.pt', generate_data=False):
+    def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='data/test/dataset.pt', generate_data=False):
         self.data_path = Path(data_path)
         self.n_dimensions = n_dimensions
         self.boundary = boundary

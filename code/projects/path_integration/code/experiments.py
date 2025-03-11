@@ -1,9 +1,9 @@
 import cProfile
 import pstats
 import io
-from boolean_reservoir.parameters import * 
-from boolean_reservoir.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as accuracy
-from projects.path_integration.dataset_init import PathIntegrationDatasetInit as dataset_init
+from projects.boolean_reservoir.code.parameters import * 
+from projects.boolean_reservoir.code.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as accuracy
+from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as dataset_init
 
 def profile_training_function():
     pr = cProfile.Profile()

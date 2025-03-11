@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 import yaml
 import itertools
 from typing import List, Union, Optional, Callable
@@ -24,7 +24,7 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
         return operator(a, b)
 
 class InputParams(BaseModel):
-    seed: int = Field(0, description="Random seed, 0 disables seed")
+    seed: int = Field(0, description="Random seed, None disables seed")
     dataset: Optional[Union[Path, List[Path]]] = Field(None, description="Path to dataset")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
@@ -34,17 +34,18 @@ class InputParams(BaseModel):
     resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
 
-    @model_validator(mode='before')
+    @model_validator(mode='after')
     def override_bits_per_feature_by_resolution_and_redundancy(cls, values):
-        if 'resolution' in values and values['resolution'] is not None:
-            values['bits_per_feature'] = calculate_w_broadcasting(lambda x, y: x * y, values['resolution'], values['redundancy'])
+        if values.resolution is not None:
+            values.bits_per_feature = calculate_w_broadcasting(lambda x, y: x * y, values.resolution, values.redundancy)
         else:
-            values['resolution'] = calculate_w_broadcasting(lambda x, y: x / y, values['bits_per_feature'], values['redundancy'])
+            values.resolution = calculate_w_broadcasting(lambda x, y: x // y, values.bits_per_feature, values.redundancy)
         return values
 
 class ReservoirParams(BaseModel):
-    seed: int = Field(0, description="Random seed, 0 disables seed")
+    seed: int = Field(0, description="Random seed, None disables seed")
     n_nodes: Union[int, List[int]] = Field(..., description="Number of nodes in the reservoir graph")
+    k_min: Union[int, List[int]] = Field(..., description="Min degree of incoming nodes")
     k_avg: Union[float, List[float]] = Field(..., description="Average degree of incoming nodes")
     k_max: Union[int, List[int]] = Field(..., description="Maximum degree of incoming nodes")
     p: Union[float, List[float]] = Field(..., description="Probability for 1 in LUT (look up table)")
@@ -53,12 +54,12 @@ class ReservoirParams(BaseModel):
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
 class OutputParams(BaseModel):
-    seed: int = Field(0, description="Random seed, 0 disables seed")
+    seed: int = Field(0, description="Random seed, None disables seed")
     n_outputs: Union[int, List[int]] = Field(..., description="Dimension of output data")
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
 
 class TrainingParams(BaseModel):
-    seed: int = Field(0, description="Random seed, 0 disables seed")
+    seed: int = Field(0, description="Random seed, None disables seed")
     batch_size: Union[int, List[int]] = Field(..., description="Number of samples per forward pass")
     criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE")
     epochs: Union[int, List[int]] = Field(..., description="Number of epochs")
@@ -79,7 +80,7 @@ class ModelParams(BaseModel):
     training: TrainingParams
 
 class GridSearchParams(BaseModel):
-    seed: int = Field(0, description="Random seed, 0 disables seed")
+    seed: int = Field(0, description="Random seed, None disables seed")
     n_samples: Optional[int] = Field(1, ge=1, description="Number of samples per configuration in grid search")
 
 class HistoryParams(BaseModel):
@@ -93,8 +94,8 @@ class TrainLog(BaseModel):
 
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
-    out_path: Path = Field('/out', description="Where to save all logs for this config")
-    save_dir: Optional[Path] = Field('/out', description="Where last run was saved")
+    out_path: Path = Field('out', description="Where to save all logs for this config")
+    save_dir: Optional[Path] = Field('out', description="Where last run was saved")
     last_checkpoint: Optional[Path] = Field(None, description="Where last checkpoint was saved")
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
@@ -202,11 +203,11 @@ if __name__ == '__main__':
     pass
 
     # # path integration
-    # update_params('/out/grid_search/path_integration/1D/initial_sweep/parameters.yaml')
-    # update_params('/out/grid_search/path_integration/2D/initial_sweep/parameters.yaml')
-    # update_params('/out/grid_search/path_integration/1D/initial_sweep2/parameters.yaml')
-    # update_params('/out/grid_search/path_integration/2D/initial_sweep2/parameters.yaml')
+    # update_params('out/grid_search/path_integration/1D/initial_sweep/parameters.yaml')
+    # update_params('out/grid_search/path_integration/2D/initial_sweep/parameters.yaml')
+    # update_params('out/grid_search/path_integration/1D/initial_sweep2/parameters.yaml')
+    # update_params('out/grid_search/path_integration/2D/initial_sweep2/parameters.yaml')
 
     # temporal 
-    # update_params('/out/grid_search/temporal/density/parameters.yaml')
-    # update_params('/out/grid_search/temporal/parity/parameters.yaml')
+    # update_params('out/grid_search/temporal/density/parameters.yaml')
+    # update_params('out/grid_search/temporal/parity/parameters.yaml')

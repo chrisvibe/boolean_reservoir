@@ -1,7 +1,7 @@
 from pathlib import Path
-from boolean_reservoir.parameters import load_yaml_config
-from boolean_reservoir.reservoir import BooleanReservoir
-from boolean_reservoir.graphs import calc_spectral_radius
+from projects.boolean_reservoir.code.parameters import load_yaml_config
+from projects.boolean_reservoir.code.reservoir import BooleanReservoir
+from projects.boolean_reservoir.code.graphs import calc_spectral_radius
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal
 import statsmodels.api as sm

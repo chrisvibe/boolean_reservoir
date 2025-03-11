@@ -6,11 +6,11 @@ import pandas as pd
 from datetime import datetime, timezone
 import networkx as nx
 import gzip
-from boolean_reservoir.encoding import bin2dec
-from boolean_reservoir.parameters import * 
-from boolean_reservoir.luts import lut_random 
-from boolean_reservoir.graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming
-from boolean_reservoir.utils import set_seed
+from projects.boolean_reservoir.code.encoding import bin2dec
+from projects.boolean_reservoir.code.parameters import * 
+from projects.boolean_reservoir.code.luts import lut_random 
+from projects.boolean_reservoir.code.graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming
+from projects.boolean_reservoir.code.utils import set_seed
 
 
 class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
@@ -82,7 +82,7 @@ class BooleanReservoir(nn.Module):
             set_seed(self.R.seed)
 
             self.graph = self.optional_load('graph', load_dict, 
-                generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
+                generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
             )
             self.adj_list = graph2adjacency_list_incoming(self.graph)
             self.n_nodes = self.graph.number_of_nodes()
@@ -346,6 +346,7 @@ class BatchedTensorHistoryWriter:
         self.dir_path = Path(folderpath)
         self.dir_path.mkdir(parents=True, exist_ok=True)
         self.file_index = 0
+        self.time = 0
         self.buffer_size = buffer_size
         self.buffer = []
         self.meta_buffer = []
@@ -356,6 +357,8 @@ class BatchedTensorHistoryWriter:
         meta_data['file_idx'] = self.file_index 
         meta_data['batch_number'] = len(self.meta_buffer)
         meta_data['samples'] = len(batch_tensor)
+        meta_data['time'] = self.time
+        self.time += 1
         if len(self.buffer) >= self.buffer_size:
             self._write_buffer()
 
@@ -379,6 +382,7 @@ class BatchedTensorHistoryWriter:
         all_data = []
         all_meta_data = []
         idx = 0
+        assert any(dir_path.glob('*.pt')), f"No files found. Try Recording the data? Maybe the path is wrong"
         for _ in dir_path.glob('*.pt'):
             tensor_path = dir_path / f'tensor_{idx}.pt'
             tensor_data = torch.load(tensor_path, weights_only=True)
@@ -392,9 +396,10 @@ class BatchedTensorHistoryWriter:
 
         df = combined_meta_data
         expanded_meta_data = df.loc[df.index.repeat(df['samples'])].reset_index(drop=True)
+        expanded_meta_data['sample_id'] = expanded_meta_data.groupby(['phase', 'step']).cumcount()
         expanded_meta_data.drop(columns=['samples'], inplace=True)
         return combined_data, expanded_meta_data, combined_meta_data
-
+    
 
 if __name__ == '__main__':
     I = InputParams(

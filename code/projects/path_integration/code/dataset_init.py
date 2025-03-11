@@ -1,20 +1,16 @@
-from boolean_reservoir.encoding import float_array_to_boolean, min_max_normalization
-from boolean_reservoir.parameters import InputParams
-from boolean_reservoir.utils import set_seed, balance_dataset
-from boolean_reservoir.train_model import DatasetInit
+from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
+from projects.boolean_reservoir.code.parameters import InputParams
+from projects.boolean_reservoir.code.utils import set_seed, balance_dataset
+from projects.boolean_reservoir.code.train_model import DatasetInit
 from benchmarks.path_integration.constrained_foraging_path_dataset import ConstrainedForagingPathDataset
+from pathlib import Path
 
 class PathIntegrationDatasetInit(DatasetInit):
     def dataset_init(self, I: InputParams):
         set_seed(I.seed) # Note that model is sensitive to this init (new training needed per seed)
-        if I.n_inputs == 1:
-            if I.dataset is None:
-                I.dataset = '/data/path_integration/1D/levy_walk/n_steps/interval_boundary/dataset.pt'
-            dataset = ConstrainedForagingPathDataset(data_path=I.dataset)
-        elif I.n_inputs == 2:
-            if I.dataset is None:
-                I.dataset = '/data/path_integration/2D/levy_walk/n_steps/square_boundary/dataset.pt'
-            dataset = ConstrainedForagingPathDataset(data_path=I.dataset)
+        parameters_from_path = self.parse_parameters_from_path(I.dataset, '-')
+        parameters_from_path = self.remap_keys(parameters_from_path)
+        dataset = ConstrainedForagingPathDataset(*parameters_from_path)
         bins = 100
         balance_dataset(dataset, num_bins=bins) # Note that data range affects bin assignment (outliers dangerous)
         dataset.set_normalizer_x(min_max_normalization)
@@ -25,3 +21,21 @@ class PathIntegrationDatasetInit(DatasetInit):
         dataset.encode_x()
         dataset.split_dataset()
         return dataset
+
+    @staticmethod
+    def parse_parameters_from_path(path: Path, delimiter: str):
+        parameters_from_path = {k: v for k, v in (part.split(delimiter) for part in path.parts if delimiter in part)}
+        parameters_from_path['data_path'] = path 
+        return parameters_from_path
+    
+    @staticmethod
+    def remap_keys(parameter_dict):
+        alias_to_parameter = {
+            'd': 'n_dimensions',
+            's': 'strategy',
+            'b': 'boundary',
+            'n': 'n_steps',
+            'm': 'samples',
+            'r': 'seed',
+        } 
+        return {k[alias_to_parameter[k]]: v for k, v in parameter_dict.items()}

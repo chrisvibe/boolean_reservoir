@@ -3,9 +3,9 @@ import matplotlib.patches as patches
 import matplotlib
 import numpy as np
 from copy import deepcopy
-from boolean_reservoir.encoding import bin2dec
-from boolean_reservoir.visualizations import plot_train_history, plot_predictions_and_labels, plot_dynamics_history
-from boolean_reservoir.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
+from projects.boolean_reservoir.code.encoding import bin2dec
+from projects.boolean_reservoir.code.visualizations import plot_train_history, plot_predictions_and_labels, plot_dynamics_history
+from projects.boolean_reservoir.code.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
 from pathlib import Path
 import seaborn as sns
 matplotlib.use('Agg')
