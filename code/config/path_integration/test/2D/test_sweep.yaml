@@ -1,6 +1,5 @@
 model:
   input_layer:
-    dataset: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'
     pertubation: 'xor'
     encoding: 'binary_embedding'
     n_inputs: 2
@@ -8,8 +7,8 @@ model:
     redundancy: 6
     interleaving: [0]
   reservoir_layer:
-    n_nodes: [1000, 2000]
-    k_avg: [2]
+    n_nodes: [500, 600]
+    k_avg: [2, 3]
     k_max: [6]
     p: [.5]
     self_loops: [0]
@@ -27,3 +26,5 @@ logging:
   grid_search:
     seed: 0
     n_samples: 2
+dataset:
+  path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'

@@ -60,7 +60,7 @@ def bin2dec(x, bits, small_endian=False):
 
 def interleave_features(x, group_size=1):
     # interleave between dimension d (dim 2) mxsxdxb
-    # group_size is grouping when interleaving f.ex N=2 → [012, 345] → [(01)(34)(25)]
+    # group_size is grouping when interleaving f.ex N=2 → [012, 345] → [(01)(3,4)(25)]
     shape = x.shape
     x = x.reshape(x.shape[0], x.shape[1], x.shape[2], -1, group_size)
     x = torch.transpose(x, 2, 3).reshape(shape)
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     print((p * (2**bits - 1)).numpy())
 
     print("Boolean representation:")
-    I = InputParams(bits_per_feature=bits, encoding='base2', n_inputs=p.shape[-1])
+    I = InputParams(bits_per_feature=bits, encoding='base2', features=p.shape[-1])
     boolean_representation = float_array_to_boolean(p, I)
     print(boolean_representation.to(torch.int).numpy())
 

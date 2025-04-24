@@ -12,6 +12,7 @@ from sklearn.manifold import TSNE, MDS
 from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
+import torch
 matplotlib.use('Agg')
 
 def plot_train_history(path, history):
@@ -60,22 +61,21 @@ def plot_grid_search(data_file_path: Path):
     df = df[['accuracy', 'loss'] + list(df_flattend_params.keys())]
     df = df.loc[:, [(col == 'params' or len(df[col].unique()) > 1) for col in df.columns]]
     features = df.drop(columns=['accuracy', 'loss'])
+    features = features.loc[:, ~features.columns.str.contains('seed', case=False)]
     
     # Identify categorical and numerical columns
     categorical_cols = features.select_dtypes(include=['object']).columns.tolist()
     numerical_cols = features.select_dtypes(exclude=['object'], include='number').columns.tolist()
-    
-    transformers = [('num', StandardScaler(), numerical_cols)]
+
+    # pre-processing
+    transformers = list() 
+    transformers.append(('num', StandardScaler(), numerical_cols))
     if categorical_cols:
         transformers.append(('cat', OneHotEncoder(sparse_output=False), categorical_cols))
-    
-    # Create a preprocessing pipeline
     preprocessor = ColumnTransformer(transformers=transformers)
-    
-    # Apply the transformations
     features_processed = preprocessor.fit_transform(features)
     
-    # Applying PCA
+    # PCA
     pca = PCA(n_components=2)
     principal_components = pca.fit_transform(features_processed)
     principal_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
@@ -208,7 +208,7 @@ def plot_dynamics_history(path):
     plt.savefig(save_path / file, bbox_inches='tight')
 
 
-def plot_activity_trace(path, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
+def plot_activity_trace(path, highlight_input_nodes=False, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
     path = Path(path)
     save_path = path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
@@ -235,16 +235,30 @@ def plot_activity_trace(path, data_filter=lambda df: df[df['phase'] != 'input_la
     # Main activity trace heatmap
     sns.heatmap(history.T, cmap='viridis', cbar=True, ax=ax_heatmap)
     expanded_meta = expanded_meta.set_index(['time'], drop=False)
-    ax_heatmap.set_title('Activity trace of node states over time')
-    ax_heatmap.set_xlabel('')
+    ax_heatmap.set_title('Activity trace of node states over time', pad=50)
+    ax_heatmap.set_xlabel('Time')
     ax_heatmap.set_ylabel('Nodes')
+
+    # # Highlight the input nodes on the y-axis with transparency TODO we dont have input nodes anymore, we use a input linear layer for this.
+    # if highlight_input_nodes:
+    #     input_nodes_path = next(path.glob('checkpoints∕*∕input_nodes.pt'))
+    #     input_nodes = torch.load(input_nodes_path, weights_only=True)
+    #     alpha_value = 0.5  # Set your desired alpha value here
+    #     for input_nodes in highlight_input_nodes.input_nodes.tolist():
+    #         for idx in input_nodes:
+    #             ax_heatmap.add_patch(
+    #                 plt.Rectangle((0, idx), 1, 1, fill=False,
+    #                             edgecolor=(1, 0, 0, alpha_value), lw=1)
+    #             )
+    #     subtitle = f'Input nodes: {highlight_input_nodes.input_nodes.tolist()}'
+    #     plt.text(0.5, 1.05, subtitle, ha='center', va='center', transform=ax_heatmap.transAxes, fontsize=10)
 
     # Phase heatmap using integer mapping for consistent color representation
     sns.heatmap(phase_df[['phase']].T, cmap=cmap_phase, cbar=True, ax=ax_phase, xticklabels=False, yticklabels=False, cbar_kws={'ticks': list(colorbar_labels.keys())})
     cbar = ax_phase.collections[0].colorbar
     cbar.ax.set_yticklabels([colorbar_labels[v] for v in cbar.get_ticks()])
     ax_phase.set_title('Phases over Time')
-    ax_phase.set_xlabel('Time')
+    ax_phase.set_xlabel('')
     ax_phase.set_ylabel('')
     file = save_path / "activity_trace_with_phase.png"
     plt.savefig(file, bbox_inches='tight')

@@ -12,7 +12,7 @@ class TemporalDatasetBase(Dataset):
         # window size (in the bit stream) i.e. 4: 10101011[1010]
         # tao is the delay (for the window) i.e. 1: 1010101[1101]0
         set_seed(p.seed)
-        self.data_path = Path(p.dataset)
+        self.data_path = Path(p.path)
         
         if self.data_path.exists() and not p.generate_data:
             self.load_data()
@@ -21,6 +21,8 @@ class TemporalDatasetBase(Dataset):
                 print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
                 p.bit_stream_length = p.window_size + p.tao
             self.data = self.generate_data(task, p.samples, p.bit_stream_length, p.tao, p.window_size)
+            self.save_data()
+        self.split = p.split
 
     def generate_data(self, task, samples, stream_length, tao, window_size):
         data_x = []
@@ -38,13 +40,15 @@ class TemporalDatasetBase(Dataset):
             'y': torch.stack(data_y),
         }
 
-    def split_dataset(self, split=(0.8, 0.1, 0.1)):
-        assert sum(split) == 1, "Split ratios must sum to 1."
-
+    def split_dataset(self, split=[0.8, 0.1, 0.1]):
+        split_train = split[0] if self.split is None else self.split.train
+        split_dev = split[1] if self.split is None else self.split.dev
+        split_test = split[2] if self.split is None else self.split.test
+        assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
         x, y = self.data['x'], self.data['y']
         idx = torch.randperm(x.size(0))
 
-        train_end, dev_end = floor(split[0] * x.size(0)), floor((split[0] + split[1]) * x.size(0))
+        train_end, dev_end = floor(split_train * x.size(0)), floor((split_train + split_dev) * x.size(0))
 
         self.data = {
             'x': x[idx[:train_end]],
@@ -58,11 +62,9 @@ class TemporalDatasetBase(Dataset):
     def save_data(self):
         self.data_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.data, self.data_path)
-        print(f"Data saved to {self.data_path}")
 
     def load_data(self):
         self.data = torch.load(self.data_path, weights_only=True)
-        print(f"Data loaded from {self.data_path}")
     
     def __len__(self):
         return self.data['x'].size(0)

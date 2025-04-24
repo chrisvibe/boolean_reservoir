@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch
 import pandas as pd
 from tqdm import tqdm
-from shutil import rmtree
 from copy import deepcopy
-from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
 from projects.boolean_reservoir.code.graph_visualizations_dash import *
 from projects.boolean_reservoir.code.parameters import * 
@@ -37,7 +37,7 @@ class BooleanAccuracy(AccuracyFunction):
 
 class DatasetInit(ABC):
     @abstractmethod
-    def dataset_init(self, I: InputParams):
+    def dataset_init(self, P: Params=None) -> Dataset:
         pass
 
 def criterion_strategy(strategy):
@@ -54,11 +54,12 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     P = model.P
     I = P.model.input_layer
     T = P.model.training
+    D = P.dataset
 
     # Init data
     torch.cuda.empty_cache()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = dataset_init(I)
+    dataset = dataset_init(P)
     dataset.data['x'] = dataset.data['x'].to(device)
     dataset.data['y'] = dataset.data['y'].to(device)
     dataset.data['x_' + T.evaluation] = dataset.data['x_' + T.evaluation].to(device)
@@ -73,7 +74,7 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, reco
     set_seed(T.seed)
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
     criterion = criterion_strategy(T.criterion)
-    data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=True, drop_last=True)
+    data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=T.shuffle, drop_last=T.drop_last)
     x_eval = 'x_' + T.evaluation
     y_eval = 'y_' + T.evaluation
     best_stats = {'eval': T.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
@@ -120,7 +121,8 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, reco
     model.P.logging.train_log.epoch = best_stats['epoch']
     return best_stats, model, train_history
 
-def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations=None):
+def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations: list[Params]=None):
+    # dataset is re-initialized when parameters from input_layer or dataset change
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
@@ -131,36 +133,47 @@ def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunct
     L.out_path.mkdir(parents=True, exist_ok=True)
     save_yaml_config(P, L.out_path / 'parameters.yaml')
     if param_combinations is None:
-        param_combinations = generate_param_combinations(P.model)
-    history = list() 
+        param_combinations = generate_param_combinations(P)
     n_config = len(param_combinations)
     n_sample = L.grid_search.n_samples
-    last_input_layer_params = dataset = best_params = None
+    last_dataset_params = last_input_params = dataset = best_params = None
+    history = list() 
     torch.cuda.empty_cache()
 
+    # TODO split dataset and input layer init, atm this assumes dataset_init is invariant to I.seed
+    def is_equal_except_seed(this, that):
+        if isinstance(that, Params):
+            return all(
+                getattr(this, attr) == getattr(that, attr)
+                for attr in this.dict() if attr != 'seed'
+            )
+        return False
+
     pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
-    for i in range(n_config):
+    for i, p in enumerate(param_combinations):
         for j in range(n_sample):
-            p = Params(model=deepcopy(param_combinations[i]), logging=deepcopy(P.logging))
             t = p.model.training
             print('#'*60)
-            k = L.grid_search.seed*4 + i*2 + j
-            t.seed = k 
+            k = generate_unique_seed(L.grid_search.seed, i, j)
+            p.model.input_layer.seed = k
             p.model.reservoir_layer.seed = k 
             p.model.output_layer.seed = k 
-            if last_input_layer_params != p.model.input_layer:
-                dataset = dataset_init(p.model.input_layer)
+            t.seed = k 
+            p.dataset.seed = k 
+            if last_dataset_params != p.dataset or not is_equal_except_seed(last_input_params, p.model.input_layer):
+                dataset = dataset_init(P=p)
                 dataset.data['x'] = dataset.data['x'].to(device)
                 dataset.data['y'] = dataset.data['y'].to(device)
                 dataset.data['x_' + t.evaluation] = dataset.data['x_' + t.evaluation].to(device)
                 dataset.data['y_' + t.evaluation] = dataset.data['y_' + t.evaluation].to(device)
-                last_input_layer_params = p.model.input_layer
+                last_dataset_params = p.dataset
+                last_input_params = p.model.input_layer
             model = best_epoch = None
             try:
                 model = BooleanReservoir(p).to(device)
                 best_epoch, model, _ = train_and_evaluate(p, model, dataset, record_stats=False, verbose=False, accuracy=accuracy)
                 model.to(cpu_device)
-            except Exception as error:
+            except (ValueError, AttributeError, TypeError) as error:
                 print("Error:", error)
                 model = BooleanReservoir
                 model.P = p
@@ -191,43 +204,3 @@ def grid_search(yaml_path, dataset_init:DatasetInit=None, accuracy:AccuracyFunct
     print(f'Best parameters:\n{best_params}')
     return P, best_params
 
-def test_saving_and_loading_models():
-    path = Path('/tmp/boolean_reservoir/out') 
-    if path.exists():
-        rmtree(path)
-    p, model, dataset, history = train_single_model('config/path_integration/2D/test_model.yaml')
-    paths = model.save()
-    #################################################################
-    model2 = BooleanReservoir(load_path=paths['parameters'].parent)
-    test_model_likeness(model, model2, dataset)
-
-def test_reproducibility_of_loaded_grid_search_checkpoint():
-    path = Path('/tmp/boolean_reservoir/out') 
-    if path.exists():
-        rmtree(path)
-    _, p = grid_search('config/path_integration/2D/test_sweep.yaml')
-    print('-'*10, '\n', p, '\n', '-'*10)
-    model = BooleanReservoir(load_path=p.logging.last_checkpoint)
-    #################################################################
-    p2 = deepcopy(model.P)
-    p2, model2, dataset2, history2 = train_single_model(parameter_override=p2)
-    test_model_likeness(model, model2, dataset2)
-    assert model.P.logging.train_log.accuracy == model2.P.logging.train_log.accuracy, 'log accuracies'
-
-def test_model_likeness(model, model2, dataset, accuracy=EuclideanDistanceAccuracy()):
-    assert model.P.model == model.P.model, 'models'
-    assert (model.state_dict()['readout.bias'] == model2.state_dict()['readout.bias']).all(), 'bias'
-    assert (model.state_dict()['readout.weight'] == model2.state_dict()['readout.weight']).all(), 'weights'
-    assert (model.lut == model2.lut).all(), 'lut'
-    assert (model.input_nodes == model2.input_nodes).all(), 'input nodes'
-    assert (model.initial_states == model2.initial_states).all(), 'initial_states'
-    assert (list(model.graph.edges(data=True)) == list(model2.graph.edges(data=True))), 'graph'
-    x_dev, y_dev = dataset.data['x_dev'], dataset.data['y_dev']
-    model.eval()
-    model2.eval()
-    with torch.no_grad():
-        y_hat_dev = model(x_dev)
-        y_hat_dev2 = model2(x_dev)
-        dev_accuracy = accuracy(y_hat_dev, y_dev, model.P.model.training.accuracy_threshold)
-        dev_accuracy2 = accuracy(y_hat_dev2, y_dev, model2.P.model.training.accuracy_threshold)
-        assert dev_accuracy == dev_accuracy2, 'accuracies'

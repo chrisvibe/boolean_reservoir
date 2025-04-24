@@ -1,6 +1,5 @@
 model:
   input_layer:
-    dataset: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'
     pertubation: 'xor'
     bits_per_feature: 48
     encoding: binary_embedding
@@ -26,3 +25,5 @@ model:
     seed: 0
 logging:
   out_path: '/tmp/boolean_reservoir/out/single_run/path_integration/2D/test'
+dataset:
+  path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'

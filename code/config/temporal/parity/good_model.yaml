@@ -5,13 +5,13 @@ logging:
   out_path: out/single_run/temporal/parity/good_model
 model:
   input_layer:
-    bits_per_feature: 5
+    bits_per_feature: 1
     dataset: data/temporal/parity/u-10/w-3/t-1/m-6000/r-0/dataset.pt
     encoding: base2
     interleaving: 0
     n_inputs: 1
     pertubation: xor
-    redundancy: 5
+    redundancy: 1
     resolution: 1
     seed: 0
   output_layer:

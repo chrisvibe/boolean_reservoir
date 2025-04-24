@@ -38,7 +38,7 @@ def remove_isolated_nodes(graph: nx.Graph, remove_connected_to_self_only=False):
 def gen_boolean_array(n):
     return np.random.randint(0, 2, size=n, dtype=bool)
 
-def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: int=None, self_loops: float=None):
+def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: int=None, self_loops: float=None, rows=None):
     """
     Generate a random boolean directed adjacency matrix with optional min and max in-degree constraints.
     Each entry in the adjacency matrix is set with uniform probability.
@@ -80,8 +80,8 @@ def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: i
         (k_max, int, "k_max"),
         (self_loops, float, "self_loops")
     ]), "Parameters must be of correct types"
-    assert 0 <= k_min <= k_avg <= k_max <= n_nodes, "Invalid k parameters: must have 0 ≤ k_min ≤ k_avg ≤ k_max ≤ n_nodes"
-    assert 0 <= self_loops <= 1, "self_loops must be between 0 and 1"
+    assert 0 <= k_min <= k_avg <= k_max <= n_nodes, f"Invalid k parameters: must have 0 ≤ k_min ({k_min}) ≤ k_avg ({k_avg}) ≤ k_max ({k_max}) ≤ n_nodes ({n_nodes})"
+    assert 0 <= self_loops <= 1, f"self_loops ({self_loops}) must be between 0 and 1"
     assert total_edges <= (n_nodes - 1) * n_nodes + n_self_loops , "Theoretical limit on edges exceeded - can happen when self_loops < 1"
 
     # Initialize k reserving space for k_min
@@ -110,7 +110,8 @@ def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: i
             k[indices] += 1
 
     # project 1D in-degree sequence to 2D adjacency matrix
-    adj_matrix = randomly_project_1d_to_2d(k)
+    rows = n_nodes if rows is None else rows
+    adj_matrix = random_projection_1d_to_2d(k, m=rows)
 
     # assign self-loops along diagonal
     # projecting to 2D may have added edges to the diagonal
@@ -138,12 +139,38 @@ def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: i
     assert (adj_matrix.sum(axis=0) >= k_min).all(), 'k_min test failed'
     return adj_matrix
 
-def randomly_project_1d_to_2d(k):
-    n_nodes = k.shape[-1]
-    adj_matrix = np.zeros((n_nodes, n_nodes), dtype=bool)
-    for i in range(adj_matrix.shape[1]):
-        adj_matrix[:k[i], i] = True 
-        np.random.shuffle(adj_matrix[:, i])
+def random_projection_1d_to_2d(k: np.ndarray, m: int=None):
+    """
+    Projects a 1D array k into a 2D boolean array where each column i 
+    has k[i] randomly positioned True values.
+    
+    Parameters:
+    ----------
+    k : np.ndarray
+        1D array where each value k[i] represents the number of True values in column i
+    m : int, optional
+        Number of rows in output array. Defaults to length of k
+        
+    Returns:
+    -------
+    np.ndarray
+        A 2D boolean array of shape (m, len(k))
+    """
+    # Handle 0D array (scalar)
+    if k.ndim == 0:
+        k = np.array([k])
+        
+    n = len(k)
+    m = n if m is None else m
+    
+    # Initialize output array
+    adj_matrix = np.zeros((m, n), dtype=bool)
+    
+    # For each column
+    for i in range(n):
+        true_indices = np.random.choice(m, k[i], replace=False)
+        adj_matrix[true_indices, i] = True
+            
     return adj_matrix
 
 def randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(pigeons, holes, capacity):
@@ -158,6 +185,85 @@ def randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(pigeons, 
     np.random.shuffle(possible_hole_assignments)
     hole_occupance = possible_hole_assignments.reshape(worst_case_capacity, holes).sum(axis=0)
     return hole_occupance
+
+def random_boolean_adjancency_matrix_from_p(n: int, m: int, p: float) -> np.ndarray:
+    adj_matrix = np.random.rand(n, m)
+    adj_matrix = adj_matrix <= p
+    return adj_matrix
+
+def random_boolean_adjancency_matrix_from_two_degree_sets(ka: np.ndarray, kb: np.ndarray, max_tries=100) -> np.ndarray:
+    """
+    Generate a boolean adjacency matrix from two degree sequences ka and kb.
+    
+    Why not do this?
+    G = nx.bipartite.configuration_model(ka, kb, create_using=nx.Graph())
+    Exact degree sequences may not be realized due to the rejection of non-simple elements
+    creat_using=nx.graph() removes the multi-edges and self-loops, but then the edge count may be wrong
+
+    Ok... and this?
+    G = nx.bipartite.havel_hakimi_graph(ka, kb, create_using=nx.Graph())
+    This is deterministic. I need random.
+
+    ... And this?
+    G = nx.bipartite.random_graph(len(ka), len(kb), p)
+    Doesnt give fine grained control over degrees :(
+
+    Conclusion:
+    1. configuration_model
+    2. attempt repair remaining after drop of non-simple elements
+
+    Alternative: 
+    1. deterministic solve: havel-hakimi
+    2. scramble: double edge swap (problem: makes connections within sets) or curveball algorithm (problem: not available)
+
+    :param ka: A 1D integer ndarray of degree sequence for set A (length n).
+    :param kb: A 1D integer ndarray of degree sequence for set B (length n).
+    :return: A boolean ndarray representing the adjacency matrix.
+    """
+    assert sum(ka) == sum(kb), "The sum of degrees in ka and kb must be equal (handshake lemma)."
+    assert ka.max() <= len(kb), "No node in set A should have a degree greater than the number of nodes in set B."
+    assert kb.max() <= len(ka), "No node in set B should have a degree greater than the number of nodes in set A."
+    assert (ka >= 0).all(), "All elements of ka must be > 0 (nodes should have non-negative degree)."
+    assert (kb >= 0).all(), "All elements of kb must be > 0 (nodes should have non-negative degree)."
+
+    # Create initial probabilisitic graph
+    A = range(len(ka))
+    B = range(len(ka), len(ka) + len(kb))
+    for i in range(max_tries):
+        G = nx.bipartite.configuration_model(ka, kb, create_using=nx.Graph())
+        adj_matrix = nx.bipartite.biadjacency_matrix(G, row_order=A, column_order=B).toarray()
+        currrent_ka = adj_matrix.sum(axis=1)
+        currrent_kb = adj_matrix.sum(axis=0)
+        if (currrent_ka == ka).all() and (currrent_kb == kb).all():
+            return adj_matrix 
+
+    # # Brute Force Repair (wont always work...)
+    # currrent_ka = adj_matrix.sum(axis=1)
+    # deficit_a = ka - currrent_ka
+    # missing = deficit_a.sum()
+    # if missing: # handshake lemma implies kb is satisdied when ka is
+    #     currrent_kb = adj_matrix.sum(axis=0)
+    #     deficit_b = kb - currrent_kb
+    #     candidates_a = np.where(deficit_a > 0)[0]
+    #     candidates_b = np.where(deficit_b > 0)[0]
+    #     # make all possible edges (ignore edges that are already 1)
+    #     candidate_edges = [(i, j) for i in candidates_a for j in candidates_b if adj_matrix[i, j] == 0]
+    #     if not candidate_edges:
+    #         if recursion <= max_recursion:
+    #             return random_boolean_adjancency_matrix_from_two_degree_sets(ka, kb, recursion=recursion+1)
+    #         UserWarning('random_boolean_adjancency_matrix_from_two_degree_sets: Could not satisfy degree set constraints')
+    #         return adj_matrix
+    #     # randomly choose missing
+    #     candidate_edges = np.stack(candidate_edges, axis=0)
+    #     idx = np.random.choice(len(candidate_edges), size=missing, replace=False)
+    #     candidate_edges = candidate_edges[idx]
+    #     # set missing (without checking)
+    #     adj_matrix[candidate_edges[:, 0], candidate_edges[:, 1]] = 1
+
+    # assert (ka == adj_matrix.sum(axis=1)).all(), "row sum mismatch (ka)"
+    # assert (kb == adj_matrix.sum(axis=0)).all(), "column sum mismatch (kb)"
+    # return adj_matrix
+   
 
 if __name__ == '__main__':
     G = generate_graph_w_k_avg_incoming_edges(n_nodes=1000, k_avg=3, k_max=6, k_min=2, self_loops=0)

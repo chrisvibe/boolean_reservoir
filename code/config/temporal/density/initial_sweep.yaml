@@ -1,0 +1,45 @@
+# attempt to reproduce figure 3:
+logging:
+  out_path: out/grid_search/temporal/density/initial_sweep
+  grid_search:
+    seed: 0
+    n_samples: 10
+model:
+  input_layer:
+    distribution: 0:b:0:a:1/b
+    encoding: base2
+    n_inputs: 10
+    pertubation: override
+    redundancy: 1
+    resolution: 1
+    seed: 0
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+    seed: 0
+  reservoir_layer:
+    init: random
+    k_min: 0
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8] # 2.25 (optimal for heterogenous) 2 (optimal for homogenous)
+    k_max: 20 # no k_max in their paper (needed given scalability of current implementation)
+    mode: [heterogenous, homogenous]
+    n_nodes: 500 # N=500 for "task solving" and N=25 for kernel quality
+    p: 0.5
+    reset: True # no explicit mention, assume reset: "remember perturbations by an external input over time"
+    self_loops: null # no control over self-loops (random)
+    seed: 0
+  training: # optimizer is not specified but is gradient descent-based (i use adam optimizer on a sigmoid activated readout with binary-cross entropy cost function)
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    epochs: 40 # epochs is different
+    evaluation: dev # consider making this a list so we can get dev and test accuracy (they call this training and generalization accuracy) 
+    learning_rate: 0.001 # learning rate is different
+    seed: 0
+dataset:
+  task: density
+  bit_stream_length: 10 # Note: stream >= window + tao so we need a dynamic stream length
+  window_size: 10 # Note: density window must be odd, parity window can be odd/even
+  tao: [1, 7, 13] 
+  samples: 6000 # I have more samples, they use 150 for training and testing. 
+  split: (.3, .4, .3)

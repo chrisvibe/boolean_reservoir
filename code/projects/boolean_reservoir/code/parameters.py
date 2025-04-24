@@ -1,16 +1,21 @@
 from pydantic import BaseModel, Field, model_validator, field_validator
 import yaml
-import itertools
-from typing import List, Union, Optional, Callable
+from itertools import product
+from typing import List, Union, Optional, Callable, Dict, Any, Type
 from pathlib import Path, PosixPath, WindowsPath
 import pandas as pd
+from benchmarks.path_integration.parameters import PathIntegrationDatasetParams
+from benchmarks.temporal.parameters import TemporalDatasetParams
 
-def represent_pathlib_path(dumper, data):
-    return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
+def pydantic_init():
+    def represent_pathlib_path(dumper, data):
+        return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
 
-yaml.add_representer(Path, represent_pathlib_path)
-yaml.add_representer(PosixPath, represent_pathlib_path)
-yaml.add_representer(WindowsPath, represent_pathlib_path)
+    yaml.add_representer(Path, represent_pathlib_path)
+    yaml.add_representer(PosixPath, represent_pathlib_path)
+    yaml.add_representer(WindowsPath, represent_pathlib_path)
+
+pydantic_init()
 
 def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
     # list-list, list-value, value-list, value-value
@@ -25,14 +30,15 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
 
 class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    dataset: Optional[Union[Path, List[Path]]] = Field(None, description="Path to dataset")
+    distribution: Union[str, List[str]] = Field('min_max_degree-0:b:0:a:1', description="Gets overriden by w_in. Input distribution mapping format: 'a_min:a_max:b_min:b_max:p' where: a and b represent a bipartite mapping from a→b (a:b) with probability p. For a and b use 'a_f': bits per feature, 'f': features, 'a': all input nodes, 'b': all reservoir nodes, or floats/ints directly; 'p' is the connection probability (0-1 or mathematical expression like '1/n'). Note that a and b are split up into a deterministic and probabalistic part; ie. a_min is guaranteed, and a_max depends on p (same for b).")
+    w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by adjacency matrix w_in:[input_bits, n_nodes]. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
-    encoding: Union[str, List[str]] = Field(..., description="Binary encoding type")
-    n_inputs: Union[int, List[int]] = Field(..., description="Dimension of input data before binary encoding")
+    encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
+    n_inputs: Union[int, List[int]] = Field(1, description="Dimension of input data before binary encoding")
     bits_per_feature: Union[int, List[int]] = Field(8, description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
     redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
     resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
-    interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf | n=2: abc, def -> ad, de, cf")
+    interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf -> adb, ecf | n=2: abcd, efgh -> ab, ef, cd, gh -> abef, cdgh")
 
     @model_validator(mode='after')
     def override_bits_per_feature_by_resolution_and_redundancy(cls, values):
@@ -44,28 +50,40 @@ class InputParams(BaseModel):
 
 class ReservoirParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    n_nodes: Union[int, List[int]] = Field(..., description="Number of nodes in the reservoir graph")
-    k_min: Union[int, List[int]] = Field(..., description="Min degree of incoming nodes")
-    k_avg: Union[float, List[float]] = Field(..., description="Average degree of incoming nodes")
-    k_max: Union[int, List[int]] = Field(..., description="Maximum degree of incoming nodes")
-    p: Union[float, List[float]] = Field(..., description="Probability for 1 in LUT (look up table)")
+    n_nodes: Union[int, List[int]] = Field(100, description="Number of nodes in the reservoir graph")
+    k_min: Union[int, List[int]] = Field(0, description="Min degree of incoming nodes")
+    k_avg: Union[float, List[float]] = Field(2, description="Average degree of incoming nodes")
+    k_max: Union[int, List[int]] = Field(None, description="Maximum degree of incoming nodes")
+    mode: Union[str, List[str]] = Field('heterogenous', description="heterogenous: each node can have different number of neighbours, homogenous: each node has k neighbours set by k_avg")
+    p: Union[float, List[float]] = Field(0.5, description="Probability for 1 in LUT (look up table)")
     reset: Optional[Union[bool, List[bool]]] = Field(True, description="Reset to init state after each sample")
     self_loops: Optional[Union[float, List[float]]] = Field(None, description="Probability of self-loops in graph; normalized by number of nodes")
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
-class OutputParams(BaseModel):
+    @model_validator(mode='after')
+    def override_for_homogenous_mode(cls, values):
+        if values.mode == 'homogenous':
+            if isinstance(values.k_avg, list):
+                values.k_min = values.k_max = 0
+            else:
+                values.k_min = values.k_max = int(values.k_avg)
+        return values
+
+class OutputParams(BaseModel): # TODO add w_out and distribution like in input_layer. atm we assume full readout
     seed: int = Field(0, description="Random seed, None disables seed")
-    n_outputs: Union[int, List[int]] = Field(..., description="Dimension of output data")
+    n_outputs: Union[int, List[int]] = Field(1, description="Dimension of output data")
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
 
 class TrainingParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    batch_size: Union[int, List[int]] = Field(..., description="Number of samples per forward pass")
+    batch_size: Union[int, List[int]] = Field(32, description="Number of samples per forward pass")
     criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE")
-    epochs: Union[int, List[int]] = Field(..., description="Number of epochs")
-    accuracy_threshold: Union[float, List[float]] = Field(..., description="Threshold for generic accuracy metric")
-    learning_rate: Union[float, List[float]] = Field(..., description="Learning rate")
+    epochs: Union[int, List[int]] = Field(100, description="Number of epochs")
+    accuracy_threshold: Union[float, List[float]] = Field(0.5, description="Threshold for generic accuracy metric")
+    learning_rate: Union[float, List[float]] = Field(0.01, description="Learning rate")
     evaluation: Optional[str] = Field('test', description="test, dev, train etc")
+    shuffle: bool = Field(True, description="Shuffle dataset")
+    drop_last: bool = Field(True, description="Drop last")
 
     # @model_validator(mode='before')
     # def handle_old_name(cls, values):
@@ -94,8 +112,8 @@ class TrainLog(BaseModel):
 
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
-    out_path: Path = Field('out', description="Where to save all logs for this config")
-    save_dir: Optional[Path] = Field('out', description="Where last run was saved")
+    out_path: Path = Field(Path('out'), description="Where to save all logs for this config")
+    save_dir: Optional[Path] = Field(Path('out'), description="Where last run was saved")
     last_checkpoint: Optional[Path] = Field(None, description="Where last checkpoint was saved")
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
@@ -104,11 +122,11 @@ class LoggingParams(BaseModel):
 class Params(BaseModel):
     model: ModelParams
     logging: LoggingParams = Field(LoggingParams())
+    dataset: Optional[Union[PathIntegrationDatasetParams, TemporalDatasetParams]] = None
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
         config = yaml.safe_load(file)
-
     params = Params(**config)
     return params
 
@@ -116,43 +134,34 @@ def save_yaml_config(base_model: BaseModel, filepath):
     with open(filepath, 'w') as file:
         yaml.dump(base_model.model_dump(), file)
 
-def generate_param_combinations(model_params: ModelParams):
-    # Function to expand a single model layer into a list of parameter dictionaries
-    def expand_layer(layer_params):
-        # Convert model to dict and identify list parameters
-        params_dict = layer_params.model_dump()
-        param_lists = {k: v if isinstance(v, list) else [v] for k, v in params_dict.items()}
+def generate_param_combinations(params: BaseModel) -> List[BaseModel]:
+    def expand_params(params: Any) -> List[Dict[str, Any]]:
+        # If the params object is a BaseModel, expand its fields recursively
+        if isinstance(params, BaseModel):
+            params_dict = params.__dict__
+            expanded_dict = {k: expand_params(v) for k, v in params_dict.items()}
+            
+            keys = expanded_dict.keys()
+            values = [expanded_dict[k] for k in keys]
+            combinations = product(*values)
+            
+            return [dict(zip(keys, combo)) for combo in combinations]
         
-        # Get all combinations of parameters for this layer
-        keys = param_lists.keys()
-        values = [param_lists[k] for k in keys]
-        combinations = list(itertools.product(*values))
+        # If the params object is a list, treat it as multiple possible values (ENUM)
+        elif isinstance(params, list):
+            return params
         
-        # Convert back to dictionaries
-        return [dict(zip(keys, combo)) for combo in combinations]
+        # Otherwise, treat it as a single potential value
+        return [params]
+
+    expanded_params = expand_params(params)
+    result_params_list = []
+
+    for combo_dict in expanded_params:
+        new_params_dict = {k: type(params.__dict__[k])(**combo_dict[k]) if isinstance(params.__dict__[k], BaseModel) else combo_dict[k] for k in params.__dict__.keys()}
+        result_params_list.append(type(params)(**new_params_dict))
     
-    # Expand each layer separately
-    input_combos = expand_layer(model_params.input_layer)
-    reservoir_combos = expand_layer(model_params.reservoir_layer)
-    output_combos = expand_layer(model_params.output_layer)
-    training_combos = expand_layer(model_params.training)
-    
-    # Create the cartesian product of all layer combinations
-    model_params_list = []
-    for input_combo in input_combos:
-        for reservoir_combo in reservoir_combos:
-            for output_combo in output_combos:
-                for training_combo in training_combos:
-                    # Create a new ModelParams object
-                    new_params = {
-                        'input_layer': InputParams(**input_combo),
-                        'reservoir_layer': ReservoirParams(**reservoir_combo),
-                        'output_layer': OutputParams(**output_combo),
-                        'training': TrainingParams(**training_combo)
-                    }
-                    model_params_list.append(ModelParams(**new_params))
-    
-    return model_params_list
+    return result_params_list
 
 def update_params(path):
     # update grid search hdf and yaml files to reflect changes in parameters

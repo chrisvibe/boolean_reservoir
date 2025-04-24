@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import random
+from hashlib import sha256
 
 # Ensure reproducibility by setting seeds globally
 def set_seed(seed=42):
@@ -10,8 +11,14 @@ def set_seed(seed=42):
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
-        # torch.backends.cudnn.deterministic = True
-        # torch.backends.cudnn.benchmark = False
+
+def generate_unique_seed(*args):
+    # Create a string representation of the combined parameters
+    combined_str = ','.join(map(str, args))
+    # Use SHA256 to hash the combined string
+    hash_digest = sha256(combined_str.encode()).hexdigest()
+    # Convert the hash to an integer and ensure it fits in the range of a typical seed
+    return int(hash_digest, 16) % (2**31 - 1)
 
 def gpu_check():
     if torch.cuda.is_available():
@@ -81,7 +88,7 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
     # Report overall reduction
     n_before, n_after = len(x), len(balanced_indices)
     print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
-    
+
     return dataset
 
 

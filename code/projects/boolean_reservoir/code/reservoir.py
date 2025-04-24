@@ -9,8 +9,54 @@ import gzip
 from projects.boolean_reservoir.code.encoding import bin2dec
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
-from projects.boolean_reservoir.code.graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming
+from projects.boolean_reservoir.code.graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming, random_boolean_adjancency_matrix_from_two_degree_sets, random_projection_1d_to_2d, randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick
 from projects.boolean_reservoir.code.utils import set_seed
+import numpy as np
+import math
+import sympy
+
+class ExpressionEvaluator:
+    def __init__(self, params: Params):
+        self._setup_sympy_env()
+        self.P = params
+        self.L = self.P.logging
+        self.I = self.P.model.input_layer
+        self.R = self.P.model.reservoir_layer
+        self.O = self.P.model.output_layer
+        self.T = self.P.model.training
+    
+    def _setup_sympy_env(self):
+        """Set up the sympy environment with symbols and their mappings."""
+        # Define symbols
+        self.sympy_symbols = {
+            'a_f': sympy.Symbol('a_f'),
+            'f': sympy.Symbol('f'),
+            'a': sympy.Symbol('a'),
+            'b': sympy.Symbol('b')
+        }
+        
+    def _get_symbol_values(self):
+        """Get current values for the symbols based on instance state."""
+        return {
+            self.sympy_symbols['a_f']: self.I.bits_per_feature,
+            self.sympy_symbols['f']: self.I.n_inputs,
+            self.sympy_symbols['a']: self.I.bits_per_feature * self.I.n_inputs,
+            self.sympy_symbols['b']: self.R.n_nodes
+        }
+    
+    def to_float(self, expr: str):
+        """Convert a string expression to a float using sympy."""
+        try:
+            # Parse the expression
+            parsed_expr = sympy.sympify(expr)
+            
+            # Get current values and substitute
+            symbol_values = self._get_symbol_values()
+            result = parsed_expr.subs(symbol_values)
+            
+            return float(result)
+        except Exception as e:
+            raise ValueError(f"Failed to evaluate expression '{expr}': {e}")
 
 
 class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
@@ -79,23 +125,29 @@ class BooleanReservoir(nn.Module):
             self.R = self.P.model.reservoir_layer
             self.O = self.P.model.output_layer
             self.T = self.P.model.training
-            set_seed(self.R.seed)
 
+            # How to perturb reservoir and which nodes to perturb 
+            set_seed(self.I.seed)
+            self.input_bits = self.I.n_inputs * self.I.bits_per_feature 
+            assert self.input_bits <= self.R.n_nodes, 'more inputs bits than nodes in graph!'
+            self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
+            if 'weights' not in load_dict:
+                if self.I.w_in:
+                    self.w_in = self.load_torch_tensor(self.I.w_in, self.device)
+                else:
+                    self.w_in = self.input_node_distribution_strategy(self.I.distribution)
+        
+            set_seed(self.R.seed)
             self.graph = self.optional_load('graph', load_dict, 
                 generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
             )
+            assert self.R.n_nodes == self.graph.number_of_nodes()
             self.adj_list = graph2adjacency_list_incoming(self.graph)
-            self.n_nodes = self.graph.number_of_nodes()
-            self.node_indices = torch.arange(self.n_nodes).to(self.device)
-            self.n_parallel = self.T.batch_size
-            self.bits_per_feature = self.I.bits_per_feature
-            self.n_inputs = self.I.n_inputs
-            self.n_outputs = self.O.n_outputs
+            self.node_indices = torch.arange(self.R.n_nodes).to(self.device)
 
             # Precompute adj_list and expand it to the batch size
             self.adj_list, self.adj_list_mask = self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max) 
             self.max_connectivity = self.adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
-            self.adj_list_expanded = self.adj_list.unsqueeze(0).expand(self.n_parallel, -1, -1).to(self.device)
             self.adj_list_mask = self.adj_list_mask.to(self.device)
 
             # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
@@ -113,21 +165,12 @@ class BooleanReservoir(nn.Module):
             self.initial_states = self.optional_load('init_state', load_dict,
                 self.initialization_strategy(self.R.init)
             ).to(self.device)
-            self.reset_reservoir()
+            self.reset_reservoir(self.T.batch_size)
             self.states_paralell.to(self.device)
             
-            # Preselect which reservoir nodes will be perturbed for input
-            input_bits = self.n_inputs * self.bits_per_feature
-            assert input_bits <= self.n_nodes, 'more inputs bits than nodes in graph!'
-            self.input_nodes = self.optional_load('input_nodes', load_dict,
-                # assumes input nodes are dedicated to their feature (no repeats)
-                torch.randperm(self.n_nodes)[:input_bits].reshape(self.n_inputs, self.bits_per_feature)
-            ).to(self.device)
-            self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
-
             # Dense readout layer
             set_seed(self.O.seed)
-            self.readout = nn.Linear(self.n_nodes, self.n_inputs).to(self.device)
+            self.readout = nn.Linear(self.R.n_nodes, self.O.n_outputs).to(self.device)
             if 'weights' in load_dict:
                 self.load_state_dict(load_dict['weights'])
             self.output_activation = self.output_activation_strategy(self.O.activation)
@@ -161,11 +204,11 @@ class BooleanReservoir(nn.Module):
     
     def initialization_strategy(self, strategy:str):
         if strategy == 'random':
-            return torch.randint(0, 2, (1, self.n_nodes), dtype=torch.uint8)
+            return torch.randint(0, 2, (1, self.R.n_nodes), dtype=torch.uint8)
         elif strategy == 'zeros':
-            return torch.zeros((1, self.n_nodes), dtype=torch.uint8)
+            return torch.zeros((1, self.R.n_nodes), dtype=torch.uint8)
         elif strategy == 'ones':
-            return torch.ones((1, self.n_nodes), dtype=torch.uint8)
+            return torch.ones((1, self.R.n_nodes), dtype=torch.uint8)
         elif strategy == 'every_other':
             states = self.initialization_strategy('zeros')
             states[::2] = 1
@@ -173,15 +216,90 @@ class BooleanReservoir(nn.Module):
         elif strategy == 'first_lut_state': # warmup reservoir with first state from LUT 
             return self.lut[self.node_indices, 0]
         elif strategy == 'random_lut_state': # warmup reservoir with random states from LUT
-            idx = torch.randint(low=0, high=2**self.max_connectivity, size=(self.n_nodes,))
+            idx = torch.randint(low=0, high=2**self.max_connectivity, size=(self.R.n_nodes,))
             return self.lut[self.node_indices, idx]
         raise ValueError
-    
+
+    def input_node_distribution_strategy(self, strategy: str):
+        # produce w_in, a [dxb]xn matrix → bipartite map of how inputs bits perturb reservoir nodes
+        # idea: make a determinisitic bipartite graph from input to reservoir + a probabilitic mapping
+        # the deterministic mapping is from a_min:b_min, the probabilistic increments this to a_max, b_max by probability p
+        # notation I: a and b get their names from normal mapping notation; number of nodes on the left and right side respectively in a bipartite map
+        # notation II: k is the edge count per node (array)
+        input_bits = self.I.n_inputs * self.I.bits_per_feature
+        assert input_bits <= self.R.n_nodes, 'more inputs bits than nodes in graph!'
+        
+        # Parse the strategy string
+        expression_evaluator = ExpressionEvaluator(self.P)
+        parts = strategy.split('-')
+        if parts[0] == 'min_max_degree':
+            parts = parts[1].split(':')
+            assert len(parts) == 5, "Strategy must have format 'min_max_degree-a_min:a_max:b_min:b_max:p'"
+            a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = parts
+
+            # Parse a_min, a_max, b_min, b_max, p 
+            a_min = int(expression_evaluator.to_float(a_min_expr))
+            a_max = int(expression_evaluator.to_float(a_max_expr))
+            assert 0 <= a_min <= a_max <= self.R.n_nodes, f'outgoing connections per input node: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {self.R.n_nodes} (nodes in graph)'
+
+            b_min = int(expression_evaluator.to_float(b_min_expr))
+            b_max = int(expression_evaluator.to_float(b_max_expr))
+            assert 0 <= b_min <= b_max <= self.R.n_nodes, f'incoming connections per reservoir node: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {input_bits} (nodes in graph)'
+
+            p = expression_evaluator.to_float(p_expr)
+            assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
+
+            # make ka:
+            capacity_range_a = a_max - a_min
+            capacity_range_b = b_max - b_min
+            edge_range = min(capacity_range_a * input_bits, capacity_range_b * self.R.n_nodes)
+            edge_range = (np.random.random(edge_range) <= p).sum()
+            ka = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, input_bits, capacity_range_a) # probabilistic connections
+            ka += a_min # deterimistic connections
+
+            # make kb:
+            edge_range = ka.sum() 
+            kb = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, self.R.n_nodes, capacity_range_b) # probabilistic connections
+            kb += b_min # deterimistic connections
+            
+            # project 1D in-degree sequence to random 2D adjacency matrix
+            w_in = random_boolean_adjancency_matrix_from_two_degree_sets(ka, kb)
+            return torch.tensor(w_in, dtype=torch.uint8)
+        elif parts[0] == 'min_max_random':
+            parts = parts[1].split(':')
+            assert len(parts) == 3, "Strategy must have format 'min_max_random-min:max:p'"
+            a_min_expr, a_max_expr, p_expr = parts
+
+            # Parse a_min, a_max, b_min, b_max, p 
+            a_min = int(expression_evaluator.to_float(a_min_expr))
+            a_max = int(expression_evaluator.to_float(a_max_expr))
+            assert 0 <= a_min <= a_max <= self.R.n_nodes, f'outgoing connections per input node: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {self.R.n_nodes} (nodes in graph)'
+
+            # Parse p 
+            p = expression_evaluator.to_float(p_expr)
+            assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
+
+            # make ka:
+            capacity_range_a = a_max - a_min
+            edge_range = capacity_range_a * input_bits
+            edge_range = (np.random.random(edge_range) <= p).sum()
+            ka = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, input_bits, capacity_range_a) # probabilistic connections
+            ka += a_min # deterimistic connections
+
+            # project 1D in-degree sequence to random 2D adjacency matrix
+            w_in = random_projection_1d_to_2d(ka, m=self.R.n_nodes).T
+            return torch.tensor(w_in, dtype=torch.uint8)
+ 
+
     def input_pertubation_strategy(self, strategy:str):
-        if strategy == 'override':
-            return lambda old, new: new
-        elif strategy == 'xor':
-                return lambda old, new: old ^ new
+        if strategy == 'xor': # Apply XOR only where input_mask is True, otherwise keep the old value
+            return lambda states, perturbations, input_mask: (states * ~input_mask) | ((states ^ perturbations) & input_mask)
+        elif strategy == 'and': # Apply AND only where input_mask is True, otherwise keep the old value
+            return lambda states, perturbations, input_mask: (states * ~input_mask) | ((states & perturbations) & input_mask)
+        elif strategy == 'or': # Apply OR only where input_mask is True, otherwise keep the old value
+            return lambda states, perturbations, input_mask: (states * ~input_mask) | ((states | perturbations) & input_mask)
+        elif strategy == 'override': 
+            return lambda states, perturbations, input_mask: (states * ~input_mask) | (perturbations & input_mask)
         raise ValueError('Unknown perturbation strategy: {}'.format(strategy))
     
     def output_activation_strategy(self, strategy:str):
@@ -201,11 +319,11 @@ class BooleanReservoir(nn.Module):
         self.checkpoint_folder.mkdir(parents=True, exist_ok=False)
         paths = self.make_load_paths(self.checkpoint_folder)
         save_yaml_config(self.P, paths['parameters'])
+        torch.save(self.w_in, paths['w_in'])
         with gzip.open(paths['graph'], 'wb') as f:
             nx.write_graphml(self.graph, f)
-        torch.save(self.lut, paths['lut'])
-        torch.save(self.input_nodes, paths['input_nodes'])
         torch.save(self.initial_states, paths['init_state'])
+        torch.save(self.lut, paths['lut'])
         torch.save(self.state_dict(), paths['weights'])
         return paths 
 
@@ -216,16 +334,16 @@ class BooleanReservoir(nn.Module):
         if p is None:
             p = load_yaml_config(paths['parameters'])
         d = dict() 
+        if 'w_in' in paths:
+            d['w_in'] = BooleanReservoir.load_torch_tensor(paths['w_in'])
         if 'graph' in paths:
             d['graph'] = BooleanReservoir.load_graph(paths['graph'])
-        if 'lut' in paths:
-            d['lut'] = BooleanReservoir.load_torch_tesor(paths['lut'], self.device)
-        if 'input_nodes' in paths:
-            d['input_nodes'] = BooleanReservoir.load_torch_tesor(paths['input_nodes'], self.device)
         if 'init_state' in paths:
-            d['init_state'] = BooleanReservoir.load_torch_tesor(paths['init_state'], self.device)
+            d['init_state'] = BooleanReservoir.load_torch_tensor(paths['init_state'], self.device)
+        if 'lut' in paths:
+            d['lut'] = BooleanReservoir.load_torch_tensor(paths['lut'], self.device)
         if 'weights' in paths:
-            d['weights'] = BooleanReservoir.load_torch_tesor(paths['weights'], self.device)
+            d['weights'] = BooleanReservoir.load_torch_tensor(paths['weights'], self.device)
         self.__init__(params=p, load_dict=d)
         return d
     
@@ -237,7 +355,7 @@ class BooleanReservoir(nn.Module):
         return graph
 
     @staticmethod
-    def load_torch_tesor(path, device):
+    def load_torch_tensor(path, device):
         tensor = torch.load(path, weights_only=True, map_location=device)
         return tensor
     
@@ -251,10 +369,10 @@ class BooleanReservoir(nn.Module):
         paths = dict()
         files = []
         files.append(('parameters', 'yaml'))
+        files.append(('w_in', 'pt'))
         files.append(('graph', 'graphml.gz'))
-        files.append(('lut', 'pt'))
-        files.append(('input_nodes', 'pt'))
         files.append(('init_state', 'pt'))
+        files.append(('lut', 'pt'))
         files.append(('weights', 'pt'))
         for file, filetype in files:
             paths[file] = folder_path / f'{file}.{filetype}'
@@ -264,35 +382,37 @@ class BooleanReservoir(nn.Module):
         vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 
-    def reset_reservoir(self):
-        self.states_paralell = self.initial_states.repeat(self.n_parallel, 1)
+    def reset_reservoir(self, batches):
+        self.states_paralell = self.initial_states.repeat(batches, 1)
    
     def forward(self, x):
         '''
-        Accepts the decomposed velocities encoded in boolean format. In 2d: x = dx, dy
-        Since each series of velocities corresponds to a single coordinate label the shape of x is: mxsxd
-        m is the number of samples
-        s is the number of steps
-        d is the number of dimensions
-        b is the number of bits used for the boolean encoding
-        the output is then mxdxb
+        input is reshaped to fit number of input bits in w_in
+        ie.
+        assume x.shape == mxsxdxb
+        m: samples
+        s: steps
+        d: n_inputs
+        b: bits_per_feature
 
-        1. input the encoded velocity data in s steps
-        2. the reservoir should is hopefully able to represent the integral of these steps
-        3. readout interprets the reservoir and outputs the integral; the final position coordinate
+        how they perturb the reservoir if self.input_bits == 2:
+        1. m paralell samples 
+        2. s sequential step sets of inputs re-using w_in
+        3. d sequential input sets as per w_in[a_i:b_i, :] (w_in is partitioned per input so two parts in the example)
+        4. b simultaneous bits as per w_in[a_i:b_i, :]
+        
+        note that x only controls m and s (assume d and b dimensions match self.I.n_inputs and seld.I.bits_per_feature)
+        thus one can change pertubations behavious via input shape or model configuration
         '''
-        m, s, d, b = x.shape
-        if self.R.reset:
-            self.reset_reservoir()
 
-        # handle batch size greater than parallel reservoirs
-        # note that the :m is to handle batch sizes less than or equal to the number of parallel reservoirs handy
-        if m > self.n_parallel:
+        # handle batch size greater than paralell reservoirs
+        m = x.shape[0]
+        if m > self.T.batch_size:
             outputs_list = list()
             kb = 0
-            for i in range(m // self.n_parallel):
-                ka = i*self.n_parallel
-                kb = ka + self.n_parallel
+            for i in range(m // self.T.batch_size):
+                ka = i*self.T.batch_size
+                kb = ka + self.T.batch_size
                 outputs = self.forward(x[ka:kb])
                 outputs_list.append(outputs)
             if kb < m:
@@ -300,34 +420,47 @@ class BooleanReservoir(nn.Module):
                 outputs_list.append(outputs)
             return torch.cat(outputs_list, dim=0)
 
-        self.batch_record(phase='init', step=0)
+        if self.R.reset:
+            self.reset_reservoir(m)
+        self.batch_record(m, phase='init', s=0, d=0)
 
         # INPUT LAYER
         # ----------------------------------------------------
-        for j in range(s):
-            # Perturb specific reservoir nodes with input
-            self.states_paralell[:m, self.input_nodes] = self.input_pertubation(self.states_paralell[:m, self.input_nodes], x[:m, j])
+        x = x.view(m, -1, self.I.n_inputs, self.I.bits_per_feature) # if input has more input bits than model expects: loop through these re-using w_in for each pertubation (samples kept in parallel)
+        s = x.shape[1]
+        k = self.w_in.shape[0]//self.I.n_inputs
+        d = self.I.n_inputs
+        for si in range(s):
+            a = b = 0
+            for di in range(d):
+                # Perturb reservoir nodes with partial input depending on d dimension
+                x_i = x[:, si, di]
+                b += k
+                w_in_i = self.w_in[a:b]
+                a = b
+                input_mask = w_in_i.sum(axis=0)
+                perturbations = x_i @ w_in_i > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
+                self.states_paralell[:m] = self.input_pertubation(self.states_paralell[:m], perturbations, input_mask)
 
-            self.batch_record(phase='input_layer', step=j)
+                self.batch_record(m, phase='input_layer', s=si+1, d=di+1)
 
-            # RESERVOIR LAYER
-            # ----------------------------------------------------
-            # Gather the states based on the expanded adj_list (note that this is maybe not efficient...)
-            state_expanded = self.states_paralell[:m].unsqueeze(-1).expand(-1, -1, self.max_connectivity)
-            states_paralell = torch.gather(state_expanded, dim=1, index=self.adj_list_expanded[:m])
+                # RESERVOIR LAYER
+                # ----------------------------------------------------
+                # Gather the states based on the adj_list
+                neighbour_states_paralell = self.states_paralell[:m, self.adj_list]
 
-            # Apply mask as the adj_list has invalid connections due to homogenized tensor
-            states_paralell &= self.adj_list_mask
+                # Apply mask as the adj_list has invalid connections due to homogenized tensor
+                neighbour_states_paralell &= self.adj_list_mask
 
-            # Convert binary to integer index
-            idx = self.bin2int(states_paralell)
+                # Convert binary to integer index
+                idx = self.bin2int(neighbour_states_paralell)
 
-            # Update the state with LUT
-            self.states_paralell[:m] = self.lut[self.node_indices, idx]
+                # Update the state with LUT for each node
+                self.states_paralell[:m] = self.lut[self.node_indices, idx]
 
-            self.batch_record(phase='reservoir_layer', step=j)
-
-        self.batch_record(phase='output_layer', step=0)
+                if si < s - 1:
+                    self.batch_record(m, phase='reservoir_layer', s=si+1, d=di+1)
+        self.batch_record(m, phase='output_layer', s=s, d=d)
 
         # READOUT LAYER
         # ----------------------------------------------------
@@ -336,9 +469,9 @@ class BooleanReservoir(nn.Module):
             outputs = self.output_activation(outputs)
         return outputs 
 
-    def batch_record(self, **meta_data):
+    def batch_record(self, m, **meta_data):
         if self.record_history and meta_data:
-            self.history.append_batch(self.states_paralell, meta_data)
+            self.history.append_batch(self.states_paralell[:m], meta_data)
 
 
 class BatchedTensorHistoryWriter:
@@ -396,28 +529,30 @@ class BatchedTensorHistoryWriter:
 
         df = combined_meta_data
         expanded_meta_data = df.loc[df.index.repeat(df['samples'])].reset_index(drop=True)
-        expanded_meta_data['sample_id'] = expanded_meta_data.groupby(['phase', 'step']).cumcount()
+        expanded_meta_data['sample_id'] = expanded_meta_data.groupby(['phase', 's', 'd']).cumcount()
         expanded_meta_data.drop(columns=['samples'], inplace=True)
         return combined_data, expanded_meta_data, combined_meta_data
     
 
 if __name__ == '__main__':
     I = InputParams(
+        distribution='1:n:1/n:o', 
         pertubation='override', 
-        encoding='binary', 
-        n_inputs=1,
-        bits_per_feature=10,
+        encoding='base2', 
+        features=2,
+        bits_per_feature=4,
         redundancy=2
         )
     R = ReservoirParams(
-        n_nodes=100,
+        n_nodes=10,
+        k_min=0,
         k_avg=2,
         k_max=5,
         p=0.5,
         self_loops=0.1
         )
-    O = OutputParams(n_outputs=1)
-    T = TrainingParams(batch_size=32,
+    O = OutputParams(features=2)
+    T = TrainingParams(batch_size=1,
         epochs=10,
         accuracy_threshold=0.05,
         learning_rate=0.001)
@@ -428,8 +563,8 @@ if __name__ == '__main__':
     model = BooleanReservoir(params)
 
     # data with s steps per sample
-    s = 3
-    x = torch.randint(0, 2, (T.batch_size, s, I.n_inputs, I.bits_per_feature,), dtype=torch.uint8)
+    s = 1
+    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.bits_per_feature,), dtype=torch.uint8)
     model(x)
     print(model(x).detach().numpy())
     model.flush_history()

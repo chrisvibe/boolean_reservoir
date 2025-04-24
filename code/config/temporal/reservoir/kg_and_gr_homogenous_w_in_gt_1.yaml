@@ -1,0 +1,48 @@
+logging:
+  history:
+    buffer_size: 64
+    record_history: True
+  out_path: out/temporal/reservoir/kq_and_gr/homogenous_w_in_gt_1
+model:
+  input_layer:
+    bits_per_feature: 1
+    distribution: min_max_random-1:b:1/b # "The node updates its state at time t according to a K-to-1 Boolean mapping of its K inputs.", "...input are chosen from the N nodes in the network with uniform probability"
+    encoding: base2
+    interleaving: 0
+    n_inputs: 10
+    # pertubation: override
+    pertubation: [override, xor]
+    redundancy: 1
+    w_in: null
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+  reservoir_layer:
+    # init: zeros # deduced from figure 1A as the rank is near zero at k=0, with random init the KQ and GR rank would start high 
+    init: [zeros, random]
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    k_min: 0
+    k_max: 20
+    mode: homogenous
+    n_nodes: 25
+    p: 0.5
+    reset: true # essentially KQ == GR if false
+    # reset: [true, false]
+    self_loops: null
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    epochs: 40
+    evaluation: dev
+    learning_rate: 0.001
+dataset:
+  task: density # not really just using the x values and ignoring y
+  bit_stream_length: 10
+  window_size: 3 # not using this
+  tao: 5 # controls tao for KQ and GR instead of tao for temporal denisty task (bits overriden to make similar inputs)
+  split: # not training the model, just recording state changes with input
+    train: 1
+    dev: 0
+    test: 0
+  samples: 100 # overriden so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)

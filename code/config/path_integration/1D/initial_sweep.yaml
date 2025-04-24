@@ -1,19 +1,19 @@
 model:
   input_layer:
-    dataset: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
+    distribution: 1:1:1:d
     pertubation: 'xor'
     encoding: 'binary_embedding'
     n_inputs: 1
-    bits_per_feature: 48
-    redundancy: 6
+    resolution: 8
+    redundancy: [1, 2, 3, 4, 5, 6]
     interleaving: 0
   reservoir_layer:
-    n_nodes: 1000
-    k_avg: [1.8, 1.9, 2, 2.1, 2.2]
+    n_nodes: [1000, 2000, 3000, 4000, 5000]
+    k_avg: [2.15, 2.20, 2.25, 2.30, 2.35]
     k_max: 6
     p: .5
-    self_loops: [0, 0.1, 0.2, 0.3, 0.4, .5, .6, .7, .8, .9, 1]
-    init: ['zeros', 'random', 'random_lut_state']
+    self_loops: [0, .2, .4, .6, .8, 1]
+    init: 'random'
   output_layer:
     n_outputs: 1
   training:
@@ -26,4 +26,6 @@ logging:
   out_path: 'out/grid_search/path_integration/1D/initial_sweep'
   grid_search:
     seed: 0
-    n_samples: 5
+    n_samples: 10
+dataset:
+  path: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'

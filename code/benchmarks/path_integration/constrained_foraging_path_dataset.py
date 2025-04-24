@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
+from projects.boolean_reservoir.code.utils import set_seed
 from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
 from projects.boolean_reservoir.code.parameters import InputParams
 from benchmarks.path_integration.constrained_foraging_path import random_walk, Boundary, NoBoundary, positions_to_p_v_pairs, generate_polygon_points, stretch_polygon, PolygonBoundary, LevyFlightStrategy 
@@ -8,7 +9,8 @@ from pathlib import Path
 from math import floor
 
 class ConstrainedForagingPathDataset(Dataset):
-    def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='data/test/dataset.pt', generate_data=False):
+    def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='data/test/dataset.pt', generate_data=False, seed=0):
+        set_seed(seed)
         self.data_path = Path(data_path)
         self.n_dimensions = n_dimensions
         self.boundary = boundary
@@ -20,13 +22,7 @@ class ConstrainedForagingPathDataset(Dataset):
             self.load_data()
         else:
             self.data = self.generate_data(n_dimensions, samples, n_steps, strategy, boundary)
-        
-        # if generate_data: # TODO copy mechanism in replication study code
-        #     self.data = self.generate_data(n_dimensions, samples, n_steps, strategy, boundary)
-        # elif self.data_path.exists():
-        #     self.load_data()
-        # else:
-        #     print(f'Cant find data at: {self.data_path} (or set generate_data flag)')
+            self.save_data()
 
     @staticmethod
     def generate_data(dimensions, samples, n_steps, strategy, boundary):
@@ -66,11 +62,9 @@ class ConstrainedForagingPathDataset(Dataset):
     def save_data(self):
         self.data_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.data, self.data_path)
-        print(f"Data saved to {self.data_path}")
 
     def load_data(self):
         self.data = torch.load(self.data_path, weights_only=True)
-        print(f"Data loaded from {self.data_path}")
     
     def set_normalizer_x(self, normalizer_x):
         self.normalizer_x = normalizer_x
@@ -125,7 +119,7 @@ if __name__ == '__main__':
     dataset.set_normalizer_y(min_max_normalization)
     dataset.normalize()
 
-    I = InputParams(bits_per_feature=bits_per_feature, encoding=encoding, n_inputs=n_features)
+    I = InputParams(bits_per_feature=bits_per_feature, encoding=encoding, features=n_features)
     encoder = lambda x: float_array_to_boolean(x, I)
     dataset.set_encoder_x(encoder)
     dataset.encode_x()

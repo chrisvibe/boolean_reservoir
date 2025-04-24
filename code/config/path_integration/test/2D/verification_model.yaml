@@ -1,6 +1,5 @@
 model:
   input_layer:
-    dataset: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'
     pertubation: 'xor'
     encoding: 'base2'
     n_inputs: 2
@@ -24,3 +23,5 @@ model:
     evaluation: 'test' 
 logging:
   out_path: 'out/single_run/path_integration/2D/verification_model'
+dataset:
+  path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'

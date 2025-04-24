@@ -1,6 +1,5 @@
 model:
   input_layer:
-    dataset: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
     encoding: 'base2'
     n_inputs: 1
     bits_per_feature: 8
@@ -23,3 +22,5 @@ model:
     evaluation: 'test' 
 logging:
   out_path: 'out/single_run/path_integration/1D/verification_model'
+dataset:
+  path: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
