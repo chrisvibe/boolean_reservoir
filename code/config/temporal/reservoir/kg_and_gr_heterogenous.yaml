@@ -6,7 +6,7 @@ logging:
 model:
   input_layer:
     bits_per_feature: 1
-    distribution: min_max_random-1:b:1/b # "The node updates its state at time t according to a K-to-1 Boolean mapping of its K inputs.", "...input are chosen from the N nodes in the network with uniform probability"
+    distribution: min_max_random-0:b:1/b # "The node updates its state at time t according to a K-to-1 Boolean mapping of its K inputs.", "...input are chosen from the N nodes in the network with uniform probability"
     encoding: base2
     interleaving: 0
     n_inputs: 10

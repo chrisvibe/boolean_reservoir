@@ -67,11 +67,17 @@ def generate_adjacency_matrix(n_nodes, k_min: int=0, k_avg: float=None, k_max: i
     """
     k_max = n_nodes if k_max is None else k_max
     k_avg = random.uniform(k_min, k_max) if k_avg is None else float(k_avg)
-    self_loops = random.uniform(0, 1) if self_loops is None else float(self_loops)
-
-    # Calculate required number of edges and self-loops
-    n_self_loops = round(self_loops * n_nodes)
     total_edges = round(k_avg * n_nodes)
+
+    if self_loops is None:
+        required_self_loops = max(0, total_edges - (n_nodes * (n_nodes - 1)))
+        optional_loops = n_nodes - required_self_loops
+        random_self_loops = random.randint(0, optional_loops)
+        n_self_loops = required_self_loops + random_self_loops
+        self_loops = n_self_loops / n_nodes
+    else:
+        self_loops = float(self_loops)
+    n_self_loops = round(self_loops * n_nodes)
 
     # Parameter validation
     assert all(isinstance(var, expected_type) for var, expected_type, name in [

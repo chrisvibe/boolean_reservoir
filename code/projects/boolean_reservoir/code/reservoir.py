@@ -6,13 +6,11 @@ import pandas as pd
 from datetime import datetime, timezone
 import networkx as nx
 import gzip
-from projects.boolean_reservoir.code.encoding import bin2dec
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
 from projects.boolean_reservoir.code.graphs import generate_graph_w_k_avg_incoming_edges, graph2adjacency_list_incoming, random_boolean_adjancency_matrix_from_two_degree_sets, random_projection_1d_to_2d, randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick
-from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.utils import set_seed, override_symlink
 import numpy as np
-import math
 import sympy
 
 class ExpressionEvaluator:
@@ -59,48 +57,6 @@ class ExpressionEvaluator:
             raise ValueError(f"Failed to evaluate expression '{expr}': {e}")
 
 
-class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
-    # Linear model for sanity check to verify:
-    # a) Base 2 binary encoding is relatively lossless with a decent number of bits
-    # b) Path integration task can be computed by summing steps
-    # Note that x values should be in the range [0, 1] for use of bin2dec
-    # Encoding assumed to be binary base 2
-    def __init__(self, n_dims):
-        super(PathIntegrationVerificationModelBaseTwoEncoding, self).__init__()
-        self.scale = nn.Linear(n_dims, n_dims)
-
-    def forward(self, x):
-        m, s, d, b = x.shape
-        x = x.to(dtype=torch.float32)
-        x = x.view(m * s * d, -1)          # role out dims
-        x = bin2dec(x, b)                  # undo bit encoding 
-        x = x.view(m, s, d)                # recover dimensions
-        x = self.scale(x)                  # scale to y range
-        x = torch.sum(x, dim=1)            # sum over s time steps
-        return x
-
-
-class PathIntegrationVerificationModel(nn.Module):
-    # Linear model for sanity check to verify:
-    # a) Any reasonable binary encoding (not just base 2)
-    # b) Path integration task can be computed by summing steps
-    # Encoding assumed to be a generalized linear transformation
-    def __init__(self, bits_per_feature, n_inputs):
-        super(PathIntegrationVerificationModel, self).__init__()
-        self.decoder = nn.Linear(bits_per_feature, 1)
-        self.scale = nn.Linear(n_inputs, n_inputs)
-
-    def forward(self, x):
-        m, s, d, b = x.shape
-        x = x.to(dtype=torch.float32)
-        x = x.view(m * s * d, -1)          # role out dims
-        x = self.decoder(x)                # undo bit encoding 
-        x = x.view(m, s, d)                # recover dimensions
-        x = self.scale(x)                  # scale to y range
-        x = torch.sum(x, dim=1)            # sum over s time steps
-        return x
-
-
 class BooleanReservoir(nn.Module):
     # load_path can be a yaml file or a checkpoint directory
     # a yaml file doesnt load any parameters while a checkpoint does
@@ -113,13 +69,12 @@ class BooleanReservoir(nn.Module):
                 P = load_yaml_config(load_path)
                 self.__init__(params=P)
             elif load_path.is_dir():
-                paths = self.make_load_paths(load_path)
-                self.load(paths=paths, parameter_override=params)
+                self.load(checkpoint_path=load_path, parameter_override=params)
             else:
                 raise AssertionError('load_path error')
         else:
             super(BooleanReservoir, self).__init__()
-            self.P = params
+            self.P = params if params else load_dict['parameters']
             self.L = self.P.logging
             self.I = self.P.model.input_layer
             self.R = self.P.model.reservoir_layer
@@ -131,12 +86,10 @@ class BooleanReservoir(nn.Module):
             self.input_bits = self.I.n_inputs * self.I.bits_per_feature 
             assert self.input_bits <= self.R.n_nodes, 'more inputs bits than nodes in graph!'
             self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
-            if 'weights' not in load_dict:
-                if self.I.w_in:
-                    self.w_in = self.load_torch_tensor(self.I.w_in, self.device)
-                else:
-                    self.w_in = self.input_node_distribution_strategy(self.I.distribution)
-        
+            self.w_in = self.optional_load('w_in', load_dict,
+                self.load_torch_tensor(self.I.w_in, self.device) if self.I.w_in
+                  else self.input_node_distribution_strategy(self.I.distribution)
+            )
             set_seed(self.R.seed)
             self.graph = self.optional_load('graph', load_dict, 
                 generate_graph_w_k_avg_incoming_edges(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
@@ -179,13 +132,14 @@ class BooleanReservoir(nn.Module):
             # Logging
             self.out_path = self.L.out_path
             self.timestamp_utc = self.get_timestamp_utc()
-            self.save_dir = self.out_path / self.timestamp_utc 
+            self.save_dir = self.out_path / 'runs' / self.timestamp_utc 
             self.checkpoint_folder = self.L.last_checkpoint
             self.L.save_dir = self.save_dir
             self.L.timestamp_utc = self.timestamp_utc
+            self.L.history.save_dir = self.save_dir / 'history'
             self.record_history = self.L.history.record_history
-            self.history = BatchedTensorHistoryWriter(folderpath=self.save_dir / 'history', buffer_size=self.L.history.buffer_size) if self.record_history else None
-    
+            self.history = BatchedTensorHistoryWriter(save_dir=self.L.history.save_dir, buffer_size=self.L.history.buffer_size) if self.record_history else None
+
     @staticmethod 
     def optional_load(load_key: str, load_dict: dict, default):
         if load_key in load_dict:
@@ -313,11 +267,14 @@ class BooleanReservoir(nn.Module):
     def get_timestamp_utc():
         return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S_%f")
 
-    def save(self):
-        self.checkpoint_folder = self.save_dir / 'checkpoints' / self.get_timestamp_utc()
-        self.L.last_checkpoint = self.checkpoint_folder 
+    def save(self, save_dir=None):
+        if save_dir is None:
+            save_dir = self.save_dir
+        self.checkpoint_folder = save_dir / 'checkpoints' / self.get_timestamp_utc()
         self.checkpoint_folder.mkdir(parents=True, exist_ok=False)
-        paths = self.make_load_paths(self.checkpoint_folder)
+        override_symlink(save_dir.name, save_dir.parent / 'last_run')
+        self.L.last_checkpoint = self.checkpoint_folder 
+        paths = self.make_load_path_dict(self.checkpoint_folder)
         save_yaml_config(self.P, paths['parameters'])
         torch.save(self.w_in, paths['w_in'])
         with gzip.open(paths['graph'], 'wb') as f:
@@ -325,27 +282,56 @@ class BooleanReservoir(nn.Module):
         torch.save(self.initial_states, paths['init_state'])
         torch.save(self.lut, paths['lut'])
         torch.save(self.state_dict(), paths['weights'])
+        override_symlink(self.checkpoint_folder.name, self.checkpoint_folder.parent / 'last_checkpoint')
+        if self.L.history.record_history:
+            override_symlink(Path('../checkpoints') / self.L.last_checkpoint.name, self.L.history.save_dir / 'checkpoint')
         return paths 
 
-    def load(self, paths=None, parameter_override:Params=None):
-        if paths is None:
-            paths = self.make_load_paths(self.checkpoint_folder)
-        p = parameter_override
-        if p is None:
-            p = load_yaml_config(paths['parameters'])
+    @staticmethod
+    def load_from_path_dict_or_checkpoint_folder(
+        path_dict: dict = None,
+        checkpoint_path = None,
+        load_key_include_set: set = None,
+        load_key_exclude_set: set = None
+    ):
+        """
+        path_dict takes precedence over optional checkpoint_path.
+        load_key_include_set (None loads all) and load_key_exclude_set filter which keys to include/exclude.
+        Inclusion is applied before exclusion.
+        """
+        if path_dict is None:
+            if checkpoint_path is None:
+                raise ValueError("Either path_dict or checkpoint_path must be provided.")
+            path_dict = BooleanReservoir.make_load_path_dict(checkpoint_path)
+
+        if load_key_include_set is not None:
+            path_dict = {k: v for k, v in path_dict.items() if k in load_key_include_set}
+
+        if load_key_exclude_set is not None:
+            path_dict = {k: v for k, v in path_dict.items() if k not in load_key_exclude_set}
+
         d = dict() 
-        if 'w_in' in paths:
-            d['w_in'] = BooleanReservoir.load_torch_tensor(paths['w_in'])
-        if 'graph' in paths:
-            d['graph'] = BooleanReservoir.load_graph(paths['graph'])
-        if 'init_state' in paths:
-            d['init_state'] = BooleanReservoir.load_torch_tensor(paths['init_state'], self.device)
-        if 'lut' in paths:
-            d['lut'] = BooleanReservoir.load_torch_tensor(paths['lut'], self.device)
-        if 'weights' in paths:
-            d['weights'] = BooleanReservoir.load_torch_tensor(paths['weights'], self.device)
-        self.__init__(params=p, load_dict=d)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if 'parameters' in path_dict:
+            d['parameters'] = load_yaml_config(path_dict['parameters'])
+        if 'w_in' in path_dict:
+            d['w_in'] = BooleanReservoir.load_torch_tensor(path_dict['w_in'], device)
+        if 'graph' in path_dict:
+            d['graph'] = BooleanReservoir.load_graph(path_dict['graph'])
+        if 'init_state' in path_dict:
+            d['init_state'] = BooleanReservoir.load_torch_tensor(path_dict['init_state'], device)
+        if 'lut' in path_dict:
+            d['lut'] = BooleanReservoir.load_torch_tensor(path_dict['lut'], device)
+        if 'weights' in path_dict:
+            d['weights'] = BooleanReservoir.load_torch_tensor(path_dict['weights'], device)
         return d
+    
+    def load(self, checkpoint_path:Path=None, paths:dict=None, parameter_override:Params=None):
+        load_dict = self.load_from_path_dict_or_checkpoint_folder(path_dict=paths, checkpoint_path=checkpoint_path)
+        if parameter_override:
+            load_dict['parameters'] = parameter_override
+        self.__init__(load_dict=load_dict)
+        return load_dict
     
     @staticmethod
     def load_graph(path):
@@ -364,7 +350,7 @@ class BooleanReservoir(nn.Module):
             self.history.flush()
 
     @staticmethod
-    def make_load_paths(folder_path):
+    def make_load_path_dict(folder_path):
         folder_path = Path(folder_path)
         paths = dict()
         files = []
@@ -374,8 +360,7 @@ class BooleanReservoir(nn.Module):
         files.append(('init_state', 'pt'))
         files.append(('lut', 'pt'))
         files.append(('weights', 'pt'))
-        for file, filetype in files:
-            paths[file] = folder_path / f'{file}.{filetype}'
+        paths = {file: folder_path / f'{file}.{filetype}' for file, filetype in files}
         return paths
     
     def bin2int(self, x):
@@ -438,7 +423,7 @@ class BooleanReservoir(nn.Module):
                 b += k
                 w_in_i = self.w_in[a:b]
                 a = b
-                input_mask = w_in_i.sum(axis=0)
+                input_mask = w_in_i.sum(axis=0).to(torch.bool)
                 perturbations = x_i @ w_in_i > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
                 self.states_paralell[:m] = self.input_pertubation(self.states_paralell[:m], perturbations, input_mask)
 
@@ -458,7 +443,7 @@ class BooleanReservoir(nn.Module):
                 # Update the state with LUT for each node
                 self.states_paralell[:m] = self.lut[self.node_indices, idx]
 
-                if si < s - 1:
+                if not ((si == s - 1) and (di == d - 1)): # skip last recording, as this is output_layer
                     self.batch_record(m, phase='reservoir_layer', s=si+1, d=di+1)
         self.batch_record(m, phase='output_layer', s=s, d=d)
 
@@ -475,9 +460,8 @@ class BooleanReservoir(nn.Module):
 
 
 class BatchedTensorHistoryWriter:
-    def __init__(self, folderpath='history', buffer_size=64):
-        self.dir_path = Path(folderpath)
-        self.dir_path.mkdir(parents=True, exist_ok=True)
+    def __init__(self, save_dir='history', buffer_size=64):
+        self.save_dir = Path(save_dir)
         self.file_index = 0
         self.time = 0
         self.buffer_size = buffer_size
@@ -498,10 +482,11 @@ class BatchedTensorHistoryWriter:
     def _write_buffer(self):
         if not self.buffer:
             return
+        self.save_dir.mkdir(parents=True, exist_ok=True)
         data = torch.cat(self.buffer, dim=0)
-        tensor_path = self.dir_path / f'tensor_{self.file_index}.pt'
+        tensor_path = self.save_dir / f'tensor_{self.file_index}.pt'
         torch.save(data, tensor_path)
-        meta_path = self.dir_path / f'meta_{self.file_index}.csv'
+        meta_path = self.save_dir / f'meta_{self.file_index}.csv'
         pd.DataFrame(self.meta_buffer).to_csv(meta_path, index=False)
         self.buffer = []
         self.meta_buffer = []
@@ -511,15 +496,15 @@ class BatchedTensorHistoryWriter:
         self._write_buffer()
 
     def reload_history(self, history_dir=None):
-        dir_path = Path(history_dir) if history_dir else self.dir_path
+        history_dir = Path(history_dir) if history_dir else self.save_dir
         all_data = []
         all_meta_data = []
         idx = 0
-        assert any(dir_path.glob('*.pt')), f"No files found. Try Recording the data? Maybe the path is wrong"
-        for _ in dir_path.glob('*.pt'):
-            tensor_path = dir_path / f'tensor_{idx}.pt'
+        assert any(history_dir.glob('*.pt')), f"No files found. Try Recording the data? Maybe the path is wrong"
+        for _ in history_dir.glob('*.pt'):
+            tensor_path = history_dir / f'tensor_{idx}.pt'
             tensor_data = torch.load(tensor_path, weights_only=True)
-            meta_path = dir_path / f'meta_{idx}.csv'
+            meta_path = history_dir / f'meta_{idx}.csv'
             meta_data = pd.read_csv(meta_path)
             all_data.append(tensor_data)
             all_meta_data.append(meta_data)

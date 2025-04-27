@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: list, config: int, sample: int):
     model.history = BatchedTensorHistoryWriter(
-        folderpath=model.L.save_dir / 'history' / metric, 
+        save_dir=model.L.save_dir / 'history' / metric, 
         buffer_size=model.L.history.buffer_size
     )
     
@@ -118,6 +118,8 @@ if __name__ == '__main__':
     paths = list()
     paths.append('config/temporal/reservoir/kg_and_gr_homogenous.yaml')
     paths.append('config/temporal/reservoir/kg_and_gr_heterogenous.yaml')
+    paths.append('config/temporal/reservoir/kg_and_gr_homogenous_w_in_gt_1.yaml')
+    paths.append('config/temporal/reservoir/kg_and_gr_heterogenous_w_in_gt_1.yaml')
     for path in paths:
         df, P = calc_kernel_quality_and_generalization_rank(path, samples_per_configuration=25)
         df.loc[:, 'k_avg'] = df['params'].apply(lambda p: p.model.reservoir_layer.k_avg)
@@ -133,7 +135,6 @@ if __name__ == '__main__':
             print(p.dataset)
             plot_kq_and_gr(subset, P, f'config_{i}_kq_and_gr.png')
 
-        # GR changes with TAO!!! now what???
         # plot_optimal_k_vs_k_avg(df)
 
 

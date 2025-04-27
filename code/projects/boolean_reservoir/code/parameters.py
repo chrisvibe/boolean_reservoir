@@ -30,7 +30,7 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
 
 class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    distribution: Union[str, List[str]] = Field('min_max_degree-0:b:0:a:1', description="Gets overriden by w_in. Input distribution mapping format: 'a_min:a_max:b_min:b_max:p' where: a and b represent a bipartite mapping from a→b (a:b) with probability p. For a and b use 'a_f': bits per feature, 'f': features, 'a': all input nodes, 'b': all reservoir nodes, or floats/ints directly; 'p' is the connection probability (0-1 or mathematical expression like '1/n'). Note that a and b are split up into a deterministic and probabalistic part; ie. a_min is guaranteed, and a_max depends on p (same for b).")
+    distribution: Union[str, List[str]] = Field('min_max_degree-0:b:0:a:1/b', description="Gets overriden by w_in. Input distribution mapping format: 'a_min:a_max:b_min:b_max:p' where: a and b represent a bipartite mapping from a→b (a:b) with probability p. For a and b use 'a_f': bits per feature, 'f': features, 'a': all input nodes, 'b': all reservoir nodes, or floats/ints directly; 'p' is the connection probability (0-1 or mathematical expression like '1/n'). Note that a and b are split up into a deterministic and probabalistic part; ie. a_min is guaranteed, and a_max depends on p (same for b).")
     w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by adjacency matrix w_in:[input_bits, n_nodes]. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
@@ -104,6 +104,7 @@ class GridSearchParams(BaseModel):
 class HistoryParams(BaseModel):
     record_history: Optional[bool] = Field(False, description="Reservoir dynamics state recording")
     buffer_size: Optional[int] = Field(64, description="Number of batched snapshots per output file")
+    save_dir: Optional[Path] = Field(Path('out/history'), description="Where model is saved when recording history")
 
 class TrainLog(BaseModel):
     accuracy: Optional[float] = Field(None, description="accuracy")

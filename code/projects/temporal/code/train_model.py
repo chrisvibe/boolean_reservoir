@@ -13,9 +13,13 @@ if __name__ == '__main__':
     # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    # p, model, dataset, history = train_single_model('config/temporal/parity/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    # plot_many_things(model, dataset, history)
-    # plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    p, model, dataset, history = train_single_model('config/temporal/parity/ok_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    plot_many_things(model, dataset, history)
+    plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+
+    p, model, dataset, history = train_single_model('config/temporal/parity/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    plot_many_things(model, dataset, history)
+    plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
     # print(model.save_dir)
     # plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
@@ -23,4 +27,4 @@ if __name__ == '__main__':
     # # Grid search stuff 
     # #####################################
     # grid_search('config/temporal/density/initial_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    grid_search('config/temporal/parity/initial_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # grid_search('config/temporal/parity/initial_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)

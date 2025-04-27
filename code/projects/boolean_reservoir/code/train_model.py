@@ -1,13 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch
 import pandas as pd
 from tqdm import tqdm
-from copy import deepcopy
 from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed
-from projects.boolean_reservoir.code.reservoir import BooleanReservoir, PathIntegrationVerificationModel, PathIntegrationVerificationModelBaseTwoEncoding
+from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.graph_visualizations_dash import *
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.visualizations import *
@@ -52,9 +50,7 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
     P = model.P
-    I = P.model.input_layer
     T = P.model.training
-    D = P.dataset
 
     # Init data
     torch.cuda.empty_cache()
@@ -64,13 +60,13 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     dataset.data['y'] = dataset.data['y'].to(device)
     dataset.data['x_' + T.evaluation] = dataset.data['x_' + T.evaluation].to(device)
     dataset.data['y_' + T.evaluation] = dataset.data['y_' + T.evaluation].to(device)
-    _, model, history = train_and_evaluate(P, model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
+    _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
     if save_model:
         model.save()
-    return P, model, dataset, history
+    return P, model, dataset, train_history
 
-def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
-    T = p.model.training
+def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
+    T = model.P.model.training
     set_seed(T.seed)
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
     criterion = criterion_strategy(T.criterion)
@@ -104,14 +100,14 @@ def train_and_evaluate(p:Params, model: BooleanReservoir, dataset: Dataset, reco
                 stats = dict()
                 stats['epoch'] = epoch + 1
                 stats['loss_train'] = epoch_train_loss / len(data_loader.dataset)
-                stats['accuracy_train'] = epoch_correct_train_predictions / (len(data_loader.dataset) * data_loader.batch_size)
+                stats['accuracy_train'] = epoch_correct_train_predictions / len(data_loader.dataset)
                 stats['loss_' + T.evaluation] = eval_loss 
                 stats['accuracy_' + T.evaluation] = eval_accuracy 
                 train_history.append(stats)
                 if verbose:
                     print(f"Epoch: {stats['epoch']:0{len(str(T.epochs))}d}/{T.epochs}, Loss: {stats['loss_' + T.evaluation]:.4f}, Accuracy: {stats['accuracy_' + T.evaluation]:.4f}")
         # deterministic reservoirs only need history from the first epoch
-        if hasattr(model, 'flush_history'):
+        if hasattr(model, 'flush_history') and model.record_history:
             model.flush_history()
             model.record_history = False
     if verbose:
@@ -159,7 +155,6 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
             p.model.reservoir_layer.seed = k 
             p.model.output_layer.seed = k 
             t.seed = k 
-            p.dataset.seed = k 
             if last_dataset_params != p.dataset or not is_equal_except_seed(last_input_params, p.model.input_layer):
                 dataset = dataset_init(P=p)
                 dataset.data['x'] = dataset.data['x'].to(device)
@@ -171,7 +166,7 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
             model = best_epoch = None
             try:
                 model = BooleanReservoir(p).to(device)
-                best_epoch, model, _ = train_and_evaluate(p, model, dataset, record_stats=False, verbose=False, accuracy=accuracy)
+                best_epoch, model, _ = train_and_evaluate(model, dataset, record_stats=False, verbose=False, accuracy=accuracy)
                 model.to(cpu_device)
             except (ValueError, AttributeError, TypeError) as error:
                 print("Error:", error)

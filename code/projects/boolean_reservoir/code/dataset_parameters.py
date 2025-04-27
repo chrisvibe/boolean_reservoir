@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 from typing import List, Union, Optional
 from pathlib import Path
 
@@ -20,6 +20,8 @@ class DatasetParameters(BaseModel):
     generate_data: bool = Field(False, description="Ignores loading even if dataset exists at path")
     samples: int = Field(64, description="Number of samples to generate in the dataset")
     seed: int = Field(0, description="Random seed, None disables seed")
-    
-    class Config:
-        extra = 'allow'
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra='allow'
+    )

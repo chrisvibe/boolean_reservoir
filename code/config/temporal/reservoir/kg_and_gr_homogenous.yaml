@@ -20,7 +20,7 @@ model:
   reservoir_layer:
     # init: zeros # deduced from figure 1A as the rank is near zero at k=0, with random init the KQ and GR rank would start high 
     init: [zeros, random]
-    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
     k_min: 0
     k_max: 20
     mode: homogenous
@@ -40,7 +40,7 @@ dataset:
   task: density # not really just using the x values and ignoring y
   bit_stream_length: 10
   window_size: 3 # not using this
-  tao: 5 # controls tao for KQ and GR instead of tao for temporal denisty task (bits overriden to make similar inputs)
+  tao: 2 # controls tao for KQ and GR instead of tao for temporal denisty task (bits overriden to make similar inputs)
   split: # not training the model, just recording state changes with input
     train: 1
     dev: 0

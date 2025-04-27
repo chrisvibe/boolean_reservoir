@@ -7,15 +7,15 @@ from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as a
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 
-def _model_likeness_check(model, model2, dataset, accuracy=a().accuracy):
+def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dataset, accuracy=a().accuracy):
     """Test that two models have identical parameters and behavior."""
     # Compare model parameters
     assert model.P.model == model2.P.model, 'model parameters do not match'
-    assert (model.state_dict()['input.weight'] == model2.state_dict()['input.weight']).all(), 'weight values do not match'
     assert (model.state_dict()['readout.bias'] == model2.state_dict()['readout.bias']).all(), 'bias values do not match'
     assert (model.state_dict()['readout.weight'] == model2.state_dict()['readout.weight']).all(), 'weight values do not match'
     assert (model.lut == model2.lut).all(), 'lookup tables do not match'
     assert (model.initial_states == model2.initial_states).all(), 'initial states do not match'
+    assert (model.w_in == model2.w_in).all(), 'w_in (input mapping) do not match'
     assert (list(model.graph.edges(data=True)) == list(model2.graph.edges(data=True))), 'graph structures do not match'
     
     # Compare model predictions
@@ -36,11 +36,11 @@ def test_saving_and_loading_models():
         rmtree(path)
     
     # Train a model and save it
-    p, model, dataset, history = train_single_model('config/path_integration/test/2D/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    paths = model.save()
+    p, model, dataset, train_history = train_single_model('config/path_integration/test/2D/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    model.save()
     
     # Load the model from the saved path
-    model2 = BooleanReservoir(load_path=paths['parameters'].parent)
+    model2 = BooleanReservoir(load_path=model.P.logging.last_checkpoint)
     
     # Test that the loaded model has the same parameters and behavior as the original
     _model_likeness_check(model, model2, dataset)
@@ -61,7 +61,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     
     # Train a new model with the same parameters
     p2 = deepcopy(model.P)
-    p2, model2, dataset2, history2 = train_single_model(parameter_override=p2, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    p2, model2, dataset2, train_history2 = train_single_model(parameter_override=p2, dataset_init=d().dataset_init, accuracy=a().accuracy)
     
     # Test that the models are equivalent
     _model_likeness_check(model, model2, dataset2)

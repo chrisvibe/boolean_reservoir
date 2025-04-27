@@ -13,6 +13,7 @@ from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
 import torch
+from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 matplotlib.use('Agg')
 
 def plot_train_history(path, history):
@@ -174,7 +175,7 @@ def plot_dynamics_history(path):
     history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
     # print(meta)
     # print('full history:', history.shape)
-    expanded_meta = expanded_meta[expanded_meta['phase'] == 'reservoir_layer']
+    expanded_meta = expanded_meta[expanded_meta['phase'].isin(['reservoir_layer', 'output_layer'])]
     history = history[expanded_meta.index].numpy()
     # print('filtered history:', history.shape)
 
@@ -191,7 +192,7 @@ def plot_dynamics_history(path):
     # print("Explained variance by each component:")
     # print(embedding.explained_variance_ratio_)
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'd']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
     plt.title('PCA of states over time')
     file = f"pca.png"
     plt.savefig(save_path / file, bbox_inches='tight')
@@ -202,7 +203,7 @@ def plot_dynamics_history(path):
     df = pd.concat([df, expanded_meta], axis=1)
 
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue='step', palette='viridis', s=100, alpha=0.7)
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'd']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
     plt.title('tSNE of states over time')
     file = f"tsne.png"
     plt.savefig(save_path / file, bbox_inches='tight')
@@ -239,19 +240,31 @@ def plot_activity_trace(path, highlight_input_nodes=False, data_filter=lambda df
     ax_heatmap.set_xlabel('Time')
     ax_heatmap.set_ylabel('Nodes')
 
-    # # Highlight the input nodes on the y-axis with transparency TODO we dont have input nodes anymore, we use a input linear layer for this.
-    # if highlight_input_nodes:
-    #     input_nodes_path = next(path.glob('checkpoints∕*∕input_nodes.pt'))
-    #     input_nodes = torch.load(input_nodes_path, weights_only=True)
-    #     alpha_value = 0.5  # Set your desired alpha value here
-    #     for input_nodes in highlight_input_nodes.input_nodes.tolist():
-    #         for idx in input_nodes:
-    #             ax_heatmap.add_patch(
-    #                 plt.Rectangle((0, idx), 1, 1, fill=False,
-    #                             edgecolor=(1, 0, 0, alpha_value), lw=1)
-    #             )
-    #     subtitle = f'Input nodes: {highlight_input_nodes.input_nodes.tolist()}'
-    #     plt.text(0.5, 1.05, subtitle, ha='center', va='center', transform=ax_heatmap.transAxes, fontsize=10)
+    # Highlight the input nodes on the y-axis with transparency
+    # since recording captures each pertubation round various parts of the reservoir are highlighted per time step
+    if highlight_input_nodes:
+        history_model_path = path / 'history/checkpoint'
+        d = BooleanReservoir.load_from_path_dict_or_checkpoint_folder(checkpoint_path=history_model_path, load_key_include_set={'parameters', 'w_in'})
+        p = d['parameters']
+        w_in = d['w_in']
+        alpha_value = 0.5
+        a = b = 0
+        I = p.model.input_layer
+        k = w_in.shape[0]//I.n_inputs
+        input_times = (t for t in expanded_meta[expanded_meta['phase'] == 'input_layer']['time'])
+        for i in input_times:
+            b += k
+            w_in_i = w_in[a:b]
+            perturbed_reservoir_nodes_mask = w_in_i.sum(axis=0) > 0
+            perturbed_reservoir_nodes = np.argwhere(perturbed_reservoir_nodes_mask)[0]
+            a = b
+            for idx in perturbed_reservoir_nodes:
+                ax_heatmap.add_patch(
+                    plt.Rectangle((i, idx), 1, 1, fill=False,
+                                edgecolor=(1, 0, 0, alpha_value), lw=1)
+                )
+        subtitle = 'mapping: ' + str({i: np.argwhere(w_in[i])[0].tolist() for i in range(w_in.shape[0])})
+        plt.text(0.5, 1.05, subtitle, ha='center', va='center', transform=ax_heatmap.transAxes, fontsize=10)
 
     # Phase heatmap using integer mapping for consistent color representation
     sns.heatmap(phase_df[['phase']].T, cmap=cmap_phase, cbar=True, ax=ax_phase, xticklabels=False, yticklabels=False, cbar_kws={'ticks': list(colorbar_labels.keys())})

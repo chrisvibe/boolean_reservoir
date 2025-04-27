@@ -158,17 +158,17 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
             color = plt.cm.tab10(color_idx % 10)
             
             # Get x and y values for plotting
-            data = data.groupby('k_avg').agg({'value': 'median'}).reset_index() # only needed for certain smoothing
+            data = data.groupby('k_avg').agg({'value': 'mean'}).reset_index() # only needed for certain smoothing
             data.sort_values(by='k_avg', inplace=True)
             x_sorted = data['k_avg'].values
             y_sorted = data['value'].values
             
-            # # Generate points on a smooth spline line - Quadratic spline interpolation (k=3 for cubic)
+            # # # Generate points on a smooth spline line - Quadratic spline interpolation (k=3 for cubic)
             # cubic_spline = UnivariateSpline(x_sorted, y_sorted, k=3, s=0.0) # requires aggregation beforhand!
             # x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
             # y_smooth = cubic_spline(x_fine)
 
-            # # Generate points w linear smoothing
+            # Generate points w linear smoothing
             linear_interpolator = interp1d(x_sorted, y_sorted, kind='linear', fill_value="extrapolate") # requires aggregation beforhand!
             x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
             y_smooth = linear_interpolator(x_fine)
@@ -266,9 +266,11 @@ def plot_kq_and_gr_many_config_lowess(grouped_df, P: Params, filename: str):
 
 
 def plot_optimal_k_vs_k_avg(df):
+    # GR changes with TAO!!! now what???
     filtered_df = df[df['metric'] == 'delta']
     grouped_df = group_df_data_by_parameters(filtered_df)
-    grouped_df = grouped_df.agg({'value': 'max', 'k_avg': 'mean'}).reset_index()
+    # cant group the group...
+    grouped_df = grouped_df.groupby('k_avg', 'tao').agg({'value': 'max'}).reset_index()
     pass
 
 

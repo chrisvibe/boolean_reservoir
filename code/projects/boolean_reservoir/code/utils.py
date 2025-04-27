@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import random
 from hashlib import sha256
+from pathlib import Path
 
 # Ensure reproducibility by setting seeds globally
 def set_seed(seed=42):
@@ -19,6 +20,11 @@ def generate_unique_seed(*args):
     hash_digest = sha256(combined_str.encode()).hexdigest()
     # Convert the hash to an integer and ensure it fits in the range of a typical seed
     return int(hash_digest, 16) % (2**31 - 1)
+
+def override_symlink(source: Path, link:str=None):
+    if link.exists():
+        link.unlink()
+    link.symlink_to(source)
 
 def gpu_check():
     if torch.cuda.is_available():

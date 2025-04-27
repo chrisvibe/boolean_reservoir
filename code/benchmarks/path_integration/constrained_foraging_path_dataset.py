@@ -43,7 +43,13 @@ class ConstrainedForagingPathDataset(Dataset):
         }
 
     def split_dataset(self, split=(0.8, 0.1, 0.1)):
-        assert sum(split) == 1, "Split ratios must sum to 1."
+        # TODO copy temporal
+        split = (split.train, split.dev, split.test)
+        assert float(sum((split))) == 1.0, "Split ratios must sum to 1."
+        # split_train = split[0] if self.split is None else self.split.train
+        # split_dev = split[1] if self.split is None else self.split.dev
+        # split_test = split[2] if self.split is None else self.split.test
+        # assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
 
         x, y = self.data['x'], self.data['y']
         idx = torch.randperm(x.size(0))

@@ -6,7 +6,7 @@ logging:
     n_samples: 10
 model:
   input_layer:
-    distribution: min_max_random-1:b:1/b
+    distribution: [min_max_random-0:b:1/b, min_max_random-1:b:1/b]
     encoding: base2
     n_inputs: 10
     pertubation: override
@@ -33,7 +33,7 @@ model:
     batch_size: 100
     criterion: BCE
     epochs: 40 # epochs is different
-    evaluation: dev # consider making this a list so we can get dev and test accuracy (they call this training and generalization accuracy) 
+    evaluation: dev
     learning_rate: 0.001 # learning rate is different
     seed: 0
 dataset:

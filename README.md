@@ -34,3 +34,4 @@ TODO
 Example:
 pytest /code/projects/boolean_reservoir/test/test_graphs.py
 pytest /code/projects/path_integration/test/test_load_and_save.py
+pytest /code/projects/path_integration/test/test_verification_models.py
