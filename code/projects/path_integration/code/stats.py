@@ -14,7 +14,7 @@ def init_get_data_and_make_groups(in_path, out_path):
     out_path.mkdir(parents=True, exist_ok=True)
 
     P = load_yaml_config(in_path)
-    L = P.logging
+    L = P.L
 
     file_path = L.out_path / 'log.h5'
     df = pd.read_hdf(file_path, key='df', mode='r')
@@ -23,14 +23,14 @@ def init_get_data_and_make_groups(in_path, out_path):
     df[col] = (df[col]-df[col].mean())/(df[col].std())
     df['model_params'] = df['params'].apply(lambda p: p.model)
     # input layer
-    df['interleaving'] = df['model_params'].apply(lambda p: p.reservoir_layer.k_avg)
+    df['interleaving'] = df['model_params'].apply(lambda p: p.R.k_avg)
     # reservoir layer
-    df['n_nodes_eff'] = df['model_params'].apply(lambda p: p.reservoir_layer.n_nodes-p.input_layer.bits_per_feature*p.input_layer.n_inputs) # litterature consideres exclude input nodes in count
-    df['k_avg'] = df['model_params'].apply(lambda p: p.reservoir_layer.k_avg)
-    df['self_loops'] = df['model_params'].apply(lambda p: p.reservoir_layer.self_loops)
-    df['init'] = df['model_params'].apply(lambda p: p.reservoir_layer.init)
+    df['n_nodes'] = df['model_params'].apply(lambda p: p.R.n_nodes)
+    df['k_avg'] = df['model_params'].apply(lambda p: p.R.k_avg)
+    df['self_loops'] = df['model_params'].apply(lambda p: p.R.self_loops)
+    df['init'] = df['model_params'].apply(lambda p: p.R.init)
     # extra
-    # df['paths'] = df['params'].apply(lambda p: BooleanReservoir.make_load_paths(p.logging.last_checkpoint))
+    # df['paths'] = df['params'].apply(lambda p: BooleanReservoir.make_load_paths(P.L.last_checkpoint))
     # df['spectral_radius'] = df['paths'].apply(lambda d: calc_spectral_radius(BooleanReservoir.load_graph(d['graph']))) # takes like 2hrs 5s/it
 
     vars = ['loss', 'interleaving', 'k_avg', 'self_loops', 'init']

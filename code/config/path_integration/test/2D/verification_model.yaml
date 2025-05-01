@@ -2,7 +2,7 @@ model:
   input_layer:
     pertubation: 'xor'
     encoding: 'base2'
-    n_inputs: 2
+    features: 2
     bits_per_feature: 8
     redundancy: 1
   reservoir_layer:

@@ -6,9 +6,11 @@ logging:
     n_samples: 10
 model:
   input_layer:
-    distribution: [min_max_random-0:b:1/b, min_max_random-1:b:1/b]
+    distribution: identity
+    connection: [out-0:b:1/(a+b), out-1:b:1/(a+b)] # "I additional input nodes that distribute the input signals to the nodes in the network. The source node of Ki links for each node i is randomly picked from N + I nodes with uniform probability" (their N is my R)
     encoding: base2
-    n_inputs: 10
+    features: 10
+    n_nodes: 1
     pertubation: override
     redundancy: 1
     bits_per_feature: 1

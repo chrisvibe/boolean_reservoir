@@ -13,22 +13,22 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 def plot_many_things(model, dataset, history):
     y_test = dataset.data['y_test'][:500]
     y_hat_test = model(dataset.data['x_test'][:500])
-    plot_train_history(model.save_dir, history)
-    plot_predictions_and_labels(model.save_dir, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[0, 1])
-    plot_dynamics_history(model.save_dir)
+    plot_train_history(model.save_path, history)
+    plot_predictions_and_labels(model.save_path, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[0, 1])
+    plot_dynamics_history(model.save_path)
     # plot_graph_with_weight_coloring_3D(model.graph, model.readout)
 
 def group_df_data_by_parameters(df):
     def set_to_none(p):
-        p.model.reservoir_layer.k_min = None
-        p.model.reservoir_layer.k_avg = None
-        p.model.reservoir_layer.k_max = None
-        p.model.reservoir_layer.seed = None
-        p.model.input_layer.seed = None
-        p.model.output_layer.seed = None
-        p.dataset.seed = None
+        p.M.R.k_min = None
+        p.M.R.k_avg = None
+        p.M.R.k_max = None
+        p.M.R.seed = None
+        p.M.I.seed = None
+        p.M.O.seed = None
+        p.D.seed = None
+        p.D.path = None
         p.logging = None
-        p.dataset.path = None
         return p
     df['group_params_str'] = df['params'].apply(set_to_none)
     df['group_params_str'] = df['group_params_str'].apply(lambda p: json.dumps(p.model_dump(), sort_keys=True, default=str))
@@ -36,9 +36,9 @@ def group_df_data_by_parameters(df):
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str):
-    D = P.dataset
+    D = P.D
     samples_per_config = df['sample'].max()
-    subtitle = f"Mode: {df.iloc[0]['params'].model.reservoir_layer.mode}, Nodes: {P.model.reservoir_layer.n_nodes}, Bit Stream Length: {D.bit_stream_length}, Tao: {D.tao}, Samples per config: {samples_per_config}, Configs: {len(df['group_params_str'].unique())}"
+    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {D.bit_stream_length}, Tao: {D.tao}, Samples per config: {samples_per_config}, Configs: {len(df['group_params_str'].unique())}"
     
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
@@ -127,13 +127,13 @@ def plot_kq_and_gr(df, P: Params, filename: str):
     fig.text(0.5, 0.01, subtitle, ha='right', fontsize=12)
     
     # Save the figure
-    save_path = P.logging.out_path / 'visualizations'
+    save_path = P.L.out_path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path / filename, bbox_inches='tight')
     plt.close(fig)
 
 def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
-    D = P.dataset
+    D = P.D
     
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
@@ -146,10 +146,10 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
     for name, subset in sorted(grouped_df, key=lambda x: x[0]):
         print(color_idx, ':')
         p = subset.iloc[0]['params']
-        print(p.model.input_layer)
-        print(p.model.reservoir_layer)
-        print(p.model.output_layer)
-        print(p.dataset)
+        print(p.M.I)
+        print(p.M.R)
+        print(p.M.O)
+        print(p.D)
         metrics = sorted(subset['metric'].unique())
         n_metrics = len(metrics)
         for i, metric in enumerate(metrics):
@@ -205,14 +205,14 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
     plt.title('Reservoir Metrics: Kernel Quality, Generalization Rank, Delta', fontsize=16)
 
     # Save the figure
-    save_path = P.logging.out_path / 'visualizations'
+    save_path = P.L.out_path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path / filename, bbox_inches='tight')
     plt.close(fig)
 
 
 def plot_kq_and_gr_many_config_lowess(grouped_df, P: Params, filename: str):
-    D = P.dataset
+    D = P.D
     
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
@@ -225,10 +225,10 @@ def plot_kq_and_gr_many_config_lowess(grouped_df, P: Params, filename: str):
     for name, subset in sorted(grouped_df, key=lambda x: x[0]):
         print(color_idx, ':')
         p = subset.iloc[0]['params']
-        print(p.model.input_layer)
-        print(p.model.reservoir_layer)
-        print(p.model.output_layer)
-        print(p.dataset)
+        print(p.M.I)
+        print(p.M.R)
+        print(p.M.O)
+        print(p.d)
         metrics = sorted(subset['metric'].unique())
         n_metrics = len(metrics)
         for i, metric in enumerate(metrics):
@@ -259,7 +259,7 @@ def plot_kq_and_gr_many_config_lowess(grouped_df, P: Params, filename: str):
     plt.title('Reservoir Metrics: Kernel Quality, Generalization Rank, Delta', fontsize=16)
 
     # Save the figure
-    save_path = P.logging.out_path / 'visualizations'
+    save_path = P.L.out_path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path / filename, bbox_inches='tight')
     plt.close(fig)

@@ -6,7 +6,7 @@ from pathlib import Path
 import seaborn as sns
 import pandas as pd
 from collections import Counter
-from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix
+from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix_w_k_avg_incoming_edges
 matplotlib.use('Agg')
 
 def visualize_in_degree_distribution_from_adjacency_matrix_func(path, file_name_append, samples, adjacency_matrix_func, **func_params):
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     ###################################### compare old incorrect adjacency matrix function with new #############################################################################
 
-    from projects.boolean_reservoir.code.graphs import old_generate_adjacency_matrix, generate_adjacency_matrix
+    from projects.boolean_reservoir.code.graphs import old_generate_adjacency_matrix, generate_adjacency_matrix_w_k_avg_incoming_edges
     samples = 100
     func_params = dict()
     func_params['n_nodes'] = 100
@@ -80,14 +80,14 @@ if __name__ == '__main__':
 
     # # check for expected normal distribution 
     visualize_in_degree_distribution_from_adjacency_matrix_func('/out', 'old', samples, old_generate_adjacency_matrix, **func_params)
-    visualize_in_degree_distribution_from_adjacency_matrix_func('/out', 'new', samples, generate_adjacency_matrix, **func_params)
+    visualize_in_degree_distribution_from_adjacency_matrix_func('/out', 'new', samples, generate_adjacency_matrix_w_k_avg_incoming_edges, **func_params)
 
     # # check that properties are invariant to n_nodes
     samples = 20
     parameter = 'n_nodes'
     parameter_iterable = range(100, 1000 + 1, 20) 
     visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'old', samples, parameter, parameter_iterable, old_generate_adjacency_matrix, **func_params)
-    visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'new', samples, parameter, parameter_iterable, generate_adjacency_matrix, **func_params)
+    visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'new', samples, parameter, parameter_iterable, generate_adjacency_matrix_w_k_avg_incoming_edges, **func_params)
 
     # check that std is largest at self_loops = 0.5 as it has most freedom
     # should be lower at p=1 as it spreads out in_degree and p=0 as it limits number of edges
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     parameter = 'self_loops'
     parameter_iterable = [i/100 for i in range(100+1)]
     visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'old', samples, parameter, parameter_iterable, old_generate_adjacency_matrix, **func_params)
-    visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'new', samples, parameter, parameter_iterable, generate_adjacency_matrix, **func_params)
+    visualize_in_degree_distribution_from_adjacency_matrix_func_vary_parameter('/out', 'new', samples, parameter, parameter_iterable, generate_adjacency_matrix_w_k_avg_incoming_edges, **func_params)
 
     ###################################### verify that underlying sub-routines are correct and roughly check run-time scaling #############################################################################
 

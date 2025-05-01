@@ -7,8 +7,8 @@ from projects.boolean_reservoir.code.utils import set_seed, balance_dataset, l2_
 
 class TemporalDatasetInit(DatasetInit): # Note dont use I.seed here dataset init will use D.seed
     def dataset_init(self, P: Params):
-        D = P.dataset
-        I = P.model.input_layer
+        D = P.D
+        I = P.M.I
         assert isinstance(D, TemporalDatasetParams) 
         if D.task == 'density':
             dataset = TemporalDensityDataset(D)

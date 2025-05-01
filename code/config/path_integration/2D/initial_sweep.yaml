@@ -3,7 +3,7 @@ model:
     distribution: 1:1:1:d
     pertubation: 'xor'
     encoding: 'binary_embedding'
-    n_inputs: 2
+    features: 2
     resolution: 8
     redundancy: [1, 2, 3, 4, 5, 6]
     interleaving: 0

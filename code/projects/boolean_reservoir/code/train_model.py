@@ -112,9 +112,9 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
             model.record_history = False
     if verbose:
         print(f'Best loss: {best_stats}')
-    model.P.logging.train_log.accuracy = best_stats['accuracy']
-    model.P.logging.train_log.loss = best_stats['loss']
-    model.P.logging.train_log.epoch = best_stats['epoch']
+    model.P.L.train_log.accuracy = best_stats['accuracy']
+    model.P.L.train_log.loss = best_stats['loss']
+    model.P.L.train_log.epoch = best_stats['epoch']
     return best_stats, model, train_history
 
 def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations: list[Params]=None):
@@ -123,7 +123,7 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
     P = load_yaml_config(yaml_path)
-    L = P.logging
+    L = P.L
     set_seed(L.grid_search.seed)
     assert not L.out_path.exists(), 'Grid search already exists (path taken)'
     L.out_path.mkdir(parents=True, exist_ok=True)
@@ -148,21 +148,21 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
     pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
     for i, p in enumerate(param_combinations):
         for j in range(n_sample):
-            t = p.model.training
+            t = p.M.T
             print('#'*60)
             k = generate_unique_seed(L.grid_search.seed, i, j)
-            p.model.input_layer.seed = k
-            p.model.reservoir_layer.seed = k 
-            p.model.output_layer.seed = k 
+            p.M.I.seed = k
+            p.M.R.seed = k 
+            p.M.O.seed = k 
             t.seed = k 
-            if last_dataset_params != p.dataset or not is_equal_except_seed(last_input_params, p.model.input_layer):
+            if last_dataset_params != p.D or not is_equal_except_seed(last_input_params, p.M.I):
                 dataset = dataset_init(P=p)
                 dataset.data['x'] = dataset.data['x'].to(device)
                 dataset.data['y'] = dataset.data['y'].to(device)
                 dataset.data['x_' + t.evaluation] = dataset.data['x_' + t.evaluation].to(device)
                 dataset.data['y_' + t.evaluation] = dataset.data['y_' + t.evaluation].to(device)
-                last_dataset_params = p.dataset
-                last_input_params = p.model.input_layer
+                last_dataset_params = p.D
+                last_input_params = p.M.I
             model = best_epoch = None
             try:
                 model = BooleanReservoir(p).to(device)
@@ -177,7 +177,7 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
                 best_epoch = {'eval': t.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
             print(f"{model.timestamp_utc}: Config: {i+1:0{len(str(n_config))}d}/{n_config}, Sample: {j+1:0{len(str(n_sample))}d}/{n_sample}, Loss: {best_epoch['loss']:.4f}, Accuracy: {best_epoch['accuracy']:.4f}, Epoch: {best_epoch['epoch']}")
             print(p.model)
-            if best_params is None or best_params.logging.train_log.loss is None or (best_epoch['loss'] < best_params.logging.train_log.loss):
+            if best_params is None or best_params.L.train_log.loss is None or (best_epoch['loss'] < best_params.L.train_log.loss):
                 best_params = model.P
             log_data = dict()
             log_data['timestamp_utc'] = model.timestamp_utc 

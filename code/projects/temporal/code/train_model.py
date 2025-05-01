@@ -11,18 +11,23 @@ if __name__ == '__main__':
 
     # p, model, dataset, history = train_single_model('config/temporal/density/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
-    # plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    p, model, dataset, history = train_single_model('config/temporal/parity/ok_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    plot_many_things(model, dataset, history)
-    plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    p, model, dataset, history = train_single_model('config/temporal/parity/debug_model2.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
+    for i in range(3):
+        plot_activity_trace(model.save_path, file_name=f"activity_trace_with_phase_{i}.png", highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == i])
 
-    p, model, dataset, history = train_single_model('config/temporal/parity/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    plot_many_things(model, dataset, history)
-    plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    # p, model, dataset, history = train_single_model('config/temporal/parity/ok_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
+    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    # print(model.save_dir)
-    # plot_activity_trace(model.save_dir, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    # p, model, dataset, history = train_single_model('config/temporal/parity/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
+    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+
+    # print(model.save_path)
+    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
     # # Grid search stuff 
     # #####################################

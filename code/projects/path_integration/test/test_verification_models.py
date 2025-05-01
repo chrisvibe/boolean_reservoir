@@ -17,8 +17,8 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
     def __init__(self, params: Params):
         super(PathIntegrationVerificationModelBaseTwoEncoding, self).__init__()
         self.P = params
-        self.I = self.P.model.input_layer
-        self.scale = nn.Linear(self.I.n_inputs, self.I.n_inputs)
+        self.I = self.P.M.I
+        self.scale = nn.Linear(self.I.features, self.I.features)
 
     def forward(self, x):
         m, s, d, b = x.shape
@@ -42,9 +42,9 @@ class PathIntegrationVerificationModel(nn.Module):
     def __init__(self, params: Params):
         super(PathIntegrationVerificationModel, self).__init__()
         self.P = params
-        self.I = self.P.model.input_layer
+        self.I = self.P.M.I
         self.decoder = nn.Linear(self.I.bits_per_feature, 1)
-        self.scale = nn.Linear(self.I.n_inputs, self.I.n_inputs)
+        self.scale = nn.Linear(self.I.features, self.I.features)
 
     def forward(self, x):
         m, s, d, b = x.shape
@@ -73,9 +73,9 @@ def test_path_integration_verification_models(model_class, config_path):
     logging.debug(f"Model instance created: {model_instance}")
     
     p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    logging.debug(f"Training completed with accuracy {trained_model.P.logging.train_log.accuracy}")
+    logging.debug(f"Training completed with accuracy {trained_model.P.L.train_log.accuracy}")
     
-    assert trained_model.P.logging.train_log.accuracy >= 0.99, f"Accuracy {trained_model.P.logging.train_log.accuracy} is below 0.99"
+    assert trained_model.P.L.train_log.accuracy >= 0.99, f"Accuracy {trained_model.P.L.train_log.accuracy} is below 0.99"
 
 
 if __name__ == '__main__':
@@ -84,4 +84,4 @@ if __name__ == '__main__':
     model = PathIntegrationVerificationModelBaseTwoEncoding(P)
     # model = PathIntegrationVerificationModel(P)
     p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    assert model.P.logging.train_log.accuracy >= 0.99, f"Accuracy {model.P.logging.train_log.accuracy} is below 0.99"
+    assert model.P.L.train_log.accuracy >= 0.99, f"Accuracy {model.P.L.train_log.accuracy} is below 0.99"

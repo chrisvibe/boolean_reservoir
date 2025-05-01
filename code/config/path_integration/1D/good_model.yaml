@@ -3,7 +3,7 @@ model:
     seed: 0
     pertubation: 'xor'
     encoding: binary_embedding
-    n_inputs: 1
+    features: 1
     bits_per_feature: 48
     redundancy: 6
     interleaving: 0

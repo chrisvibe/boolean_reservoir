@@ -6,10 +6,12 @@ logging:
 model:
   input_layer:
     bits_per_feature: 1
-    distribution: min_max_random-0:b:1/b # "The node updates its state at time t according to a K-to-1 Boolean mapping of its K inputs.", "...input are chosen from the N nodes in the network with uniform probability"
+    distribution: identity
+    connection: out-0:b:1/(a+b) # "I additional input nodes that distribute the input signals to the nodes in the network. The source node of Ki links for each node i is randomly picked from N + I nodes with uniform probability" (their N is my R)
     encoding: base2
     interleaving: 0
-    n_inputs: 10
+    features: 10
+    n_nodes: 10
     # pertubation: override
     pertubation: [override, xor]
     redundancy: 1
@@ -20,7 +22,7 @@ model:
   reservoir_layer:
     # init: zeros # deduced from figure 1A as the rank is near zero at k=0, with random init the KQ and GR rank would start high 
     init: [zeros, random]
-    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     k_min: 0
     k_max: 20
     mode: homogenous
@@ -41,6 +43,7 @@ dataset:
   bit_stream_length: 10
   window_size: 3 # not using this
   tao: 2 # controls tao for KQ and GR instead of tao for temporal denisty task (bits overriden to make similar inputs)
+  # tao: [2, 4] # controls tao for KQ and GR instead of tao for temporal denisty task (bits overriden to make similar inputs)
   split: # not training the model, just recording state changes with input
     train: 1
     dev: 0

@@ -2,7 +2,7 @@ model:
   input_layer:
     pertubation: 'xor'
     encoding: 'binary_embedding'
-    n_inputs: 2
+    features: 2
     bits_per_feature: 48
     redundancy: 6
     interleaving: [0]

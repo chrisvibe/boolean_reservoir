@@ -12,8 +12,6 @@ from sklearn.manifold import TSNE, MDS
 from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
-import torch
-from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 matplotlib.use('Agg')
 
 def plot_train_history(path, history):
@@ -52,10 +50,10 @@ def plot_grid_search(data_file_path: Path):
     df['loss'] = df['loss'].apply(lambda x: x ** .5) # MSE to RMS
     plot_histogram_of_top_percentile_vs_config_id(out_path, df, top_percentile=0.1)
     flatten_params = lambda x: pd.concat([
-        pd.Series({f"I.{k}": v for k, v in x.model.input_layer.model_dump().items()}),
-        pd.Series({f"R.{k}": v for k, v in x.model.reservoir_layer.model_dump().items()}),
-    # pd.Series({f"O.{k}": v for k, v in x.model.output_layer.model_dump().items()}),
-    # pd.Series({f"T.{k}": v for k, v in x.model.training.model_dump().items()})
+        pd.Series({f"I.{k}": v for k, v in x.M.I.model_dump().items()}),
+        pd.Series({f"R.{k}": v for k, v in x.M.R.model_dump().items()}),
+    # pd.Series({f"O.{k}": v for k, v in x.M.O.model_dump().items()}),
+    # pd.Series({f"T.{k}": v for k, v in x.M.T.model_dump().items()}),
     ])
     df_flattend_params = df['params'].apply(lambda p: flatten_params(p))
     df = pd.concat([df, df_flattend_params], axis=1)
@@ -154,7 +152,7 @@ def plot_histogram_of_top_percentile_vs_config_id(path, df, top_percentile=0.1):
     config_counts = config_ids.value_counts().sort_index()
     top_config_id = config_counts.idxmax()
     print(f"Config ID with highest frequency: {top_config_id}, Count: {config_counts[top_config_id]}")
-    print(f"Checkpoint: {str(df.iloc[top_config_id].params.logging.last_checkpoint)}")
+    print(f"Checkpoint: {str(df.iloc[top_config_id].params.P.L.last_checkpoint)}")
     
     plt.figure(figsize=(10, 6))
     plt.bar(config_counts.index, config_counts.values, alpha=0.7, color='skyblue', edgecolor='black')
@@ -172,7 +170,7 @@ def plot_dynamics_history(path):
     path = Path(path)
     save_path = path / 'visualizations' 
     save_path.mkdir(parents=True, exist_ok=True)
-    history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
+    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
     # print(meta)
     # print('full history:', history.shape)
     expanded_meta = expanded_meta[expanded_meta['phase'].isin(['reservoir_layer', 'output_layer'])]
@@ -192,7 +190,8 @@ def plot_dynamics_history(path):
     # print("Explained variance by each component:")
     # print(embedding.explained_variance_ratio_)
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'd']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'f']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
+    plt.legend(title='phase, step, feature')
     plt.title('PCA of states over time')
     file = f"pca.png"
     plt.savefig(save_path / file, bbox_inches='tight')
@@ -203,19 +202,20 @@ def plot_dynamics_history(path):
     df = pd.concat([df, expanded_meta], axis=1)
 
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'd']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'f']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
+    plt.legend(title='phase, step, feature')
     plt.title('tSNE of states over time')
     file = f"tsne.png"
     plt.savefig(save_path / file, bbox_inches='tight')
 
 
-def plot_activity_trace(path, highlight_input_nodes=False, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
+def plot_activity_trace(path, file_name="activity_trace_with_phase.png", highlight_input_nodes=False, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
     path = Path(path)
     save_path = path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
 
     # Load history and metadata
-    history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history()
+    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history(include={'parameters', 'graph', 'w_in'})
     expanded_meta = data_filter(expanded_meta)
     expanded_meta = aggregation_handle(expanded_meta) 
     history = history[expanded_meta.index]
@@ -243,27 +243,23 @@ def plot_activity_trace(path, highlight_input_nodes=False, data_filter=lambda df
     # Highlight the input nodes on the y-axis with transparency
     # since recording captures each pertubation round various parts of the reservoir are highlighted per time step
     if highlight_input_nodes:
-        history_model_path = path / 'history/checkpoint'
-        d = BooleanReservoir.load_from_path_dict_or_checkpoint_folder(checkpoint_path=history_model_path, load_key_include_set={'parameters', 'w_in'})
-        p = d['parameters']
-        w_in = d['w_in']
-        alpha_value = 0.5
+        p = load_dict['parameters']
+        w_in = load_dict['w_in']
+        alpha_value = 0.8
         a = b = 0
-        I = p.model.input_layer
-        k = w_in.shape[0]//I.n_inputs
+        I = p.M.I
         input_times = (t for t in expanded_meta[expanded_meta['phase'] == 'input_layer']['time'])
         for i in input_times:
-            b += k
+            b += I.bits_per_feature
             w_in_i = w_in[a:b]
-            perturbed_reservoir_nodes_mask = w_in_i.sum(axis=0) > 0
-            perturbed_reservoir_nodes = np.argwhere(perturbed_reservoir_nodes_mask)[0]
+            selected_input_indices = w_in_i.sum(axis=0).nonzero(as_tuple=True)[0]
             a = b
-            for idx in perturbed_reservoir_nodes:
+            for idx in selected_input_indices:
                 ax_heatmap.add_patch(
                     plt.Rectangle((i, idx), 1, 1, fill=False,
                                 edgecolor=(1, 0, 0, alpha_value), lw=1)
                 )
-        subtitle = 'mapping: ' + str({i: np.argwhere(w_in[i])[0].tolist() for i in range(w_in.shape[0])})
+        subtitle = 'mapping I→R: ' + str({i: np.argwhere(w_in[i])[0].tolist() for i in range(w_in.shape[0])})
         plt.text(0.5, 1.05, subtitle, ha='center', va='center', transform=ax_heatmap.transAxes, fontsize=10)
 
     # Phase heatmap using integer mapping for consistent color representation
@@ -273,8 +269,7 @@ def plot_activity_trace(path, highlight_input_nodes=False, data_filter=lambda df
     ax_phase.set_title('Phases over Time')
     ax_phase.set_xlabel('')
     ax_phase.set_ylabel('')
-    file = save_path / "activity_trace_with_phase.png"
-    plt.savefig(file, bbox_inches='tight')
+    plt.savefig(save_path / file_name, bbox_inches='tight')
     plt.close()
 
 def plot_reconstructed_manifold(path, adjacency_matrix):

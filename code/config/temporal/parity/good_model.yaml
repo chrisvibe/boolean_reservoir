@@ -27,10 +27,12 @@ logging:
 model:
   input_layer:
     bits_per_feature: 1
-    distribution: min_max_random-0:b:1/b
+    distribution: identity
+    connection: out-0:b:1/(a+b)
     encoding: base2
     interleaving: 0
-    n_inputs: 10
+    features: 10
+    n_nodes: 10
     pertubation: override
     redundancy: 1
     resolution: 1

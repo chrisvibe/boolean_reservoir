@@ -54,7 +54,7 @@ def plot_random_walk(dir_path, positions, strategy, boundary):
     path = Path(dir_path) / 'visualizations/random_walk'
     path.mkdir(parents=True, exist_ok=True)
     file_name = f'{dimensions}D-s={steps}-{strategy}-{boundary}.png'
-    # TODO add strategy and boundary alias so that it pritns nicely here with __str__ method or __repr___
+    # TODO add strategy and boundary alias so that it prints nicely here with __str__ method or __repr___
     plt.savefig(path / file_name, bbox_inches='tight')
 
 def plot_random_walk_model(dir_path, x: np.array, model, y: np.array):
@@ -117,9 +117,9 @@ def plot_binary_encoding_error_hist_and_boxplotplot(path, dataset, bins):
 def plot_many_things(model, dataset, history):
     y_test = dataset.data['y_test'][:500]
     y_hat_test = model(dataset.data['x_test'][:500])
-    plot_train_history(model.save_dir, history)
-    plot_predictions_and_labels(model.save_dir, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[-1, 2])
-    plot_dynamics_history(model.save_dir)
+    plot_train_history(model.save_path, history)
+    plot_predictions_and_labels(model.save_path, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[-1, 2])
+    plot_dynamics_history(model.save_path)
     # plot_graph_with_weight_coloring_3D(model.graph, model.readout)
 
 if __name__ == '__main__':

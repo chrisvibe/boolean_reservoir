@@ -40,7 +40,7 @@ def test_saving_and_loading_models():
     model.save()
     
     # Load the model from the saved path
-    model2 = BooleanReservoir(load_path=model.P.logging.last_checkpoint)
+    model2 = BooleanReservoir(load_path=model.P.L.last_checkpoint)
     
     # Test that the loaded model has the same parameters and behavior as the original
     _model_likeness_check(model, model2, dataset)
@@ -57,7 +57,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     print('-'*10, '\n', p, '\n', '-'*10)
     
     # Load model from checkpoint
-    model = BooleanReservoir(load_path=p.logging.last_checkpoint)
+    model = BooleanReservoir(load_path=P.L.last_checkpoint)
     
     # Train a new model with the same parameters
     p2 = deepcopy(model.P)
@@ -65,7 +65,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     
     # Test that the models are equivalent
     _model_likeness_check(model, model2, dataset2)
-    assert model.P.logging.train_log.accuracy == model2.P.logging.train_log.accuracy, 'log accuracies do not match'
+    assert model.P.L.train_log.accuracy == model2.P.L.train_log.accuracy, 'log accuracies do not match'
 
 
 if __name__ == '__main__':

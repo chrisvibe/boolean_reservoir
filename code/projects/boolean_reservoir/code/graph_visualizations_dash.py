@@ -8,7 +8,7 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 from projects.boolean_reservoir.code.graphs import remove_isolated_nodes
 
-def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=lambda g: nx.spring_layout(g, dim=3), metadata=None, draw_edges=True):
+def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear=None, layout=lambda g: nx.spring_layout(g, dim=3), metadata=None, draw_edges=True, draw_arrow=False):
     def id_generator():
         seen_elements = dict()
         current_id = 0
@@ -22,8 +22,8 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=
     def convert_to_numeric(id_gen, value):
         if isinstance(value, str) and len(value) == 1:
             return ord(value)
-        elif isinstance(value, (int, float, np.number, np.ndarray)):
-            return value
+        elif isinstance(value, (int, float, np.number, np.ndarray, bool)):
+            return float(value)
         else:
             next(id_gen)
             return id_gen.send(value)
@@ -50,15 +50,19 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=
                 "z": arr[2]
             }
         return attrs
+    
+    def add_readout_metadata(readout): # TODO cleanup with a loop? why is id set here?
+        weights = readout.weight.data.numpy()
+        weight_set_1 = weights[0, :]
+        weight_set_2 = weights[1, :]
+        nx.set_node_attributes(graph, dict(enumerate(range(len(weight_set_1)))), 'id')
+        nx.set_node_attributes(graph, dict(enumerate(list(np.around(weight_set_1, decimals=3)))), 'weight_0')
+        if weights.shape[0] > 1:
+            nx.set_node_attributes(graph, dict(enumerate(list(np.around(weight_set_2, decimals=3)))), 'weight_1')
 
     # Add node metadata
-    weights = readout.weight.data.numpy()
-    weight_set_1 = weights[0, :]
-    weight_set_2 = weights[1, :]
-    nx.set_node_attributes(graph, dict(enumerate(range(len(weight_set_1)))), 'id')
-    nx.set_node_attributes(graph, dict(enumerate(list(np.around(weight_set_1, decimals=3)))), 'weight_0')
-    if weights.shape[0] > 1:
-        nx.set_node_attributes(graph, dict(enumerate(list(np.around(weight_set_2, decimals=3)))), 'weight_1')
+    if readout:
+        add_readout_metadata(readout)
     if metadata:
         for label, dict_data in metadata:
             nx.set_node_attributes(graph, dict_data, label)
@@ -97,6 +101,30 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=
                 edge_y += [y0, y1, None]
                 edge_z += [z0, z1, None]
 
+        arrow_trace = None
+        if draw_arrow: # TODO fix looks terrible. Need data for edges not just nodes
+            # Convert lists to numpy arrays to be used for plotting
+            edge_start_x = np.array(edge_x[::2])
+            edge_start_y = np.array(edge_y[::2])
+            edge_start_z = np.array(edge_z[::2])
+            arrow_u = np.array(edge_x[1::2])
+            arrow_v = np.array(edge_y[1::2])
+            arrow_w = np.array(edge_z[1::2])
+
+            # Draw the edges as arrows using cones
+            arrow_trace = go.Cone(
+                x=edge_start_x,
+                y=edge_start_y,
+                z=edge_start_z,
+                u=arrow_u,
+                v=arrow_v,
+                w=arrow_w,
+                sizemode='absolute',
+                sizeref=0.25,
+                colorscale='Blues',
+                showscale=False,
+            )
+
         edge_trace = go.Scatter3d(
             x=edge_x, y=edge_y, z=edge_z,
             line=dict(width=0.5, color='black') if draw_edges else dict(width=0, color='rgba(0,0,0,0)'),
@@ -118,7 +146,7 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=
             hoverinfo='text'
         )
         node_trace.text = [f"Node {i}: " + ', '.join([f"{col}: {val}" for col, val in row.items()]) for i, row in filtered_df.astype(str).iterrows()]
-        fig = go.Figure(data=[edge_trace, node_trace])
+        fig = go.Figure(data=[edge_trace, node_trace, arrow_trace] if arrow_trace else [edge_trace, node_trace])
         fig.update_layout(showlegend=False)
         fig.update_layout(scene=dict(
             xaxis=dict(showbackground=False),
@@ -177,16 +205,20 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear, layout=
 
 if __name__ == '__main__':
     from reservoir import BooleanReservoir
-    model = BooleanReservoir(load_path='/out/single_run/path_interation/2D/good_model/2025_02_17_113551_406400/checkpoints/2025_02_17_114011_225303')
+    model = BooleanReservoir(load_path='/out/temporal/reservoir/kq_and_gr/homogenous/runs/last_run/history/checkpoint')
+    graph = model.graph
+    model.add_graph_labels(graph)
+    # graph = remove_isolated_nodes(graph)
     metadata = list()
     metadata.append(['in_degree', dict(model.graph.in_degree)])
-    d = {node: 'normal' for node in model.graph.nodes()}
-    for idx, nodes in enumerate(model.input_nodes):
-        d.update({v: f'input_{idx}' for v in nodes.tolist()})
+    d = {node: ''.join(['I'*d['I'], 'R'*d['R'], 'O'*d['O']]) for node, d in model.graph.nodes(data=True)}
+    # for idx, nodes in enumerate(model.input_nodes):
+        # d.update({v: f'input_{idx}' for v in nodes.tolist()})
         # metadata.append(['color', {k: 'red' for k in input_nodes.tolist()}])  # override node colors!
     metadata.append(['type', d])
-    graph = remove_isolated_nodes(model.graph)
-    plot_graph_with_weight_coloring_3D(graph, model.readout, layout=lambda g: nx.random_layout(g, dim=3), metadata=metadata, draw_edges=True)
+    # plot_graph_with_weight_coloring_3D(graph, readout=model.readout, layout=lambda g: nx.random_layout(g, dim=3), metadata=metadata, draw_edges=True)
     # plot_graph_with_weight_coloring_3D(graph, model.readout, layout=lambda g: nx.spring_layout(g, dim=3), metadata=metadata, draw_edges=True)
     # plot_graph_with_weight_coloring_3D(graph, model.readout, layout=lambda g: nx.kamada_kawai_layout(g, dim=3), metadata=metadata, draw_edges=True)
     # example query: abs(weight_0) > 0.1 or abs(weight_1) > 0.1 or type.str.startswith('input')
+
+    plot_graph_with_weight_coloring_3D(graph, readout=None, layout=lambda g: nx.random_layout(g, dim=3), metadata=metadata, draw_edges=True)

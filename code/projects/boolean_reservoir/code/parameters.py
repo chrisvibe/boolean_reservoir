@@ -30,27 +30,62 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
 
 class InputParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    distribution: Union[str, List[str]] = Field('min_max_degree-0:b:0:a:1/b', description="Gets overriden by w_in. Input distribution mapping format: 'a_min:a_max:b_min:b_max:p' where: a and b represent a bipartite mapping from a→b (a:b) with probability p. For a and b use 'a_f': bits per feature, 'f': features, 'a': all input nodes, 'b': all reservoir nodes, or floats/ints directly; 'p' is the connection probability (0-1 or mathematical expression like '1/n'). Note that a and b are split up into a deterministic and probabalistic part; ie. a_min is guaranteed, and a_max depends on p (same for b).")
+    distribution: Union[str, List[str]] = Field(
+        'identity',
+        description=(
+            "Select a mode for mapping input bits to input nodes. Options include:\n"
+            
+            "1. **Identity**: Use 'identity' for a straightforward mapping with no probabilistic adjustments.\n"
+            "   - Example: 'identity'\n"
+            
+            "2. **Stub Matching**: Use format 'stub-a_min:a_max:b_min:b_max:p', where:\n"
+            "   - stub matching in this context means constraining in-degree of b and out-degrees of a and a solution is not always guaranteed.\n"
+            "   - `a_min:a_max` and `b_min:b_max` dictate the mapping from a→b, splitting elements into deterministic (`_min`) and probabilistic (`_max`) parts.\n"
+            "   - Values for 'a' and 'b' can be symbolic tokens: 'a': bits, 'b': I, or numeric values directly.\n"
+            "   - `p` is the connection probability, a number (0-1) or an expression like '1/b'.\n"
+            "   - Example: 'stub-1:10:1:5:0.5' k_a_in is between 1 and 10, k_b_out is between 1 and 5, with a connection probability of 0.5.\n"
+            
+            "3. **In-Degree**: Use format 'in-b_min:b_max:p', focusing only on the in-degree of 'b', following a similar deterministic/probabilistic approach.\n"
+            "   - Example: 'in-2:8:0.8' where nodes have in-degree mapped between 2 to 8 with a probability of 0.8.\n"
+
+            "4. **Out-Degree Mapping**: Use format 'out-a_min:a_max:p', focusing only on the out-degree of 'a', following a similar deterministic/probabilistic approach.\n"
+            "   - Example: 'out-2:8:0.8' where nodes have out-degree mapped between 2 to 8 with a probability of 0.8.\n"
+
+            "Note: 'w_in' overrides this field with a manual adjacency matrix. Both aim to map bits to input nodes (bits→I)."
+        )
+    )
+    connection: Union[str, List[str]] = Field('out-1:b:1/b', description="See distribution property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
     w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by adjacency matrix w_in:[input_bits, n_nodes]. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
-    n_inputs: Union[int, List[int]] = Field(1, description="Dimension of input data before binary encoding")
+    features: Union[int, List[int]] = Field(1, description="Dimension of input data before binary encoding")
     bits_per_feature: Union[int, List[int]] = Field(8, description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
     redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
+    n_nodes: Union[int, List[int]] = Field(None, description="Number of input nodes. This can be different from number of bits, as w_in maps bits to input_nodes (I) arbitrarily")
     resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf -> adb, ecf | n=2: abcd, efgh -> ab, ef, cd, gh -> abef, cdgh")
 
-    @model_validator(mode='after')
-    def override_bits_per_feature_by_resolution_and_redundancy(cls, values):
-        if values.resolution is not None:
-            values.bits_per_feature = calculate_w_broadcasting(lambda x, y: x * y, values.resolution, values.redundancy)
+    @model_validator(mode='after') # TODO consider this as a property?
+    def override_bits_per_feature_by_resolution_and_redundancy(self):
+        if self.resolution is not None:
+            self.bits_per_feature = calculate_w_broadcasting(lambda x, y: x * y, self.resolution, self.redundancy)
         else:
-            values.resolution = calculate_w_broadcasting(lambda x, y: x // y, values.bits_per_feature, values.redundancy)
-        return values
+            self.resolution = calculate_w_broadcasting(lambda x, y: x // y, self.bits_per_feature, self.redundancy)
+        return self
+
+    @model_validator(mode='after')
+    def default_n_nodes(self):
+        if self.n_nodes is None:
+            self.n_nodes = calculate_w_broadcasting(lambda x, y: y, self.features, self.features)
+        return self
+
+    @property
+    def bits(self):
+        return self.features * self.bits_per_feature
 
 class ReservoirParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
-    n_nodes: Union[int, List[int]] = Field(100, description="Number of nodes in the reservoir graph")
+    n_nodes: Optional[Union[int, List[int]]] = Field(None, description="Number of reservoir nodes (R) excluding input nodes (I)")
     k_min: Union[int, List[int]] = Field(0, description="Min degree of incoming nodes")
     k_avg: Union[float, List[float]] = Field(2, description="Average degree of incoming nodes")
     k_max: Union[int, List[int]] = Field(None, description="Maximum degree of incoming nodes")
@@ -61,15 +96,15 @@ class ReservoirParams(BaseModel):
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
     @model_validator(mode='after')
-    def override_for_homogenous_mode(cls, values):
-        if values.mode == 'homogenous':
-            if isinstance(values.k_avg, list):
-                values.k_min = values.k_max = 0
+    def override_for_homogenous_mode(self):
+        if self.mode == 'homogenous':
+            if isinstance(self.k_avg, list):
+                self.k_min = self.k_max = 0
             else:
-                values.k_min = values.k_max = int(values.k_avg)
-        return values
+                self.k_min = self.k_max = int(self.k_avg)
+        return self
 
-class OutputParams(BaseModel): # TODO add w_out and distribution like in input_layer. atm we assume full readout
+class OutputParams(BaseModel): # TODO add w_out and distribution like in input_layer. atm we assume full readout of R
     seed: int = Field(0, description="Random seed, None disables seed")
     n_outputs: Union[int, List[int]] = Field(1, description="Dimension of output data")
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
@@ -85,17 +120,31 @@ class TrainingParams(BaseModel):
     shuffle: bool = Field(True, description="Shuffle dataset")
     drop_last: bool = Field(True, description="Drop last")
 
-    # @model_validator(mode='before')
-    # def handle_old_name(cls, values):
-    #     if 'radius_threshold' in values:
-    #         values['accuracy_threshold'] = values.pop('radius_threshold')
-    #     return values
-
 class ModelParams(BaseModel):
     input_layer: InputParams
     reservoir_layer: ReservoirParams
     output_layer: OutputParams
     training: TrainingParams
+
+    @property
+    def I(self):
+        return self.input_layer 
+
+    @property
+    def R(self):
+        return self.reservoir_layer 
+
+    @property
+    def O(self):
+        return self.output_layer 
+
+    @property
+    def T(self):
+        return self.training 
+
+    @property
+    def n_nodes(self):
+        return self.R.n_nodes + self.I.n_nodes 
 
 class GridSearchParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
@@ -104,7 +153,7 @@ class GridSearchParams(BaseModel):
 class HistoryParams(BaseModel):
     record_history: Optional[bool] = Field(False, description="Reservoir dynamics state recording")
     buffer_size: Optional[int] = Field(64, description="Number of batched snapshots per output file")
-    save_dir: Optional[Path] = Field(Path('out/history'), description="Where model is saved when recording history")
+    save_path: Optional[Path] = Field(Path('out/history'), description="Where model is saved when recording history")
 
 class TrainLog(BaseModel):
     accuracy: Optional[float] = Field(None, description="accuracy")
@@ -114,7 +163,7 @@ class TrainLog(BaseModel):
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
     out_path: Path = Field(Path('out'), description="Where to save all logs for this config")
-    save_dir: Optional[Path] = Field(Path('out'), description="Where last run was saved")
+    save_path: Optional[Path] = Field(Path('out'), description="Where last run was saved")
     last_checkpoint: Optional[Path] = Field(None, description="Where last checkpoint was saved")
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
@@ -124,6 +173,18 @@ class Params(BaseModel):
     model: ModelParams
     logging: LoggingParams = Field(LoggingParams())
     dataset: Optional[Union[PathIntegrationDatasetParams, TemporalDatasetParams]] = None
+
+    @property
+    def M(self):
+        return self.model 
+
+    @property
+    def L(self):
+        return self.logging 
+
+    @property
+    def D(self):
+        return self.dataset 
 
 def load_yaml_config(filepath):
     with open(filepath, 'r') as file:
@@ -168,19 +229,19 @@ def update_params(path):
     # update grid search hdf and yaml files to reflect changes in parameters
     path = Path(path)
     P = load_yaml_config(path)
-    L = P.logging
+    L = P.L
     file_path = L.out_path / 'log.h5'
     df = pd.read_hdf(file_path, key='df', mode='r')
 
     def update(p):
-        # if p.logging.last_checkpoint is None:
-            # p.logging.last_checkpoint = next(p.logging.save_dir.glob('**/*.yaml')).parent
+        # if p.L.last_checkpoint is None:
+            # p.L.last_checkpoint = next(p.L.save_path.glob('**/*.yaml')).parent
         # if hasattr(p.model.training, 'radius_threshold'):
             # p.model.training.accuracy_threshold = p.model.training.radius_threshold
             # del p.model.training.radius_threshold
-        paths_attrs = ['out_path', 'save_dir', 'last_checkpoint']
+        paths_attrs = ['out_path', 'save_path', 'last_checkpoint']
         for attr in paths_attrs:
-            path = getattr(p.logging, attr)
+            path = getattr(p.L, attr)
             parts = path.parts
             if 'path_integration' in parts:
                 continue
@@ -192,7 +253,7 @@ def update_params(path):
                 continue
             new_parts = parts[:idx] + ('path_integration',) + parts[idx:]
             new_path = Path(*new_parts)
-            setattr(p.logging, attr, new_path)
+            setattr(P.L, attr, new_path)
         return p
     df['params'] = df['params'].apply(update)
     
@@ -202,10 +263,10 @@ def update_params(path):
 
     #### UPDATE YAML ####
     p = df.iloc[0]['params']
-    save_yaml_config(p, p.logging.out_path / 'parameters.yaml')
+    save_yaml_config(p, P.L.out_path / 'parameters.yaml')
     for idx, row in df.iterrows():
         p = row['params']
-        save_yaml_config(p, p.logging.last_checkpoint / 'parameters.yaml')
+        save_yaml_config(p, P.L.last_checkpoint / 'parameters.yaml')
 
     print('remmember to update config files as these were just the logged files')
 

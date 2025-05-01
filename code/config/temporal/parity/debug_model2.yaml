@@ -19,7 +19,7 @@ logging:
   history:
     buffer_size: 64
     record_history: true
-  out_path: out/single_run/temporal/parity/ok_model
+  out_path: out/single_run/temporal/parity/debug_model2
   train_log:
     accuracy: 0.8063794068270845
     epoch: 40
@@ -44,11 +44,11 @@ model:
     seed: 87807586
   reservoir_layer:
     init: random
-    k_avg: 5.0
-    k_max: 5
-    k_min: 5
+    k_avg: 10 
+    k_max: 10
+    k_min: 10
     mode: homogenous
-    n_nodes: 500
+    n_nodes: 25
     p: 0.5
     reset: true
     seed: 87807586

@@ -35,6 +35,49 @@ def remove_isolated_nodes(graph: nx.Graph, remove_connected_to_self_only=False):
         non_isolated_nodes = non_isolated_nodes - self_loops
     return graph.subgraph(non_isolated_nodes).copy()
 
+def constrain_degree_of_bipartite_mapping(a, b, min_degree, max_degree, p, in_degree=True):
+    '''
+    a and b repesent a bipartite mapping a→b
+    to build adjacency matrices for this we use and analogy of pigeons finding pigeon holes of a certain capacity
+    in_degree: sets control of in-degree vs out-degree
+    constraint: sets min max constrain on a or b
+    p: probability of connection from max - min
+
+    if in_degree = False we constrain out degree of a not b....
+    '''
+    capacity_range = max_degree - min_degree
+    constrained_set = b if in_degree else a
+    free_set = a if in_degree else b
+    edge_range = capacity_range * constrained_set 
+    edge_range = (np.random.random(edge_range) <= p).sum()
+    k = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, constrained_set, capacity_range) # probabilistic connections
+    k += min_degree # deterimistic connections
+
+    # project 1D in-degree sequence to random 2D adjacency matrix
+    w = random_projection_1d_to_2d(k, m=free_set)
+    if in_degree:
+        return w
+    else:
+        return w.T
+
+def random_constrained_stub_matching(a, b, a_min, a_max, b_min, b_max, p):
+    # make ka:
+    capacity_range_a = a_max - a_min
+    capacity_range_b = b_max - b_min
+    edge_range = min(capacity_range_a * b, capacity_range_b * a)
+    edge_range = (np.random.random(edge_range) <= p).sum()
+    ka_out = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, a, capacity_range_a) # probabilistic connections
+    ka_out += a_min # deterimistic connections
+
+    # make kb:
+    edge_range = ka_out.sum() 
+    kb_in = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, b, capacity_range_b) # probabilistic connections
+    kb_in += b_min # deterimistic connections
+    
+    # project 1D in-degree sequence to random 2D adjacency matrix
+    w = random_boolean_adjancency_matrix_from_two_degree_sets(ka_out, kb_in)
+    return w
+
 def gen_boolean_array(n):
     return np.random.randint(0, 2, size=n, dtype=bool)
 
@@ -272,12 +315,11 @@ def random_boolean_adjancency_matrix_from_two_degree_sets(ka: np.ndarray, kb: np
    
 
 if __name__ == '__main__':
-    G = generate_graph_w_k_avg_incoming_edges(n_nodes=1000, k_avg=3, k_max=6, k_min=2, self_loops=0)
-    adj_matrix = nx.adjacency_matrix(G).todense()
-    k = adj_matrix.sum(axis=0)
+    w = generate_adjacency_matrix(n_nodes=1000, k_avg=3, k_max=6, k_min=2, self_loops=0)
+    k = w.sum(axis=0)
     print(k)
     print(k.min(), k.max())
-    eigenvalues = np.linalg.eigvals(adj_matrix)
+    eigenvalues = np.linalg.eigvals(w)
     rho = max(abs(eigenvalues))
     print(rho)
     eigenvalue_magnitudes = np.abs(eigenvalues)

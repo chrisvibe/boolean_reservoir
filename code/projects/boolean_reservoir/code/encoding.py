@@ -98,24 +98,24 @@ class BinaryEmbedding:
         """Encode float data using the Binary Embedding method with the pre-generated random key vectors.
         
         Args:
-            data: A normalized [0, 1] float tensor of shape (batch_size, sequence_length, n_inputs, bit_resolution).
+            data: A normalized [0, 1] float tensor of shape (batch_size, sequence_length, features, bit_resolution).
                 
         Returns:
-            A binary encoded tensor with self-similar properties of shape (batch_size, sequence_length, n_inputs, n*bit_resolution).
+            A binary encoded tensor with self-similar properties of shape (batch_size, sequence_length, features, n*bit_resolution).
         """
-        batch_size, seq_length, n_inputs = data.size()
+        batch_size, seq_length, features = data.size()
         
         # Convert normalized data to binary representation
         binary_tensors = dec2bin(data, self.b).to(torch.uint8)
         
         # Expand dimensions for broadcasting
-        binary_tensors = binary_tensors.unsqueeze(3).expand(-1, -1, -1, self.n, -1)  # Output shape: (batch_size, seq_length, n_inputs, self.n, self.b)
+        binary_tensors = binary_tensors.unsqueeze(3).expand(-1, -1, -1, self.n, -1)  # Output shape: (batch_size, seq_length, features, self.n, self.b)
     
         # Perform XOR operations
         encoded_tensors = binary_tensors ^ self.random_boolean_keys
 
         # Flatten encoded tensors per value
-        encoded_tensors = encoded_tensors.view(batch_size, seq_length, n_inputs, -1)
+        encoded_tensors = encoded_tensors.view(batch_size, seq_length, features, -1)
 
         return encoded_tensors
 
@@ -154,8 +154,8 @@ if __name__ == '__main__':
     encoder = BinaryEmbedding(b=4, n=3)
     batch_size = 2
     s = 3
-    n_inputs = 2
-    x = torch.randint(0, 10, (batch_size, s, n_inputs,), dtype=torch.float) / 10
+    features = 2
+    x = torch.randint(0, 10, (batch_size, s, features,), dtype=torch.float) / 10
 
     encoded_tensors = encoder.encode(x)
     print("Input Tensor:\n", x.numpy())
