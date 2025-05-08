@@ -57,7 +57,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     print('-'*10, '\n', p, '\n', '-'*10)
     
     # Load model from checkpoint
-    model = BooleanReservoir(load_path=P.L.last_checkpoint)
+    model = BooleanReservoir(load_path=p.L.last_checkpoint)
     
     # Train a new model with the same parameters
     p2 = deepcopy(model.P)

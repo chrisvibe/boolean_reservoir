@@ -14,4 +14,6 @@ build_base_image()
     docker build -t $image:$version $build_context
 }
 
+mkdir -p ../data
+mkdir -p ../out
 build_base_image

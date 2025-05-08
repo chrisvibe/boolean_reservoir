@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch
 import pandas as pd
 from tqdm import tqdm
-from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed
+from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed, CudaMemoryManager
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.graph_visualizations_dash import *
 from projects.boolean_reservoir.code.parameters import * 
@@ -47,19 +47,14 @@ def criterion_strategy(strategy):
         raise ValueError
 
 def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None):
+    mem = CudaMemoryManager()
+    mem.manage_memory()
     if model is None:
-        model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
+        model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path).to(mem.device)
     P = model.P
-    T = P.model.training
 
     # Init data
-    torch.cuda.empty_cache()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = dataset_init(P)
-    dataset.data['x'] = dataset.data['x'].to(device)
-    dataset.data['y'] = dataset.data['y'].to(device)
-    dataset.data['x_' + T.evaluation] = dataset.data['x_' + T.evaluation].to(device)
-    dataset.data['y_' + T.evaluation] = dataset.data['y_' + T.evaluation].to(device)
+    dataset = dataset_init(P).to(mem.device)
     _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
     if save_model:
         model.save()
@@ -119,7 +114,6 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
 
 def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations: list[Params]=None):
     # dataset is re-initialized when parameters from input_layer or dataset change
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)
     P = load_yaml_config(yaml_path)
@@ -134,7 +128,7 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
     n_sample = L.grid_search.n_samples
     last_dataset_params = last_input_params = dataset = best_params = None
     history = list() 
-    torch.cuda.empty_cache()
+    mem = CudaMemoryManager()
 
     # TODO split dataset and input layer init, atm this assumes dataset_init is invariant to I.seed
     def is_equal_except_seed(this, that):
@@ -147,6 +141,7 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
 
     pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
     for i, p in enumerate(param_combinations):
+        mem.manage_memory()
         for j in range(n_sample):
             t = p.M.T
             print('#'*60)
@@ -156,16 +151,12 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
             p.M.O.seed = k 
             t.seed = k 
             if last_dataset_params != p.D or not is_equal_except_seed(last_input_params, p.M.I):
-                dataset = dataset_init(P=p)
-                dataset.data['x'] = dataset.data['x'].to(device)
-                dataset.data['y'] = dataset.data['y'].to(device)
-                dataset.data['x_' + t.evaluation] = dataset.data['x_' + t.evaluation].to(device)
-                dataset.data['y_' + t.evaluation] = dataset.data['y_' + t.evaluation].to(device)
+                dataset = dataset_init(P=p).to(mem.device)
                 last_dataset_params = p.D
                 last_input_params = p.M.I
             model = best_epoch = None
             try:
-                model = BooleanReservoir(p).to(device)
+                model = BooleanReservoir(p).to(mem.device)
                 best_epoch, model, _ = train_and_evaluate(model, dataset, record_stats=False, verbose=False, accuracy=accuracy)
                 model.to(cpu_device)
             except (ValueError, AttributeError, TypeError) as error:
@@ -198,4 +189,3 @@ def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:Accuracy
     print('#'*60)
     print(f'Best parameters:\n{best_params}')
     return P, best_params
-

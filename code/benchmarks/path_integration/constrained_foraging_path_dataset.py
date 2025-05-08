@@ -64,6 +64,11 @@ class ConstrainedForagingPathDataset(Dataset):
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
+
+    def to(self, device):
+        for key in self.data.keys():
+            self.data[key] = self.data[key].to(device)
+        return self
     
     def save_data(self):
         self.data_path.parent.mkdir(parents=True, exist_ok=True)

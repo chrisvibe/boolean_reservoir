@@ -9,7 +9,7 @@ import gzip
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
 from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming, random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
-from projects.boolean_reservoir.code.utils import set_seed, override_symlink
+from projects.boolean_reservoir.code.utils import set_seed, override_symlink, print_pretty_binary_matrix
 import numpy as np
 import sympy
 
@@ -60,6 +60,7 @@ class BatchedTensorHistoryWriter:
         self.buffer_size = buffer_size
         self.buffer = []
         self.meta_buffer = []
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def append_batch(self, batch_tensor, meta_data):
         self.buffer.append(batch_tensor.clone().cpu())
@@ -102,7 +103,7 @@ class BatchedTensorHistoryWriter:
             all_data.append(tensor_data)
             all_meta_data.append(meta_data)
             idx += 1
-        combined_data = torch.cat(all_data, dim=0)
+        combined_data = torch.cat(all_data, dim=0).to(self.device)
         combined_meta_data = pd.concat(all_meta_data, ignore_index=True, axis=0)
 
         df = combined_meta_data
@@ -123,7 +124,6 @@ class BooleanReservoir(nn.Module):
     # a yaml file doesnt load any parameters while a checkpoint does
     # params can be used to override stuff in conjunction with load_path
     def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if load_path:
             load_path = Path(load_path)
             if load_path.suffix in ['.yaml', '.yml']:
@@ -148,16 +148,17 @@ class BooleanReservoir(nn.Module):
             set_seed(self.I.seed)
             self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
             self.w_in = self.load_or_generate('w_in', load_dict, lambda:
-                self.load_torch_tensor(self.I.w_in, self.device) if self.I.w_in
+                self.load_torch_tensor(self.I.w_in) if self.I.w_in
                   else self.bipartite_mapping_strategy(self.I.distribution, self.I.bits, self.I.n_nodes)
             )
             # TODO optionally control each quadrant individually
-            # w_ii = w_ir = None
-            # if 'graph' not in load_dict:
-                # w_ii = torch.zeros((self.I.n_nodes, self.I.n_nodes))  # TODO no effect atm - add flexibility for connections betwen input nodes (I→I)
-                # w_ir = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.R.n_nodes)
-            self.node_indices = torch.arange(self.M.n_nodes).to(self.device)
-            self.input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=bool, device=self.device)
+            w_ii = w_ir = None
+            if 'graph' not in load_dict:
+                w_ii = torch.zeros((self.I.n_nodes, self.I.n_nodes))  # TODO no effect atm - add flexibility for connections betwen input nodes (I→I)
+                # w_ii = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.I.n_nodes)
+                w_ir = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.R.n_nodes)
+            self.node_indices = torch.arange(self.M.n_nodes)
+            self.input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=bool)
             self.input_nodes_mask[:self.I.n_nodes] = True
 
             # RESERVOIR LAYER
@@ -166,24 +167,21 @@ class BooleanReservoir(nn.Module):
             # Graph is divided into nodes that recieve input (I) and nodes that dont (R)
             # This forms four partitions when constructing the adjacency matrix that can be fine-tuned
             # TODO optionally control each quadrant individually
-            # w_ri = w_rr = None
-            # if 'graph' not in load_dict:
-                # w_ri = torch.zeros((self.R.n_nodes, self.I.n_nodes))
-                # w_rr = torch.tensor(generate_adjacency_matrix(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops))
-            # self.graph = self.load_or_generate('graph', load_dict, lambda:
-                # self.build_graph_from_quadrants(w_ii, w_ir, w_ri, w_rr)
-            # )
-            self.graph = self.load_or_generate('graph', load_dict,
-                self.build_graph
+            w_ri = w_rr = None
+            if 'graph' not in load_dict:
+                w_ri = torch.zeros((self.R.n_nodes, self.I.n_nodes))
+                # w_ri = self.bipartite_mapping_strategy(self.I.connection, self.R.n_nodes, self.I.n_nodes)
+                w_rr = torch.tensor(generate_adjacency_matrix(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops))
+            self.graph = self.load_or_generate('graph', load_dict, lambda:
+                self.build_graph_from_quadrants(w_ii, w_ir, w_ri, w_rr)
             )
             assert self.M.n_nodes == self.graph.number_of_nodes()
             self.adj_list = graph2adjacency_list_incoming(self.graph)
 
             # Precompute adj_list and expand it to the batch size
-            self.adj_list, self.adj_list_mask, self.no_neighbours_mask = map(lambda x: x.to(self.device),
-                self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max)
-            )
+            self.adj_list, self.adj_list_mask, self.no_neighbours_mask = self.homogenize_adj_list(self.adj_list, max_length=self.R.k_max)
             self.max_connectivity = self.adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
+            self.no_neighbours_indices = self.no_neighbours_mask.nonzero(as_tuple=True)[0]
 
             # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
             # LUT allows incoming edges from I + R for each node
@@ -192,24 +190,22 @@ class BooleanReservoir(nn.Module):
             )
 
             # Precompute bin2int conversion mask 
-            self.powers_of_2 = self.make_minimal_powers_of_two(self.max_connectivity).to(self.device)
+            self.powers_of_2 = self.make_minimal_powers_of_two(self.max_connectivity)
 
             # Initialize state (R + I)
             self.states_parallel = None
             self.initial_states = self.load_or_generate('init_state', load_dict, lambda:
                 self.initialization_strategy(self.R.init)
-            ).to(self.device)
+            )
             self.reset_reservoir(self.T.batch_size)
-            self.states_parallel.to(self.device)
             
             # OUTPUT LAYER
             set_seed(self.O.seed)
-            self.readout = nn.Linear(self.R.n_nodes, self.O.n_outputs).to(self.device) # readout of R only TODO add option to choose
+            self.readout = nn.Linear(self.R.n_nodes, self.O.n_outputs) # readout of R only TODO add option to choose
             if 'weights' in load_dict:
                 self.load_state_dict(load_dict['weights'])
             self.output_activation = self.output_activation_strategy(self.O.activation)
             self.output_nodes_mask = ~self.input_nodes_mask # TODO add option to choose with w_out (bit mask or mapping)
-            self.output_nodes_mask.to(self.device)
             set_seed(self.R.seed)
 
             # LOGGING
@@ -222,6 +218,30 @@ class BooleanReservoir(nn.Module):
             self.L.history.save_path = self.save_path / 'history'
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
+            self.device = None
+    
+    def to(self, device=None, dtype=None, non_blocking=False):
+        super().to(device=device, dtype=dtype, non_blocking=non_blocking)
+        if device is not None:
+            self.device = device
+            self.move_to_device(device)
+        return self
+    
+    def move_to_device(self, device):
+        attributes = [
+            'w_in',
+            'node_indices',
+            'input_nodes_mask',
+            'adj_list',
+            'adj_list_mask',
+            'no_neighbours_indices',
+            'lut',
+            'powers_of_2',
+            'initial_states',
+            'output_nodes_mask',
+            'states_parallel'
+        ]
+        list(map(lambda attr: setattr(self, attr, getattr(self, attr).to(device)), attributes))
 
     def add_graph_labels(self, graph):
         labels_mapping = {node: node for node in graph.nodes()}
@@ -249,12 +269,6 @@ class BooleanReservoir(nn.Module):
             edge_quadrants[(u, v)] = quadrant
         nx.set_edge_attributes(graph, edge_quadrants, 'quadrant')
 
-    def build_graph(self):
-        # TODO this is wrong as it mixes model levels settings with reservoir level
-        w = generate_adjacency_matrix(self.M.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops)
-        graph = nx.from_numpy_array(w, create_using=nx.DiGraph)
-        return graph
-    
     def build_graph_from_quadrants(self, w_ii, w_ir, w_ri, w_rr):
         w_i = torch.cat((w_ii, w_ir), dim=1)
         w_r = torch.cat((w_ri, w_rr), dim=1)
@@ -310,53 +324,56 @@ class BooleanReservoir(nn.Module):
             return self.lut[self.node_indices, idx]
         raise ValueError
 
-    def bipartite_mapping_strategy(self, strategy: str, a: int, b:int):
+    def bipartite_mapping_strategy(self, strategy_parameters_str: str, a: int, b:int):
         # produce w [axb] matrix → bipartite map, by default a maps to b but this can be inverted by swaping a and b in the input string
         # notation I: a and b get their names from mapping notation; number of nodes on the left and right side respectively in a bipartite map
         # notation II: k is the edge count per node (array)
         expression_evaluator = ExpressionEvaluator(self.P, {'a': a, 'b': b})
-        parts = strategy.split('-')
+        if '-' in strategy_parameters_str:
+            strategy, parameters = strategy_parameters_str.split('-', 1)
+            parameters = parameters.split(':')
+        else:
+            strategy = strategy_parameters_str
+            parameters = None
         w = None
-        if parts[0] == 'identity':
+        if strategy == 'identity':
             w = np.eye(a, b)
-        elif parts[0] == 'stub':
+        elif strategy == 'stub':
             # idea: make a determinisitic bipartite graph + a probabilitic mapping
             # constrain in and out degree simultaneously
             # the deterministic mapping is from a_min:b_min, the probabilistic increments this to a_max, b_max by probability p
 
             # Parse a_min, a_max, b_min, b_max, p 
-            parts = parts[1].split(':')
-            assert len(parts) == 5, "Strategy must have format 'stub-a_min:a_max:b_min:b_max:p'"
-            a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = parts
+            assert len(parameters) == 5, "a→b [{a}x{b}] - Strategy must have format 'stub-a_min:a_max:b_min:b_max:p'"
+            a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = parameters
             a_min = int(expression_evaluator.to_float(a_min_expr))
             a_max = int(expression_evaluator.to_float(a_max_expr))
             b_min = int(expression_evaluator.to_float(b_min_expr))
             b_max = int(expression_evaluator.to_float(b_max_expr))
             p = expression_evaluator.to_float(p_expr)
             assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
-            assert 0 <= b_min <= b_max <= a, f'incoming connections per node in b: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {a} (a)'
-            assert 0 <= a_min <= a_max <= b, f'outgoing connections per node in a: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {b} (b)'
+            assert 0 <= b_min <= b_max <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {a} (a)'
+            assert 0 <= a_min <= a_max <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {b} (b)'
 
             w = random_constrained_stub_matching(a, b, a_min, a_max, b_min, b_max, p)
-        elif parts[0] in {'in', 'out'}:
+        elif strategy in {'in', 'out'}:
             # idea: make a determinisitic bipartite graph + a probabilitic mapping
             # constrain either in or out degree
             # the deterministic mapping is to satisfy min_degree, the probabilistic increments this to max_degree by probability p
 
             # Parse b_min, b_max, p 
-            parts = parts[1].split(':')
-            assert len(parts) == 3, "Strategy must have format 'in-min_degree:max_degree:p'"
-            min_degree_expr, max_degree_expr, p_expr = parts
+            assert len(parameters) == 3, "Strategy must have format 'in-min_degree:max_degree:p'"
+            min_degree_expr, max_degree_expr, p_expr = parameters
             min_degree = int(expression_evaluator.to_float(min_degree_expr))
             max_degree = int(expression_evaluator.to_float(max_degree_expr))
             p = expression_evaluator.to_float(p_expr)
             assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
 
-            in_degree = parts[0] == 'in'
-            if in_degree: # in-degree of b
-                assert 0 <= min_degree <= max_degree <= a, f'incoming connections per node in b: 0 <= {min_degree} (b_min) <= {max_degree} (b_max) <= {a} (a)'
-            else: # out-degree of a
-                assert 0 <= min_degree <= max_degree <= b, f'outgoing connections per node in a: 0 <= {min_degree} (a_min) <= {max_degree} (a_max) <= {b} (b)'
+            if strategy == 'in':
+                assert 0 <= min_degree <= max_degree <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {min_degree} (b_min) <= {max_degree} (b_max) <= {a} (a)'
+            elif strategy == 'out':
+                assert 0 <= min_degree <= max_degree <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {min_degree} (a_min) <= {max_degree} (a_max) <= {b} (b)'
+            in_degree = strategy == 'in'
             w = constrain_degree_of_bipartite_mapping(a, b, min_degree, max_degree, p, in_degree=in_degree)
         if w is not None:
             return torch.tensor(w, dtype=torch.uint8)
@@ -461,7 +478,7 @@ class BooleanReservoir(nn.Module):
         return graph
 
     @staticmethod
-    def load_torch_tensor(path, device):
+    def load_torch_tensor(path, device=None):
         tensor = torch.load(path, weights_only=True, map_location=device)
         return tensor
     
@@ -483,7 +500,7 @@ class BooleanReservoir(nn.Module):
         paths = {file: folder_path / f'{file}.{filetype}' for file, filetype in files}
         return paths
     
-    def bin2int(self, x):
+    def bin2int(self, x): # TODO consider bit packig?
         vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 
@@ -539,24 +556,14 @@ class BooleanReservoir(nn.Module):
             a = b = 0
             for fi in range(f):
 
-                # Perturb reservoir nodes with partial input depending on f dimension
-                x_i = x[:, si, fi]
+                # # Perturb reservoir nodes with partial input depending on f dimension
+                x_i = x[:m, si, fi]
                 b += self.I.bits_per_feature
                 w_in_i = self.w_in[a:b]
                 a = b
-                input_mask = w_in_i.any(dim=0)
-                perturbations = x_i @ w_in_i > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
-                self.states_parallel[:m, self.input_nodes_mask] = (self.input_pertubation(self.states_parallel[:m, self.input_nodes_mask], perturbations) & input_mask) | (self.states_parallel[:m, self.input_nodes_mask] & ~input_mask)
-
-                # # TODO consider indices instead 
-                # # in outer loop: perturbations = x @ self.w_in # not sure this takes away stepping through features...
-                # b += self.I.bits_per_feature
-                # w_in_i = self.w_in[a:b]
-                # selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
-                # perturbations_i = perturbations[a:b]
-                # a = b
-                # x_i = x[:, si, fi, selected_input_indices]
-                # input_nodes[selected_input_indices] = self.input_pertubation(input_nodes[selected_input_indices], perturbations_i)
+                selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
+                perturbations_i = (x_i.to(torch.float16) @ w_in_i.to(torch.float16)) > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation, TODO gpu doesnt like uint8...
+                self.states_parallel[:m, selected_input_indices] = self.input_pertubation(self.states_parallel[:m, selected_input_indices], perturbations_i[:, selected_input_indices]).to(torch.uint8)
 
                 self.batch_record(m, phase='input_layer', s=si+1, f=fi+1)
 
@@ -571,9 +578,9 @@ class BooleanReservoir(nn.Module):
                 idx = self.bin2int(neighbour_states_paralell)
 
                 # Update the state with LUT for each node
-                # TODO more complicated than necesarry - no neighbours defaults in the first LUT entry → fix by no_neighbours_mask
+                # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
                 states_parallel = self.lut[self.node_indices, idx]
-                states_parallel[:, self.no_neighbours_mask] = self.states_parallel[:m, self.no_neighbours_mask]
+                states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
                 self.states_parallel[:m] = states_parallel
 
                 if not ((si == s - 1) and (fi == f - 1)): # skip last recording, as this is output_layer

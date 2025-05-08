@@ -89,15 +89,15 @@ class ReservoirParams(BaseModel):
     k_min: Union[int, List[int]] = Field(0, description="Min degree of incoming nodes")
     k_avg: Union[float, List[float]] = Field(2, description="Average degree of incoming nodes")
     k_max: Union[int, List[int]] = Field(None, description="Maximum degree of incoming nodes")
-    mode: Union[str, List[str]] = Field('heterogenous', description="heterogenous: each node can have different number of neighbours, homogenous: each node has k neighbours set by k_avg")
+    mode: Union[str, List[str]] = Field('heterogeneous', description="heterogeneous: each node can have different number of neighbours, homogeneous: each node has k neighbours set by k_avg")
     p: Union[float, List[float]] = Field(0.5, description="Probability for 1 in LUT (look up table)")
     reset: Optional[Union[bool, List[bool]]] = Field(True, description="Reset to init state after each sample")
     self_loops: Optional[Union[float, List[float]]] = Field(None, description="Probability of self-loops in graph; normalized by number of nodes")
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
     @model_validator(mode='after')
-    def override_for_homogenous_mode(self):
-        if self.mode == 'homogenous':
+    def override_for_homogeneous_mode(self):
+        if self.mode == 'homogeneous':
             if isinstance(self.k_avg, list):
                 self.k_min = self.k_max = 0
             else:

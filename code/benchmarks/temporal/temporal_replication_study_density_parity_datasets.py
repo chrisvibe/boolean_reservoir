@@ -32,7 +32,7 @@ class TemporalDatasetBase(Dataset):
         for _ in range(samples):
             arr = self.gen_boolean_array(stream_length)
             label = task(arr, tao, window_size)
-            data_x.append(torch.tensor(arr, dtype=torch.uint8).unsqueeze(-1).unsqueeze(-1)) # s, d, b
+            data_x.append(torch.tensor(arr, dtype=torch.uint8).unsqueeze(-1).unsqueeze(-1)) # s, f, b
             data_y.append(torch.tensor(label, dtype=torch.float).unsqueeze(0))
 
         return {
@@ -58,6 +58,11 @@ class TemporalDatasetBase(Dataset):
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
+
+    def to(self, device):
+        for key in self.data.keys():
+            self.data[key] = self.data[key].to(device)
+        return self
     
     def save_data(self):
         self.data_path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +78,7 @@ class TemporalDatasetBase(Dataset):
         x = self.data['x'][idx]
         y = self.data['y'][idx]
         return x, y
-
+    
     @staticmethod
     def gen_boolean_array(n):
         return np.random.randint(0, 2, size=n, dtype=bool)

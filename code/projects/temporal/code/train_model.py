@@ -13,11 +13,6 @@ if __name__ == '__main__':
     # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    p, model, dataset, history = train_single_model('config/temporal/parity/debug_model2.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    # plot_many_things(model, dataset, history)
-    for i in range(3):
-        plot_activity_trace(model.save_path, file_name=f"activity_trace_with_phase_{i}.png", highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == i])
-
     # p, model, dataset, history = train_single_model('config/temporal/parity/ok_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
@@ -31,5 +26,16 @@ if __name__ == '__main__':
 
     # # Grid search stuff 
     # #####################################
-    # grid_search('config/temporal/density/initial_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    # grid_search('config/temporal/parity/initial_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    configs = [
+        'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
+        'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
+        'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+        'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
+
+        'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
+        'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
+        'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
+        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
+    ]
+    for c in configs:
+        grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy)

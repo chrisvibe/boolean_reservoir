@@ -205,7 +205,7 @@ def plot_graph_with_weight_coloring_3D(graph: nx.Graph, readout: Linear=None, la
 
 if __name__ == '__main__':
     from reservoir import BooleanReservoir
-    model = BooleanReservoir(load_path='/out/temporal/reservoir/kq_and_gr/homogenous/runs/last_run/history/checkpoint')
+    model = BooleanReservoir(load_path='/out/temporal/reservoir/kq_and_gr/homogeneous/runs/last_run/history/checkpoint')
     graph = model.graph
     model.add_graph_labels(graph)
     # graph = remove_isolated_nodes(graph)

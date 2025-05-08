@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import random
+from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix
 
 def generate_graph_w_k_avg_incoming_edges(n_nodes, k_min=None, k_avg=None, k_max=None, self_loops=None):
     adj_matrix = generate_adjacency_matrix(n_nodes=n_nodes, k_min=k_min, k_avg=k_avg, k_max=k_max, self_loops=self_loops)

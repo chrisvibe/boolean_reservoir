@@ -152,7 +152,7 @@ def plot_histogram_of_top_percentile_vs_config_id(path, df, top_percentile=0.1):
     config_counts = config_ids.value_counts().sort_index()
     top_config_id = config_counts.idxmax()
     print(f"Config ID with highest frequency: {top_config_id}, Count: {config_counts[top_config_id]}")
-    print(f"Checkpoint: {str(df.iloc[top_config_id].params.P.L.last_checkpoint)}")
+    print(f"Checkpoint: {str(df.iloc[top_config_id].params.L.last_checkpoint)}")
     
     plt.figure(figsize=(10, 6))
     plt.bar(config_counts.index, config_counts.values, alpha=0.7, color='skyblue', edgecolor='black')
@@ -209,13 +209,13 @@ def plot_dynamics_history(path):
     plt.savefig(save_path / file, bbox_inches='tight')
 
 
-def plot_activity_trace(path, file_name="activity_trace_with_phase.png", highlight_input_nodes=False, data_filter=lambda df: df[df['phase'] != 'input_layer'], aggregation_handle=lambda df: df[df['sample_id'] == 0]):
+def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_phase.png", highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0]):
     path = Path(path)
-    save_path = path / 'visualizations'
+    save_path = save_path if save_path else path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
 
     # Load history and metadata
-    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history(include={'parameters', 'graph', 'w_in'})
+    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history(include={'parameters', 'w_in'})
     expanded_meta = data_filter(expanded_meta)
     expanded_meta = aggregation_handle(expanded_meta) 
     history = history[expanded_meta.index]

@@ -1,0 +1,46 @@
+logging:
+  history:
+    buffer_size: 64
+    record_history: True
+  out_path: out/temporal/kq_and_gr/homogeneous-deterministic-tao5
+model:
+  input_layer:
+    bits_per_feature: 1
+    distribution: identity
+    connection: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
+    encoding: base2
+    interleaving: 0
+    features: 10
+    pertubation: [override, xor]
+    redundancy: 1
+    w_in: null
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+  reservoir_layer:
+    init: [zeros, random]
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    k_min: 0
+    k_max: 25
+    mode: homogeneous
+    n_nodes: 25
+    p: 0.5
+    reset: true
+    self_loops: null
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    epochs: 40
+    evaluation: dev
+    learning_rate: 0.001
+dataset: # this whole section is repurposed to control the custom experiments
+  task: density # not really just using the x values and ignoring y
+  bit_stream_length: 10
+  window_size: 3 # not using this
+  tao: 5 # controls tao for KQ and GR instead of tao for temporal density task (bits overriden to make similar inputs)
+  split: # not training the model, just recording state changes with input
+    train: 1
+    dev: 0
+    test: 0
+  samples: 25 # number of samples/random seeds per configuration. overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)

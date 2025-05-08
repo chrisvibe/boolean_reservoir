@@ -2,17 +2,19 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir, BatchedTensorHistoryWriter
 from benchmarks.temporal.temporal_replication_study_density_parity_datasets import TemporalDensityDataset
-from projects.boolean_reservoir.code.parameters import load_yaml_config, generate_param_combinations, Params
+from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config, generate_param_combinations, Params
 from projects.boolean_reservoir.code.graphs import calc_spectral_radius 
-from projects.temporal.code.visualizations import plot_kq_and_gr, group_df_data_by_parameters, plot_kq_and_gr_many_config, plot_optimal_k_vs_k_avg
+from projects.temporal.code.visualizations import plot_kq_and_gr, group_df_data_by_parameters, plot_kq_and_gr_many_config, plot_optimal_k_vs_n
+from projects.boolean_reservoir.code.visualizations import plot_activity_trace 
 import pandas as pd
-from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink
+from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager
 from pathlib import Path
 from tqdm import tqdm
 
 def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: list, config: int, sample: int):
     # nest history by metric (load from same model and evaluate on KQ and GR)
-    new_save_path = model.L.save_path / 'history' / metric / 'history'
+    nested_out = model.L.save_path / 'history' / metric
+    new_save_path = nested_out / 'history'
     model.history = BatchedTensorHistoryWriter(
         save_path=new_save_path, 
         buffer_size=model.history.buffer_size
@@ -29,7 +31,7 @@ def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: l
     filter = expanded_meta[expanded_meta['phase'] == 'output_layer']
     filtered_history = history[filter.index].to(torch.float)
     reservoir_node_history = filtered_history[:, ~model.input_nodes_mask]
-    
+
     rank = torch.linalg.matrix_rank(reservoir_node_history)
     data.append({
         'config': config,
@@ -38,20 +40,23 @@ def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: l
         'value': rank.item()
     })
 
+    # # TODO comment out - debugging
+    # for z in range(10):
+    #    plot_activity_trace(nested_out, save_path=model.L.save_path / 'visualizations', file_name=f"activity_trace_with_phase_{config}_{sample}_{metric}_r_{rank.item()}_t_{z}.png", aggregation_handle=lambda df: df[df['sample_id'] == z])
 
-def simulate_state_transisions_and_calculate_rank(p: Params, dataset_kq: Dataset, dataset_gr: Dataset, data: list, config: int):
+
+
+def simulate_state_transisions_and_calculate_rank(p: Params, device: torch.device, dataset_kq: Dataset, dataset_gr: Dataset, data: list, config: int):
     subset_size = p.M.R.n_nodes # square matrix per rank calculation
     data_loader_kq = DataLoader(dataset_kq, batch_size=subset_size, shuffle=False, drop_last=True)
     data_loader_gr = DataLoader(dataset_gr, batch_size=subset_size, shuffle=False, drop_last=True)
-    
-    i = 0
-    for (x_kq, _), (x_gr, _) in zip(data_loader_kq, data_loader_gr):
+
+    for i, ((x_kq, _), (x_gr, _)) in enumerate(zip(data_loader_kq, data_loader_gr)):
         seed = generate_unique_seed(config, i)
-        i += 1
         p.M.I.seed = seed 
         p.M.R.seed = seed 
         p.M.O.seed = seed 
-        model = BooleanReservoir(p)
+        model = BooleanReservoir(p).to(device)
         model.save()
         model.eval()
 
@@ -69,7 +74,7 @@ def simulate_state_transisions_and_calculate_rank(p: Params, dataset_kq: Dataset
             'metric': 'spectral_radius',
             'value': spectral_radius
         })
-       
+
         process_batch(model, x_kq, 'kq', data, config, i)
         process_batch(model, x_gr, 'gr', data, config, i)
 
@@ -95,23 +100,30 @@ def get_generalization_rank_dataset(p: Params):
     dataset.data['x'] = x.view(shape)
     return dataset
 
-def calc_kernel_quality_and_generalization_rank(yaml_path, samples_per_configuration):
+def calc_kernel_quality_and_generalization_rank(yaml_path):
     # get n_node samples for KQ and GR, as well as some graph properties
     # written with the assumption that n_nodes doesnt change
     P = load_yaml_config(yaml_path)
-    P.D.samples = P.M.R.n_nodes * samples_per_configuration
-    P.D.update_path()
+    P = override_samples_in_p(P)
     param_combinations = generate_param_combinations(P)
     df = prepare_metrics_data(param_combinations)
     return df, P
 
+def override_samples_in_p(p: Params):
+    p.D.samples = p.M.R.n_nodes * p.D.samples # P.D.samples is the number of samples per configuration up until here where it actually becomes the number of samples (overidden)
+    p.D.update_path()
+    return p
+
 def prepare_metrics_data(param_combinations: list[Params]):
     data = []
+    mem = CudaMemoryManager()
     for i, p in enumerate(tqdm(param_combinations, desc="Processing configurations")):
+        mem.manage_memory()
         p.D.seed = i
-        dataset_kq = get_kernel_quality_dataset(p) 
-        dataset_gr = get_generalization_rank_dataset(p)
-        simulate_state_transisions_and_calculate_rank(p, dataset_kq, dataset_gr, data, i)
+        # TODO consider overriding tao here if its set to none with a random value
+        dataset_kq = get_kernel_quality_dataset(p).to(mem.device)
+        dataset_gr = get_generalization_rank_dataset(p).to(mem.device)
+        simulate_state_transisions_and_calculate_rank(p, mem.device, dataset_kq, dataset_gr, data, i)
 
     df = pd.DataFrame(data)
     pivot_df = df.pivot_table(index=['config', 'sample'], columns='metric', values='value', aggfunc='first').reset_index()
@@ -122,36 +134,25 @@ def prepare_metrics_data(param_combinations: list[Params]):
 
 if __name__ == '__main__':
     paths = list()
-    paths.append('config/temporal/reservoir/kg_and_gr_homogenous.yaml')
-    paths.append('config/temporal/reservoir/kg_and_gr_heterogenous.yaml')
+    # paths.append('config/temporal/kq_and_gr/test.yaml')
+
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
+
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
+
+    paths.append('config/temporal/kq_and_gr/vary_tao/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_tao/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_tao/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_tao/heterogeneous_stochastic.yaml')
+
+    # generate data
     for path in paths:
-        df, P = calc_kernel_quality_and_generalization_rank(path, samples_per_configuration=25)
-        df.loc[:, 'k_avg'] = df['params'].apply(lambda p: p.M.R.k_avg)
-
-        grouped_df = group_df_data_by_parameters(df)
-        plot_kq_and_gr_many_config(grouped_df, P, 'many_config.png')
-        for i, (name, subset) in enumerate(sorted(grouped_df, key=lambda x: x[0])):
-            print(i, ':')
-            p = subset.iloc[0]['params']
-            print(p.M.I)
-            print(p.M.R)
-            print(p.M.O)
-            print(p.D)
-            plot_kq_and_gr(subset, P, f'config_{i}_kq_and_gr.png')
-
-        # plot_optimal_k_vs_k_avg(df)
-
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'homogenous')]
-        # plot_kq_and_gr(subset, P, 'homogenous_kq_and_gr.png')
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'heterogenous')]
-        # plot_kq_and_gr(subset, P, 'heterogenous_kq_and_gr.png')
-
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'homogenous') & (df['metric'] == 'kq')]
-        # plot_kq_and_gr(subset, P, 'homogenous_kq.png')
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'heterogenous') & (df['metric'] == 'kq')]
-        # plot_kq_and_gr(subset, P, 'heterogenous_kq.png')
-
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'homogenous') & (df['metric'] == 'gr')]
-        # plot_kq_and_gr(subset, P, 'homogenous_gr.png')
-        # subset = df[df['params'].apply(lambda p: p.M.R.mode == 'heterogenous') & (df['metric'] == 'gr')]
-        # plot_kq_and_gr(subset, P, 'heterogenous_gr.png')
+        df, P = calc_kernel_quality_and_generalization_rank(path)
+        data_file_path = P.L.out_path / 'df.h5'
+        df.to_hdf(data_file_path, key='df', mode='w')

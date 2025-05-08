@@ -30,15 +30,15 @@ def group_df_data_by_parameters(df):
         p.D.path = None
         p.logging = None
         return p
+    df = df.sort_values(by='config')
     df['group_params_str'] = df['params'].apply(set_to_none)
     df['group_params_str'] = df['group_params_str'].apply(lambda p: json.dumps(p.model_dump(), sort_keys=True, default=str))
     grouped = df.groupby(df['group_params_str'])
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str):
-    D = P.D
-    samples_per_config = df['sample'].max()
-    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {D.bit_stream_length}, Tao: {D.tao}, Samples per config: {samples_per_config}, Configs: {len(df['group_params_str'].unique())}"
+    samples_per_config = df['sample'].max() + 1
+    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {samples_per_config}, Configs: {len(df['group_params_str'].unique())}"
     
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
@@ -133,23 +133,21 @@ def plot_kq_and_gr(df, P: Params, filename: str):
     plt.close(fig)
 
 def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
-    D = P.D
-    
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
     
     color_idx = 0
     xvals = list()
-    shift = 7  # Lines are too close at k_avg < 6 (subtract 1 as we use 1 for jitter in k_avg)
+    shift = 5  # Lines are too close at k_avg < 4 (subtract 1 as we use 1 for jitter in k_avg)
     g = len(grouped_df)
     val_range = grouped_df['k_avg'].max().max() - shift
-    for name, subset in sorted(grouped_df, key=lambda x: x[0]):
-        print(color_idx, ':')
-        p = subset.iloc[0]['params']
-        print(p.M.I)
-        print(p.M.R)
-        print(p.M.O)
-        print(p.D)
+    for name, subset in grouped_df:
+        # print(color_idx, ':')
+        # p = subset.iloc[0]['params']
+        # print(p.M.I)
+        # print(p.M.R)
+        # print(p.M.O)
+        # print(p.D)
         metrics = sorted(subset['metric'].unique())
         n_metrics = len(metrics)
         for i, metric in enumerate(metrics):
@@ -163,17 +161,17 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
             x_sorted = data['k_avg'].values
             y_sorted = data['value'].values
             
-            # # # Generate points on a smooth spline line - Quadratic spline interpolation (k=3 for cubic)
-            # cubic_spline = UnivariateSpline(x_sorted, y_sorted, k=3, s=0.0) # requires aggregation beforhand!
-            # x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
-            # y_smooth = cubic_spline(x_fine)
-
-            # Generate points w linear smoothing
-            linear_interpolator = interp1d(x_sorted, y_sorted, kind='linear', fill_value="extrapolate") # requires aggregation beforhand!
+            # # Generate points on a smooth spline line - Quadratic spline interpolation (k=3 for cubic)
+            cubic_spline = UnivariateSpline(x_sorted, y_sorted, k=3, s=0.0) # requires aggregation beforhand!
             x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
-            y_smooth = linear_interpolator(x_fine)
+            y_smooth = cubic_spline(x_fine)
 
-            # Generate points on a smooth lowess line
+            # # Generate points w linear smoothing
+            # linear_interpolator = interp1d(x_sorted, y_sorted, kind='linear', fill_value="extrapolate") # requires aggregation beforhand!
+            # x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
+            # y_smooth = linear_interpolator(x_fine)
+
+            # # Generate points on a smooth lowess line
             # xy = lowess(y_sorted, x_sorted, frac=2./3., it=3, delta=0.0, is_sorted=True, missing='none', return_sorted=True)
             # x_fine, y_smooth = xy[:, 0], xy[:, 1]
             
@@ -210,62 +208,7 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
     plt.savefig(save_path / filename, bbox_inches='tight')
     plt.close(fig)
 
-
-def plot_kq_and_gr_many_config_lowess(grouped_df, P: Params, filename: str):
-    D = P.D
-    
-    # Create the figure and axis with extra space for legends
-    fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
-    
-    color_idx = 0
-    xvals = list()
-    shift = 7 # lines are too close at k_avg < 6 (subtract 1 as we use 1 for jitter in k_avg)
-    g = len(grouped_df)
-    val_range = grouped_df['k_avg'].max().max() - shift
-    for name, subset in sorted(grouped_df, key=lambda x: x[0]):
-        print(color_idx, ':')
-        p = subset.iloc[0]['params']
-        print(p.M.I)
-        print(p.M.R)
-        print(p.M.O)
-        print(p.d)
-        metrics = sorted(subset['metric'].unique())
-        n_metrics = len(metrics)
-        for i, metric in enumerate(metrics):
-            data = subset[subset['metric'] == metric]
-            color = plt.cm.tab10(color_idx % 10)
-            # Regression line
-            trend = sns.regplot(
-                x='k_avg',
-                y='value',
-                data=data,
-                scatter=False,
-                lowess=True,
-                ax=ax,
-                color=color,
-                line_kws={'linestyle':'--', 'linewidth':2},
-                label=color_idx
-            )
-            xvals.append(color_idx * val_range / g + ((i + 1) / n_metrics) - 1 + shift)
-        color_idx += 1
-
-    lines = plt.gca().get_lines()
-    labelLines(lines, align=False, xvals=xvals, fontsize=10)
-    ax.set_ylabel('Rank')
-    ax.set_xlabel('Average K')
-    
-    # Adjust subplot parameters to give specified padding
-    plt.subplots_adjust(right=0.8)  # This leaves room for legends
-    plt.title('Reservoir Metrics: Kernel Quality, Generalization Rank, Delta', fontsize=16)
-
-    # Save the figure
-    save_path = P.L.out_path / 'visualizations'
-    save_path.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path / filename, bbox_inches='tight')
-    plt.close(fig)
-
-
-def plot_optimal_k_vs_k_avg(df):
+def plot_optimal_k_vs_n(df):
     # GR changes with TAO!!! now what???
     filtered_df = df[df['metric'] == 'delta']
     grouped_df = group_df_data_by_parameters(filtered_df)

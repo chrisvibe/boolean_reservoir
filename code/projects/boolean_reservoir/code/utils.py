@@ -3,6 +3,7 @@ import numpy as np
 import random
 from hashlib import sha256
 from pathlib import Path
+import networkx as nx
 
 # Ensure reproducibility by setting seeds globally
 def set_seed(seed=42):
@@ -21,19 +22,118 @@ def generate_unique_seed(*args):
     # Convert the hash to an integer and ensure it fits in the range of a typical seed
     return int(hash_digest, 16) % (2**31 - 1)
 
+def print_pretty_binary_matrix(data, input_nodes=None, reservoir_nodes=None, print_str=True, return_str=False):
+    QUADRANT_COLORS = {
+        'II': '\033[95m',    # Magenta
+        'IR': '\033[93m',    # Yellow
+        'RI': '\033[91m',    # Red
+        'RR': '\033[92m',    # Green
+        'default': '\033[94m',  # Blue
+    }
+
+    def infer_quadrant(u, v):
+        if u in input_nodes and v in input_nodes:
+            return 'II'
+        elif u in input_nodes and v in reservoir_nodes:
+            return 'IR'
+        elif u in reservoir_nodes and v in input_nodes:
+            return 'RI'
+        elif u in reservoir_nodes and v in reservoir_nodes:
+            return 'RR'
+        return 'default'
+
+    if isinstance(data, torch.Tensor):
+        array = (data.detach().cpu().numpy() != 0).astype(int)
+        color_matrix = np.full(array.shape, 'default', dtype=object)
+
+    elif isinstance(data, np.ndarray):
+        array = (data != 0).astype(int)
+        color_matrix = np.full(array.shape, 'default', dtype=object)
+
+    elif isinstance(data, (nx.Graph, nx.DiGraph)):
+        nodes = list(data.nodes())
+        node_index = {node: i for i, node in enumerate(nodes)}
+        array = nx.to_numpy_array(data, nodelist=nodes, dtype=bool).astype(int)
+        color_matrix = np.full(array.shape, 'default', dtype=object)
+
+        for u, v, attrs in data.edges(data=True):
+            i, j = node_index[u], node_index[v]
+            if 'quadrant' in attrs:
+                q = attrs['quadrant']
+            elif input_nodes is not None and reservoir_nodes is not None:
+                q = infer_quadrant(u, v)
+            else:
+                q = 'default'
+            color_matrix[i, j] = q
+            if not data.is_directed():
+                color_matrix[j, i] = q
+    else:
+        raise TypeError("Input must be a torch.Tensor, np.ndarray, or networkx Graph/DiGraph.")
+
+    lines = []
+    for i in range(array.shape[0]):
+        row = ''
+        for j in range(array.shape[1]):
+            val = str(array[i, j])
+            color = QUADRANT_COLORS.get(color_matrix[i, j], QUADRANT_COLORS['default'])
+            row += f"{color}{val}\033[0m"
+        lines.append(row)
+
+    result = '\n'.join(lines)
+    if print_str:
+        print(result)
+    if return_str:
+        return result
+    
 def override_symlink(source: Path, link:str=None):
     if link.exists():
         link.unlink()
     link.symlink_to(source)
 
-def gpu_check():
-    if torch.cuda.is_available():
-        print("CUDA is available. PyTorch version:", torch.__version__)
-        print("CUDA version:", torch.version.cuda)
-        print("CUDA device count:", torch.cuda.device_count())
-        print("CUDA devices:", torch.cuda.get_device_name(0))
-    else:
-        print("CUDA is not available.")
+class CudaMemoryManager:
+    def __init__(self, ratio_threshold=0.9, verbose=True):
+        if verbose:
+            self.gpu_check()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Initialize memory tracking for each device
+        if torch.cuda.is_available(): 
+            self.num_gpus = torch.cuda.device_count()
+            self.mem_capacity_per_gpu = []
+            self.mem_last_reserved_per_gpu = []
+            
+            for dev_idx in range(self.num_gpus):
+                memory_capacity = torch.cuda.get_device_properties(dev_idx).total_memory
+                self.mem_capacity_per_gpu.append(memory_capacity)
+                self.mem_last_reserved_per_gpu.append(0)
+            
+            self.ratio_threshold = ratio_threshold
+            self.manage_memory = self._cuda_manage_memory
+        else:
+            self.manage_memory = self._cpu_manage_memory
+    
+    def _cuda_manage_memory(self):
+        for dev_idx in range(self.num_gpus):
+            reserved_memory = torch.cuda.memory_reserved(dev_idx)
+            mem_one_iter = reserved_memory - self.mem_last_reserved_per_gpu[dev_idx]
+            self.mem_last_reserved_per_gpu[dev_idx] = reserved_memory
+            ratio = (reserved_memory + mem_one_iter) / self.mem_capacity_per_gpu[dev_idx]
+            if ratio > self.ratio_threshold:
+                torch.cuda.empty_cache()
+                break
+    
+    def _cpu_manage_memory(self):
+        pass
+
+    @staticmethod
+    def gpu_check():
+        if torch.cuda.is_available():
+            print("CUDA is available. PyTorch version:", torch.__version__)
+            print("CUDA version:", torch.version.cuda)
+            print("CUDA device count:", torch.cuda.device_count())
+            print("CUDA devices:", torch.cuda.get_device_name(0))
+        else:
+            print("CUDA is not available.")
 
 def l2_distance(tensor):
     return torch.sqrt((tensor ** 2).sum(axis=1))

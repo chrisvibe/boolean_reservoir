@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix_w_k_avg_incoming_edges
+from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix
 from scipy.stats import shapiro
 
 def calculate_worst_case_parameters_for_expecting_normal_distribution(k_avg):
@@ -85,7 +85,7 @@ def calculate_worst_case_parameters_for_expecting_normal_distribution(k_avg):
     ]
 )
 def test_generate_adjacency_matrix(n_nodes, k_min, k_avg, k_max, self_loops):
-    adj_matrix = generate_adjacency_matrix_w_k_avg_incoming_edges(n_nodes, k_min, k_avg, k_max, self_loops)
+    adj_matrix = generate_adjacency_matrix(n_nodes, k_min, k_avg, k_max, self_loops)
     assert adj_matrix is not None
     assert adj_matrix.shape == (n_nodes, n_nodes), "Adjacency matrix shape mismatch"
 
