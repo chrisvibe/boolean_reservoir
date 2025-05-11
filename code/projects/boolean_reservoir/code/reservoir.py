@@ -153,7 +153,7 @@ class BooleanReservoir(nn.Module):
             )
             # TODO optionally control each quadrant individually
             w_ii = w_ir = None
-            if 'graph' not in load_dict:
+            if 'graph' not in load_dict: # generated here due to random seed
                 w_ii = torch.zeros((self.I.n_nodes, self.I.n_nodes))  # TODO no effect atm - add flexibility for connections betwen input nodes (I→I)
                 # w_ii = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.I.n_nodes)
                 w_ir = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.R.n_nodes)
@@ -168,7 +168,7 @@ class BooleanReservoir(nn.Module):
             # This forms four partitions when constructing the adjacency matrix that can be fine-tuned
             # TODO optionally control each quadrant individually
             w_ri = w_rr = None
-            if 'graph' not in load_dict:
+            if 'graph' not in load_dict: # generated here due to random seed
                 w_ri = torch.zeros((self.R.n_nodes, self.I.n_nodes))
                 # w_ri = self.bipartite_mapping_strategy(self.I.connection, self.R.n_nodes, self.I.n_nodes)
                 w_rr = torch.tensor(generate_adjacency_matrix(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops))
@@ -402,6 +402,11 @@ class BooleanReservoir(nn.Module):
     @staticmethod
     def get_timestamp_utc():
         return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S_%f")
+    
+    @staticmethod
+    def save_graph(path, graph):
+        with gzip.open(path, 'wb') as f:
+            nx.write_graphml(graph, f)
 
     def save(self, save_path=None):
         if save_path is None:
@@ -411,13 +416,22 @@ class BooleanReservoir(nn.Module):
         override_symlink(save_path.name, save_path.parent / 'last_run')
         self.L.last_checkpoint = self.checkpoint_path 
         paths = self.make_load_path_dict(self.checkpoint_path)
-        save_yaml_config(self.P, paths['parameters'])
-        torch.save(self.w_in, paths['w_in'])
-        with gzip.open(paths['graph'], 'wb') as f:
-            nx.write_graphml(self.graph, f)
-        torch.save(self.initial_states, paths['init_state'])
-        torch.save(self.lut, paths['lut'])
-        torch.save(self.state_dict(), paths['weights'])
+        paths = {k: paths[k] for k in self.L.save_keys}
+        # TODO consider torch.save all in one file to avoid too many files?
+        save_map = {
+            'parameters': lambda path: save_yaml_config(self.P, path),
+            'w_in': lambda path: torch.save(self.w_in, path),
+            'graph': lambda path: self.save_graph(path, self.graph),
+            'init_state': lambda path: torch.save(self.initial_states, path),
+            'lut': lambda path: torch.save(self.lut, path),
+            'weights': lambda path: torch.save(self.state_dict(), path),
+        }
+        for key in self.L.save_keys:
+            if key not in save_map:
+                raise KeyError(f"Unsupported key in path_dict: '{key}'")
+            saver = save_map[key]
+            saver(paths[key])
+ 
         override_symlink(self.checkpoint_path.name, self.checkpoint_path.parent / 'last_checkpoint')
         if self.L.history.record_history:
             self.L.history.save_path.mkdir(parents=True, exist_ok=True) # in case model is saved before history is recorded
@@ -442,25 +456,29 @@ class BooleanReservoir(nn.Module):
             path_dict = BooleanReservoir.make_load_path_dict(checkpoint_path)
 
         if load_key_include_set is not None:
-            path_dict = {k: v for k, v in path_dict.items() if k in load_key_include_set}
+            path_dict = {k: path_dict[k] for k, v in load_key_exclude_set.items()}
 
         if load_key_exclude_set is not None:
             path_dict = {k: v for k, v in path_dict.items() if k not in load_key_exclude_set}
 
         d = dict() 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if 'parameters' in path_dict:
-            d['parameters'] = load_yaml_config(path_dict['parameters'])
-        if 'w_in' in path_dict:
-            d['w_in'] = BooleanReservoir.load_torch_tensor(path_dict['w_in'], device)
-        if 'graph' in path_dict:
-            d['graph'] = BooleanReservoir.load_graph(path_dict['graph'])
-        if 'init_state' in path_dict:
-            d['init_state'] = BooleanReservoir.load_torch_tensor(path_dict['init_state'], device)
-        if 'lut' in path_dict:
-            d['lut'] = BooleanReservoir.load_torch_tensor(path_dict['lut'], device)
-        if 'weights' in path_dict:
-            d['weights'] = BooleanReservoir.load_torch_tensor(path_dict['weights'], device)
+        load_map = {
+            'parameters': lambda path: load_yaml_config(path),
+            'w_in': lambda path: BooleanReservoir.load_torch_tensor(path, device),
+            'graph': BooleanReservoir.load_graph,
+            'init_state': lambda path: BooleanReservoir.load_torch_tensor(path, device),
+            'lut': lambda path: BooleanReservoir.load_torch_tensor(path, device),
+            'weights': lambda path: BooleanReservoir.load_torch_tensor(path, device),
+        }
+        for key, path in path_dict.items():
+            if key not in load_map:
+                raise KeyError(f"Unsupported key in path_dict: '{key}'")
+            if path.exists():
+                loader = load_map[key]
+                d[key] = loader(path)
+            else:
+                print(f"Warning: Model object key '{key}' does not exist at '{path}' (A replacement may be generated)")
         return d
     
     def load(self, checkpoint_path:Path=None, paths:dict=None, parameter_override:Params=None):

@@ -91,5 +91,5 @@ def anova_analysis(in_path, out_path):
 
 
 if __name__ == '__main__':
-    # anova_analysis('/out/grid_search/path_integration/2D/initial_sweep/parameters.yaml', '/tmp')
-    anova_analysis('/out/grid_search/path_integration/2D/initial_sweep/parameters.yaml', '/tmp')
+    # anova_analysis('/out/path_integration/grid_search/2D/initial_sweep/parameters.yaml', '/tmp')
+    anova_analysis('/out/path_integration/grid_search/2D/initial_sweep/parameters.yaml', '/tmp')

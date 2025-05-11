@@ -196,7 +196,3 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
     print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
 
     return dataset
-
-
-if __name__ == '__main__':
-    gpu_check()

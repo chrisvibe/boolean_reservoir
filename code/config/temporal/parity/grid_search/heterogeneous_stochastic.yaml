@@ -3,6 +3,7 @@ logging:
   grid_search:
     seed: 0
     n_samples: 10
+  save_keys: [parameters]
 model:
   input_layer:
     bits_per_feature: 1

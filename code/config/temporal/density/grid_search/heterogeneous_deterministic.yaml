@@ -1,8 +1,9 @@
 logging:
-  out_path: out/grid_search/temporal/density/heterogeneous-deterministic
+  out_path: out/temporal/grid_search/density/heterogeneous-deterministic
   grid_search:
     seed: 0
     n_samples: 10
+  save_keys: [parameters]
 model:
   input_layer:
     bits_per_feature: 1

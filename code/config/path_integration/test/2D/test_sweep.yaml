@@ -22,7 +22,7 @@ model:
     learning_rate: 0.001
     evaluation: 'dev' 
 logging:
-  out_path: '/tmp/boolean_reservoir/out/grid_search/path_integration/test/2D'
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/grid_search'
   grid_search:
     seed: 0
     n_samples: 2

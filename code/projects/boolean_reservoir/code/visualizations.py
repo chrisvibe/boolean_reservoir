@@ -61,7 +61,9 @@ def plot_grid_search(data_file_path: Path):
     df = df.loc[:, [(col == 'params' or len(df[col].unique()) > 1) for col in df.columns]]
     features = df.drop(columns=['accuracy', 'loss'])
     features = features.loc[:, ~features.columns.str.contains('seed', case=False)]
-    
+    features_pluss_loss = df.drop(columns=['accuracy'])
+    features_pluss_loss = features_pluss_loss.loc[:, ~features_pluss_loss.columns.str.contains('seed', case=False)]
+
     # Identify categorical and numerical columns
     categorical_cols = features.select_dtypes(include=['object']).columns.tolist()
     numerical_cols = features.select_dtypes(exclude=['object'], include='number').columns.tolist()
@@ -73,32 +75,46 @@ def plot_grid_search(data_file_path: Path):
         transformers.append(('cat', OneHotEncoder(sparse_output=False), categorical_cols))
     preprocessor = ColumnTransformer(transformers=transformers)
     features_processed = preprocessor.fit_transform(features)
+
+    # pre-processing w loss
+    numerical_cols_plus_loss = deepcopy(numerical_cols)
+    numerical_cols_plus_loss.append('loss')
+    transformers2 = list() 
+    transformers2.append(('num', StandardScaler(), numerical_cols_plus_loss))
+    if categorical_cols:
+        transformers2.append(('cat', OneHotEncoder(sparse_output=False), categorical_cols))
+    preprocessor2 = ColumnTransformer(transformers=transformers2)
+    features_processed2 = preprocessor2.fit_transform(features_pluss_loss)
     
     # PCA
-    pca = PCA(n_components=2)
-    principal_components = pca.fit_transform(features_processed)
-    principal_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
-    
-    # Visualization of PCA
-    nested_out_path = out_path / 'pca' 
-    nested_out_path.mkdir(exist_ok=True)
-    plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=principal_df.join(df[['loss']]), x='PC1', y='PC2', hue='loss', palette='viridis', s=100, alpha=0.7)
-    plt.title('PCA of Parameters')
-    plt.savefig(nested_out_path / 'pca.png', bbox_inches='tight')
-    
-    # Creating a heatmap of parameter contributions
-    loadings = pca.components_.T
-    feature_names = deepcopy(numerical_cols)
-    if categorical_cols:
-        feature_names += preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
-    loading_df = pd.DataFrame(loadings, index=feature_names, columns=['PC1', 'PC2'])
+    def pca_helper(out_path, file_name, features_processed, df, numerical_cols, categorical_cols, preprocessor):
+        pca = PCA(n_components=2)
+        principal_components = pca.fit_transform(features_processed)
+        principal_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+        
+        # Visualization of PCA
+        nested_out_path = out_path / 'pca' 
+        nested_out_path.mkdir(exist_ok=True)
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(data=principal_df.join(df[['loss']]), x='PC1', y='PC2', hue='loss', palette='viridis', s=100, alpha=0.7)
+        plt.title('PCA of Parameters')
+        plt.savefig(nested_out_path / (file_name + '.png'), bbox_inches='tight')
+        
+        # Creating a heatmap of parameter contributions
+        loadings = pca.components_.T
+        feature_names = deepcopy(numerical_cols)
+        if categorical_cols:
+            feature_names += preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
+        loading_df = pd.DataFrame(loadings, index=feature_names, columns=['PC1', 'PC2'])
 
-    plt.figure(figsize=(3, 6))
-    sns.heatmap(loading_df, annot=True, cmap='coolwarm', cbar=True)
-    plt.title('Parameter Contributions')
-    plt.savefig(nested_out_path / 'pca_legend.png', bbox_inches='tight')
+        plt.figure(figsize=(3, 6))
+        sns.heatmap(loading_df, annot=True, cmap='coolwarm', cbar=True)
+        plt.title('Parameter Contributions')
+        plt.savefig(nested_out_path / (file_name + '_legend.png'), bbox_inches='tight')
     
+    pca_helper(out_path, 'pca', features_processed, df, numerical_cols, categorical_cols, preprocessor)
+    pca_helper(out_path, 'pca_w_loss', features_processed2, df, numerical_cols_plus_loss, categorical_cols, preprocessor2)
+
     # Correlation matrix, including categorical variables
     std = features[numerical_cols].std()
     num_columns_to_keep = std[std != 0].index.tolist()
@@ -106,11 +122,25 @@ def plot_grid_search(data_file_path: Path):
     columns_to_keep = num_columns_to_keep + cat_columns_to_keep
     features_with_performance = pd.concat([features[columns_to_keep], df[['loss']]], axis=1)
     correlation_matrix = features_with_performance.corr(method='spearman', numeric_only=True)
-    
+
     plt.figure(figsize=(10, 8))
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', cbar=True)
-    plt.title('Correlation Matrix including Performance Metrics')
-    plt.savefig(out_path / 'correlation.png', bbox_inches='tight')
+    plt.title('Correlation Matrix - Numerical')
+    plt.savefig(out_path / 'correlation_num.png', bbox_inches='tight')
+
+    if categorical_cols:
+        num_bins = 10
+        features_with_performance['loss_bin'] = pd.qcut(features_with_performance['loss'], q=num_bins)
+        crosstab_result = pd.crosstab(
+            [features_with_performance[col] for col in categorical_cols],
+            features_with_performance['loss_bin']
+        )
+        normalized_crosstab_result = crosstab_result.div(crosstab_result.sum(axis=1), axis=0)
+
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(normalized_crosstab_result, annot=True, cmap='coolwarm', cbar=True)
+        plt.title('Normalized Correlation Matrix - Quantile Bins')
+        plt.savefig(out_path / 'correlation_cat.png', bbox_inches='tight')
 
     def loss_vs_parameter(path, df):
         for column in df.columns[df.columns != 'loss']:
@@ -349,6 +379,15 @@ if __name__ == '__main__':
     pass
     # plot_grid_search(Path('out/grid_search/path_integation/1D/initial_sweep/log.h5'))
     # plot_grid_search(Path('out/grid_search/path_integation/2D/initial_sweep/log.h5'))
-    plot_grid_search('out/grid_search/temporal/density/initial_sweep/log.h5')
-    plot_grid_search('out/grid_search/temporal/parity/initial_sweep/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/initial_sweep/log.h5')
+    # plot_grid_search('out/grid_search/temporal/parity/initial_sweep/log.h5')
 
+    plot_grid_search('out/temporal/density/grid_search/homogeneous-deterministic/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/homogeneous-stochastic/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/heterogeneous-deterministic/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/heterogeneous-stochastic/log.h5')
+
+    # plot_grid_search('out/grid_search/temporal/parity/homogeneous-deterministic/log.h5')
+    # plot_grid_search('out/grid_search/temporal/parity/homogeneous-stochastic/log.h5')
+    # plot_grid_search('out/grid_search/temporal/parity/heterogeneous-deterministic/log.h5')
+    # plot_grid_search('out/grid_search/temporal/parity/heterogeneous-stochastic/log.h5')

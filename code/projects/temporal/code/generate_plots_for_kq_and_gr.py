@@ -68,6 +68,7 @@ if __name__ == '__main__':
     # smooth curve for example config
     paths = list()
     paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
     for path in paths:
         P = load_yaml_config(path)
         P = override_samples_in_p(P)

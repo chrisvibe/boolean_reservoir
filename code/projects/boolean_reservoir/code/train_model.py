@@ -66,6 +66,7 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
     optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
     criterion = criterion_strategy(T.criterion)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=T.shuffle, drop_last=T.drop_last)
+    m = len(data_loader) * T.batch_size if T.drop_last else len(dataset)
     x_eval = 'x_' + T.evaluation
     y_eval = 'y_' + T.evaluation
     best_stats = {'eval': T.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
@@ -80,7 +81,7 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
             loss = criterion(y_hat, y)
             loss.backward()
             optimizer.step()
-            epoch_train_loss += loss.item()
+            epoch_train_loss += loss.item() * len(x)
             epoch_correct_train_predictions += accuracy(y_hat, y, T.accuracy_threshold, normalize=False)
         model.eval()
         with torch.no_grad():
@@ -94,8 +95,8 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
             if record_stats:
                 stats = dict()
                 stats['epoch'] = epoch + 1
-                stats['loss_train'] = epoch_train_loss / len(data_loader.dataset)
-                stats['accuracy_train'] = epoch_correct_train_predictions / len(data_loader.dataset)
+                stats['loss_train'] = epoch_train_loss / m # average loss per sample
+                stats['accuracy_train'] = epoch_correct_train_predictions / m # average accuracy per sample 
                 stats['loss_' + T.evaluation] = eval_loss 
                 stats['accuracy_' + T.evaluation] = eval_accuracy 
                 train_history.append(stats)
@@ -113,6 +114,7 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
     return best_stats, model, train_history
 
 def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations: list[Params]=None):
+    # TODO add DP and make each GPU handle one model?
     # dataset is re-initialized when parameters from input_layer or dataset change
     cpu_device = torch.device('cpu')
     yaml_path = Path(yaml_path)

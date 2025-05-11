@@ -168,6 +168,13 @@ class LoggingParams(BaseModel):
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
     train_log: TrainLog = Field(TrainLog())
+    save_keys: Optional[set] = Field({'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'}, description="Only save these model objects")
+
+    @model_validator(mode='after')
+    def save_keys_from_list_to_set(self):
+        if self.save_keys is not None:
+            self.save_keys = set(self.save_keys)
+        return self
 
 class Params(BaseModel):
     model: ModelParams
@@ -274,11 +281,11 @@ if __name__ == '__main__':
     pass
 
     # # path integration
-    # update_params('out/grid_search/path_integration/1D/initial_sweep/parameters.yaml')
-    # update_params('out/grid_search/path_integration/2D/initial_sweep/parameters.yaml')
-    # update_params('out/grid_search/path_integration/1D/initial_sweep2/parameters.yaml')
-    # update_params('out/grid_search/path_integration/2D/initial_sweep2/parameters.yaml')
+    # update_params('out/path_integration/grid_search/1D/initial_sweep/parameters.yaml')
+    # update_params('out/path_integration/grid_search/2D/initial_sweep/parameters.yaml')
+    # update_params('out/path_integration/grid_search/1D/initial_sweep2/parameters.yaml')
+    # update_params('out/path_integration/grid_search/2D/initial_sweep2/parameters.yaml')
 
     # temporal 
-    # update_params('out/grid_search/temporal/density/parameters.yaml')
+    # update_params('out/temporal/density/grid_search/parameters.yaml')
     # update_params('out/grid_search/temporal/parity/parameters.yaml')

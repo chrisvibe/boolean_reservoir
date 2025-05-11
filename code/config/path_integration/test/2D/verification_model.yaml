@@ -22,6 +22,6 @@ model:
     learning_rate: 0.01
     evaluation: 'test' 
 logging:
-  out_path: 'out/single_run/path_integration/2D/verification_model'
+  out_path: 'out/path_integration/test/2D/verification_model/single_run'
 dataset:
   path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'

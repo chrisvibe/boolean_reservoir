@@ -27,7 +27,7 @@ model:
     evaluation: 'test' 
     seed: 531
 logging:
-  out_path: 'out/single_run/path_integration/2D/good_model'
+  out_path: 'out/path_integration/single_run/2D/good_model'
   history:
     record_history: true
     buffer_size: 64

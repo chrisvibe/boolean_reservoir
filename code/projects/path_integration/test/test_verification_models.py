@@ -66,6 +66,7 @@ class PathIntegrationVerificationModel(nn.Module):
     (PathIntegrationVerificationModel, 'config/path_integration/test/2D/verification_model.yaml'),
 ])
 def test_path_integration_verification_models(model_class, config_path):
+    # Note that the model is not saved
     logging.debug(f"Testing model {model_class} with config {config_path}")
     P = load_yaml_config(config_path)
     

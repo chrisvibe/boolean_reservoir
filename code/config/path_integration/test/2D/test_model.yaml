@@ -24,6 +24,6 @@ model:
     evaluation: 'test' 
     seed: 0
 logging:
-  out_path: '/tmp/boolean_reservoir/out/single_run/path_integration/2D/test'
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/single_run'
 dataset:
   path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'

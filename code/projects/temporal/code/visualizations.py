@@ -220,5 +220,5 @@ def plot_optimal_k_vs_n(df):
 if __name__ == '__main__':
     pass
     # from projects.boolean_reservoir.code.visualizations import plot_grid_search
-    # plot_grid_search('out/grid_search/temporal/density/initial_sweep/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/initial_sweep/log.h5')
     # plot_grid_search('out/grid_search/temporal/parity/initial_sweep/log.h5')
