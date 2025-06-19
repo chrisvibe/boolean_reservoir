@@ -1,6 +1,13 @@
 import torch
 from projects.boolean_reservoir.code.parameters import InputParams
 
+class BooleanEncoder:
+    def __init__(self, I):
+        self.I = I
+
+    def __call__(self, x):
+        return float_array_to_boolean(x, self.I)
+
 
 def float_array_to_boolean(values, I:InputParams):
     '''

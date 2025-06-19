@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset
+from torch.multiprocessing import Lock as MP_Lock
 from pathlib import Path
 from math import floor
 import numpy as np
@@ -7,6 +8,8 @@ from projects.boolean_reservoir.code.utils import set_seed
 from benchmarks.temporal.parameters import TemporalDatasetParams
 
 class TemporalDatasetBase(Dataset):
+    _lock = MP_Lock()  # Class-level lock for dataset generation
+
     def __init__(self, task, p: TemporalDatasetParams):
         # bit_stream_length i.e. 12: 101010111010
         # window size (in the bit stream) i.e. 4: 10101011[1010]
@@ -17,11 +20,16 @@ class TemporalDatasetBase(Dataset):
         if self.data_path.exists() and not p.generate_data:
             self.load_data()
         else:
-            if p.bit_stream_length < p.window_size + p.tao:
-                print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
-                p.bit_stream_length = p.window_size + p.tao
-            self.data = self.generate_data(task, p.samples, p.bit_stream_length, p.tao, p.window_size)
-            self.save_data()
+            with self._lock:  # Synchronize dataset generation
+                # Double-check file existence inside lock
+                if self.data_path.exists() and not p.generate_data:
+                    self.load_data()
+                else:
+                    if p.bit_stream_length < p.window_size + p.tao:
+                        print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
+                        p.bit_stream_length = p.window_size + p.tao
+                    self.data = self.generate_data(task, p.samples, p.bit_stream_length, p.tao, p.window_size)
+                    self.save_data()
         self.split = p.split
 
     def generate_data(self, task, samples, stream_length, tao, window_size):

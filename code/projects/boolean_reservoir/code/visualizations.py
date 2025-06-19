@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import matplotlib
 import numpy as np
 from copy import deepcopy
 from pathlib import Path
@@ -12,6 +11,7 @@ from sklearn.manifold import TSNE, MDS
 from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
+import matplotlib
 matplotlib.use('Agg')
 
 def plot_train_history(path, history):
@@ -216,12 +216,13 @@ def plot_dynamics_history(path):
     embedding = pca.fit_transform(history_normalized)
     df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)
+    df['hue_tuple'] = df[['phase', 's', 'f']].apply(tuple, axis=1)
 
     # print("Explained variance by each component:")
     # print(embedding.explained_variance_ratio_)
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'f']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
-    plt.legend(title='phase, step, feature')
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue='hue_tuple', palette='viridis', s=100, alpha=0.7)
+    plt.legend(title='(phase, step, feature)')
     plt.title('PCA of states over time')
     file = f"pca.png"
     plt.savefig(save_path / file, bbox_inches='tight')
@@ -230,10 +231,11 @@ def plot_dynamics_history(path):
     embedding = tsne.fit_transform(history_normalized)
     df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)
+    df['hue_tuple'] = df[['phase', 's', 'f']].apply(tuple, axis=1)
 
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue=df[['phase', 's', 'f']].apply(tuple, axis=1), palette='viridis', s=100, alpha=0.7)
-    plt.legend(title='phase, step, feature')
+    sns.scatterplot(data=df, x='PC1', y='PC2', hue='hue_tuple', palette='viridis', s=100, alpha=0.7)
+    plt.legend(title='(phase, step, feature)')
     plt.title('tSNE of states over time')
     file = f"tsne.png"
     plt.savefig(save_path / file, bbox_inches='tight')

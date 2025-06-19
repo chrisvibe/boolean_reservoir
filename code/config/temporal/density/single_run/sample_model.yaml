@@ -14,7 +14,7 @@ dataset:
     train: 0.4
   tao: 7
   task: density
-  window_size: 3
+  window_size: [1, 3, 5]
 logging:
   grid_search:
     n_samples: 10

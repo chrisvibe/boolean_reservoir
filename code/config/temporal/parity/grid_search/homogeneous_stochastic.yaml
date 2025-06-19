@@ -1,8 +1,8 @@
 logging:
-  out_path: out/grid_search/temporal/parity/homogeneous-stochastic
+  out_path: out/temporal/grid_search/parity/homogeneous-stochastic
   grid_search:
     seed: 0
-    n_samples: 10
+    n_samples: 25
   save_key: {parameters}
 model:
   input_layer:
@@ -38,8 +38,8 @@ model:
 dataset:
   task: parity
   bit_stream_length: 10
-  window_size: 3
-  tao: [3, 5, 7]
+  window_size: [1, 3, 5]
+  tao: [1, 3, 5]
   split:
     train: 0.4
     dev: 0.3

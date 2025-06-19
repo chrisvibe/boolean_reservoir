@@ -2,122 +2,14 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
-import pandas as pd
-from datetime import datetime, timezone
 import networkx as nx
-import gzip
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
 from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming, random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
-from projects.boolean_reservoir.code.utils import set_seed, override_symlink, print_pretty_binary_matrix
+from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.reservoir_utils import ExpressionEvaluator, InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel
 import numpy as np
-import sympy
 
-class ExpressionEvaluator:
-    def __init__(self, params: Params, symbols: dict=dict()):
-        self._setup_sympy_env()
-        self.P = params
-        self.M = self.P.M
-        self.L = self.P.L
-        self.I = self.P.M.I
-        self.R = self.P.M.R
-        self.O = self.P.M.O
-        self.T = self.P.M.T
-        self.symbols = symbols
-
-    def _setup_sympy_env(self):
-        """Set up the sympy environment with symbols and their mappings."""
-        # Define symbols
-        self.sympy_symbols = {
-            'a': sympy.Symbol('a'),
-            'b': sympy.Symbol('b')
-        }
-        
-    def _get_symbol_values(self):
-        """Get current values for the symbols based on instance state."""
-        return {self.sympy_symbols[k]: v for k, v in self.symbols.items()}
-    
-    def to_float(self, expr: str):
-        """Convert a string expression to a float using sympy."""
-        try:
-            # Parse the expression
-            parsed_expr = sympy.sympify(expr)
-            
-            # Get current values and substitute
-            symbol_values = self._get_symbol_values()
-            result = parsed_expr.subs(symbol_values)
-            
-            return float(result)
-        except Exception as e:
-            raise ValueError(f"Failed to evaluate expression '{expr}': {e}")
-
-
-class BatchedTensorHistoryWriter:
-    def __init__(self, save_path='history', buffer_size=64):
-        self.save_path = Path(save_path)
-        self.file_index = 0
-        self.time = 0
-        self.buffer_size = buffer_size
-        self.buffer = []
-        self.meta_buffer = []
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    def append_batch(self, batch_tensor, meta_data):
-        self.buffer.append(batch_tensor.clone().cpu())
-        self.meta_buffer.append(meta_data)
-        meta_data['file_idx'] = self.file_index 
-        meta_data['batch_number'] = len(self.meta_buffer)
-        meta_data['samples'] = len(batch_tensor)
-        meta_data['time'] = self.time
-        self.time += 1
-        if len(self.buffer) >= self.buffer_size:
-            self._write_buffer()
-
-    def _write_buffer(self):
-        if not self.buffer:
-            return
-        self.save_path.mkdir(parents=True, exist_ok=True)
-        data = torch.cat(self.buffer, dim=0)
-        tensor_path = self.save_path / f'tensor_{self.file_index}.pt'
-        torch.save(data, tensor_path)
-        meta_path = self.save_path / f'meta_{self.file_index}.csv'
-        pd.DataFrame(self.meta_buffer).to_csv(meta_path, index=False)
-        self.buffer = []
-        self.meta_buffer = []
-        self.file_index += 1
-
-    def flush(self):
-        self._write_buffer()
-
-    def reload_history(self, history_path=None, checkpoint_path=None, include={''}, exclude={}):
-        history_path = Path(history_path) if history_path else self.save_path
-        all_data = []
-        all_meta_data = []
-        idx = 0
-        assert any(history_path.glob('*.pt')), f"No files found at {history_path}. Try Recording the data? Maybe the path is wrong"
-        for _ in history_path.glob('*.pt'):
-            tensor_path = history_path / f'tensor_{idx}.pt'
-            tensor_data = torch.load(tensor_path, weights_only=True)
-            meta_path = history_path / f'meta_{idx}.csv'
-            meta_data = pd.read_csv(meta_path)
-            all_data.append(tensor_data)
-            all_meta_data.append(meta_data)
-            idx += 1
-        combined_data = torch.cat(all_data, dim=0).to(self.device)
-        combined_meta_data = pd.concat(all_meta_data, ignore_index=True, axis=0)
-
-        df = combined_meta_data
-        expanded_meta_data = df.loc[df.index.repeat(df['samples'])].reset_index(drop=True)
-        expanded_meta_data['sample_id'] = expanded_meta_data.groupby(['phase', 's', 'f']).cumcount()
-        expanded_meta_data.drop(columns=['samples'], inplace=True)
-
-        checkpoint_path = checkpoint_path if checkpoint_path else history_path / 'checkpoint'
-        load_dict = dict()
-        if checkpoint_path.exists():
-            load_dict = BooleanReservoir.load_from_path_dict_or_checkpoint_folder(checkpoint_path=checkpoint_path, load_key_include_set=include, load_key_exclude_set=exclude)
-
-        return load_dict, combined_data, expanded_meta_data, combined_meta_data
- 
 
 class BooleanReservoir(nn.Module):
     # load_path can be a yaml file or a checkpoint directory
@@ -147,7 +39,7 @@ class BooleanReservoir(nn.Module):
             # How to perturb reservoir nodes that receive input (I) - w_in maps input bits to input_nodes 
             set_seed(self.I.seed)
             self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
-            self.w_in = self.load_or_generate('w_in', load_dict, lambda:
+            self.w_in = SaveAndLoadModel.load_or_generate('w_in', load_dict, lambda:
                 self.load_torch_tensor(self.I.w_in) if self.I.w_in
                   else self.bipartite_mapping_strategy(self.I.distribution, self.I.bits, self.I.n_nodes)
             )
@@ -172,7 +64,7 @@ class BooleanReservoir(nn.Module):
                 w_ri = torch.zeros((self.R.n_nodes, self.I.n_nodes))
                 # w_ri = self.bipartite_mapping_strategy(self.I.connection, self.R.n_nodes, self.I.n_nodes)
                 w_rr = torch.tensor(generate_adjacency_matrix(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops))
-            self.graph = self.load_or_generate('graph', load_dict, lambda:
+            self.graph = SaveAndLoadModel.load_or_generate('graph', load_dict, lambda:
                 self.build_graph_from_quadrants(w_ii, w_ir, w_ri, w_rr)
             )
             assert self.M.n_nodes == self.graph.number_of_nodes()
@@ -185,7 +77,7 @@ class BooleanReservoir(nn.Module):
 
             # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
             # LUT allows incoming edges from I + R for each node
-            self.lut = self.load_or_generate('lut', load_dict, lambda:
+            self.lut = SaveAndLoadModel.load_or_generate('lut', load_dict, lambda:
                 lut_random(self.M.n_nodes, self.max_connectivity, p=self.R.p).to(torch.uint8)
             )
 
@@ -194,7 +86,7 @@ class BooleanReservoir(nn.Module):
 
             # Initialize state (R + I)
             self.states_parallel = None
-            self.initial_states = self.load_or_generate('init_state', load_dict, lambda:
+            self.initial_states = SaveAndLoadModel.load_or_generate('init_state', load_dict, lambda:
                 self.initialization_strategy(self.R.init)
             )
             self.reset_reservoir(self.T.batch_size)
@@ -210,9 +102,8 @@ class BooleanReservoir(nn.Module):
 
             # LOGGING
             self.out_path = self.L.out_path
-            self.timestamp_utc = self.get_timestamp_utc()
+            self.timestamp_utc = SaveAndLoadModel.get_timestamp_utc()
             self.save_path = self.out_path / 'runs' / self.timestamp_utc 
-            self.checkpoint_path = self.L.last_checkpoint
             self.L.save_path = self.save_path
             self.L.timestamp_utc = self.timestamp_utc
             self.L.history.save_path = self.save_path / 'history'
@@ -288,13 +179,6 @@ class BooleanReservoir(nn.Module):
         else:
             dtype = torch.int64
         return (2 ** torch.arange(bits, dtype=dtype).flip(0))
-
-    @staticmethod 
-    def load_or_generate(load_key: str, load_dict: dict, generator: callable):
-        if load_key in load_dict:
-            return load_dict[load_key]
-        else:
-            return generator()
 
     @staticmethod
     def homogenize_adj_list(adj_list, max_length): # tensor may have less than max_length columns if not needed
@@ -381,142 +265,42 @@ class BooleanReservoir(nn.Module):
  
     @staticmethod
     def input_pertubation_strategy(strategy:str):
-        # assumes states is only input nodes
-        if strategy == 'xor':
-            return lambda states, perturbations: states ^ perturbations
-        elif strategy == 'and':
-            return lambda states, perturbations: states & perturbations
-        elif strategy == 'or':
-            return lambda states, perturbations: states | perturbations
-        elif strategy == 'override': 
-            return lambda states, perturbations: perturbations
-        raise ValueError('Unknown perturbation strategy: {}'.format(strategy))
+        return InputPerturbationStrategy.get(strategy)
     
-    def output_activation_strategy(self, strategy:str):
-        if strategy is None:
-            return lambda x: x
-        elif strategy == 'sigmoid':
-                return lambda x: torch.sigmoid(x)
-        raise ValueError
+    @staticmethod
+    def output_activation_strategy(strategy:str):
+        return OutputActivationStrategy.get(strategy)
     
     @staticmethod
     def get_timestamp_utc():
-        return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H%M%S_%f")
-    
-    @staticmethod
-    def save_graph(path, graph):
-        with gzip.open(path, 'wb') as f:
-            nx.write_graphml(graph, f)
+        return SaveAndLoadModel.get_timestamp_utc()
 
     def save(self, save_path=None):
         if save_path is None:
             save_path = self.save_path
-        self.checkpoint_path = save_path / 'checkpoints' / self.get_timestamp_utc()
-        self.checkpoint_path.mkdir(parents=True, exist_ok=False)
-        override_symlink(save_path.name, save_path.parent / 'last_run')
-        self.L.last_checkpoint = self.checkpoint_path 
-        paths = self.make_load_path_dict(self.checkpoint_path)
-        paths = {k: paths[k] for k in self.L.save_keys}
-        # TODO consider torch.save all in one file to avoid too many files?
-        save_map = {
-            'parameters': lambda path: save_yaml_config(self.P, path),
-            'w_in': lambda path: torch.save(self.w_in, path),
-            'graph': lambda path: self.save_graph(path, self.graph),
-            'init_state': lambda path: torch.save(self.initial_states, path),
-            'lut': lambda path: torch.save(self.lut, path),
-            'weights': lambda path: torch.save(self.state_dict(), path),
-        }
-        for key in self.L.save_keys:
-            if key not in save_map:
-                raise KeyError(f"Unsupported key in path_dict: '{key}'")
-            saver = save_map[key]
-            saver(paths[key])
- 
-        override_symlink(self.checkpoint_path.name, self.checkpoint_path.parent / 'last_checkpoint')
-        if self.L.history.record_history:
-            self.L.history.save_path.mkdir(parents=True, exist_ok=True) # in case model is saved before history is recorded
-            override_symlink(Path('../checkpoints') / self.L.last_checkpoint.name, self.L.history.save_path / 'checkpoint')
-        return paths 
 
-    @staticmethod
-    def load_from_path_dict_or_checkpoint_folder(
-        path_dict: dict = None,
-        checkpoint_path = None,
-        load_key_include_set: set = None,
-        load_key_exclude_set: set = None
-    ):
-        """
-        path_dict takes precedence over optional checkpoint_path.
-        load_key_include_set (None loads all) and load_key_exclude_set filter which keys to include/exclude.
-        Inclusion is applied before exclusion.
-        """
-        if path_dict is None:
-            if checkpoint_path is None:
-                raise ValueError("Either path_dict or checkpoint_path must be provided.")
-            path_dict = BooleanReservoir.make_load_path_dict(checkpoint_path)
+        paths, checkpoint_path = SaveAndLoadModel.save_model({
+            'P': self.P,
+            'w_in': self.w_in,
+            'graph': self.graph,
+            'initial_states': self.initial_states,
+            'lut': self.lut,
+            'state_dict': self.state_dict,
+            'save_path': save_path,
+            'history': self.L.history,
+        })
 
-        if load_key_include_set is not None:
-            path_dict = {k: path_dict[k] for k, v in load_key_exclude_set.items()}
+        self.L.last_checkpoint = checkpoint_path
+        return paths
 
-        if load_key_exclude_set is not None:
-            path_dict = {k: v for k, v in path_dict.items() if k not in load_key_exclude_set}
-
-        d = dict() 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        load_map = {
-            'parameters': lambda path: load_yaml_config(path),
-            'w_in': lambda path: BooleanReservoir.load_torch_tensor(path, device),
-            'graph': BooleanReservoir.load_graph,
-            'init_state': lambda path: BooleanReservoir.load_torch_tensor(path, device),
-            'lut': lambda path: BooleanReservoir.load_torch_tensor(path, device),
-            'weights': lambda path: BooleanReservoir.load_torch_tensor(path, device),
-        }
-        for key, path in path_dict.items():
-            if key not in load_map:
-                raise KeyError(f"Unsupported key in path_dict: '{key}'")
-            if path.exists():
-                loader = load_map[key]
-                d[key] = loader(path)
-            else:
-                print(f"Warning: Model object key '{key}' does not exist at '{path}' (A replacement may be generated)")
-        return d
-    
     def load(self, checkpoint_path:Path=None, paths:dict=None, parameter_override:Params=None):
-        load_dict = self.load_from_path_dict_or_checkpoint_folder(path_dict=paths, checkpoint_path=checkpoint_path)
-        if parameter_override:
-            load_dict['parameters'] = parameter_override
+        load_dict = SaveAndLoadModel.load(checkpoint_path=checkpoint_path, paths=paths, parameter_override=parameter_override)
         self.__init__(load_dict=load_dict)
         return load_dict
-    
-    @staticmethod
-    def load_graph(path):
-        with gzip.open(path, 'rb') as f:
-            graph = nx.read_graphml(f) 
-            graph = nx.relabel_nodes(graph, lambda x: int(x)) 
-        return graph
 
-    @staticmethod
-    def load_torch_tensor(path, device=None):
-        tensor = torch.load(path, weights_only=True, map_location=device)
-        return tensor
-    
     def flush_history(self):
         if self.history:
             self.history.flush()
-
-    @staticmethod
-    def make_load_path_dict(folder_path):
-        folder_path = Path(folder_path)
-        paths = dict()
-        files = []
-        files.append(('parameters', 'yaml'))
-        files.append(('w_in', 'pt'))
-        files.append(('graph', 'graphml.gz'))
-        files.append(('init_state', 'pt'))
-        files.append(('lut', 'pt'))
-        files.append(('weights', 'pt'))
-        paths = {file: folder_path / f'{file}.{filetype}' for file, filetype in files}
-        return paths
     
     def bin2int(self, x): # TODO consider bit packig?
         vals = (x * self.powers_of_2).sum(dim=-1)

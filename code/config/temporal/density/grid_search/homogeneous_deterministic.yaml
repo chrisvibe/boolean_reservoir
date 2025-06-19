@@ -2,7 +2,7 @@ logging:
   out_path: out/temporal/density/grid_search/homogeneous-deterministic
   grid_search:
     seed: 0
-    n_samples: 10
+    n_samples: 25
   save_keys: [parameters]
 model:
   input_layer:
@@ -38,8 +38,8 @@ model:
 dataset:
   task: density
   bit_stream_length: 10
-  window_size: 3
-  tao: [3, 5, 7]
+  window_size: [1, 3, 5]
+  tao: [1, 3, 5]
   split:
     train: 0.4
     dev: 0.3

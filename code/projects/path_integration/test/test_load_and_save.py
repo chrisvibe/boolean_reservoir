@@ -4,8 +4,9 @@ from pathlib import Path
 import torch
 from copy import deepcopy
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir
-from projects.boolean_reservoir.code.train_model import train_single_model, grid_search, EuclideanDistanceAccuracy as a
+from projects.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
+from projects.boolean_reservoir.code.boolean_reservoir_parallel import boolean_reservoir_grid_search 
 
 def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dataset, accuracy=a().accuracy):
     """Test that two models have identical parameters and behavior."""
@@ -53,7 +54,14 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
         rmtree(path)
     
     # Run grid search and get the best parameters
-    _, p = grid_search('config/path_integration/test/2D/test_sweep.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    _, p = boolean_reservoir_grid_search(
+        'config/path_integration/test/2D/test_sweep.yaml',
+        dataset_init=d().dataset_init,
+        accuracy=a().accuracy,
+        gpu_memory_per_job_gb = 0.5,
+        cpu_memory_per_job_gb = 1,
+        cpu_cores_per_job = 2,
+    )
     print('-'*10, '\n', p, '\n', '-'*10)
     
     # Load model from checkpoint

@@ -85,12 +85,19 @@ def print_pretty_binary_matrix(data, input_nodes=None, reservoir_nodes=None, pri
     if return_str:
         return result
     
-def override_symlink(source: Path, link:str=None):
-    if link.exists():
-        link.unlink()
-    link.symlink_to(source)
+def override_symlink(source: Path, link: Path = None):
+    try:
+        if link is None:
+            link = Path(source.name)
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(source)
+    except FileExistsError:
+        print(f'ERROR: Could not create symlink; file already exists: {link}')
+    except Exception as e:
+        print(f'Unexpected error creating symlink: {e}')
 
-class CudaMemoryManager:
+class CudaMemoryManager: # TODO This class works but is not recommended for multi-gpu setting...
     def __init__(self, ratio_threshold=0.9, verbose=True):
         if verbose:
             self.gpu_check()
@@ -120,10 +127,11 @@ class CudaMemoryManager:
             ratio = (reserved_memory + mem_one_iter) / self.mem_capacity_per_gpu[dev_idx]
             if ratio > self.ratio_threshold:
                 torch.cuda.empty_cache()
-                break
+                return True
+        return False
     
     def _cpu_manage_memory(self):
-        pass
+        return False
 
     @staticmethod
     def gpu_check():
@@ -141,7 +149,7 @@ def l2_distance(tensor):
 def manhattan_distance(tensor):
     return torch.abs(tensor).sum(axis=1)
 
-def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_classes=False, target_mode='samples_over_bins'):
+def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_classes=False, target_mode='samples_over_bins', verbose=False):
     x = dataset.data['x']
     y = dataset.data['y']
 
@@ -172,27 +180,29 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
     balanced_indices = torch.cat(balanced_indices) if balanced_indices else torch.arange(len(y))
     
     # Report statistics
-    if labels_are_classes:
-        print("Class distribution:")
-        unique_labels = torch.unique(y)
-        for label in unique_labels:
-            before_count = (y == label).sum().item()
-            after_count = (y[balanced_indices] == label).sum().item()
-            print(f" Class {int(label.item())}: {before_count} → {after_count} samples")
-    else:
-        print("Value distribution (quartiles):")
-        quartiles = [0, 25, 50, 75, 100]
-        before_quartiles = [torch.quantile(y, q/100).item() for q in quartiles]
-        after_quartiles = [torch.quantile(y[balanced_indices], q/100).item() for q in quartiles]
-        for i, q in enumerate(quartiles):
-            print(f" {q}%: {before_quartiles[i]:.4f} → {after_quartiles[i]:.4f}")
+    if verbose:
+        if labels_are_classes:
+            print("Class distribution:")
+            unique_labels = torch.unique(y)
+            for label in unique_labels:
+                before_count = (y == label).sum().item()
+                after_count = (y[balanced_indices] == label).sum().item()
+                print(f" Class {int(label.item())}: {before_count} → {after_count} samples")
+        else:
+            print("Value distribution (quartiles):")
+            quartiles = [0, 25, 50, 75, 100]
+            before_quartiles = [torch.quantile(y, q/100).item() for q in quartiles]
+            after_quartiles = [torch.quantile(y[balanced_indices], q/100).item() for q in quartiles]
+            for i, q in enumerate(quartiles):
+                print(f" {q}%: {before_quartiles[i]:.4f} → {after_quartiles[i]:.4f}")
     
     # Update dataset with balanced indices
     dataset.data['x'] = x[balanced_indices]
     dataset.data['y'] = y[balanced_indices]
     
     # Report overall reduction
-    n_before, n_after = len(x), len(balanced_indices)
-    print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
+    if verbose:
+        n_before, n_after = len(x), len(balanced_indices)
+        print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
 
     return dataset

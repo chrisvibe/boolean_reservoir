@@ -9,6 +9,7 @@ from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.graph_visualizations_dash import *
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.visualizations import *
+from time import sleep
 
 class AccuracyFunction(ABC):
     @abstractmethod
@@ -112,82 +113,3 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
     model.P.L.train_log.loss = best_stats['loss']
     model.P.L.train_log.epoch = best_stats['epoch']
     return best_stats, model, train_history
-
-def grid_search(yaml_path: str, dataset_init:DatasetInit=None, accuracy:AccuracyFunction=None, param_combinations: list[Params]=None):
-    # TODO add DP and make each GPU handle one model?
-    # dataset is re-initialized when parameters from input_layer or dataset change
-    cpu_device = torch.device('cpu')
-    yaml_path = Path(yaml_path)
-    P = load_yaml_config(yaml_path)
-    L = P.L
-    set_seed(L.grid_search.seed)
-    assert not L.out_path.exists(), 'Grid search already exists (path taken)'
-    L.out_path.mkdir(parents=True, exist_ok=True)
-    save_yaml_config(P, L.out_path / 'parameters.yaml')
-    if param_combinations is None:
-        param_combinations = generate_param_combinations(P)
-    n_config = len(param_combinations)
-    n_sample = L.grid_search.n_samples
-    last_dataset_params = last_input_params = dataset = best_params = None
-    history = list() 
-    mem = CudaMemoryManager()
-
-    # TODO split dataset and input layer init, atm this assumes dataset_init is invariant to I.seed
-    def is_equal_except_seed(this, that):
-        if isinstance(that, Params):
-            return all(
-                getattr(this, attr) == getattr(that, attr)
-                for attr in this.dict() if attr != 'seed'
-            )
-        return False
-
-    pbar = tqdm(total=n_config*n_sample, desc="Grid Search Progress")
-    for i, p in enumerate(param_combinations):
-        mem.manage_memory()
-        for j in range(n_sample):
-            t = p.M.T
-            print('#'*60)
-            k = generate_unique_seed(L.grid_search.seed, i, j)
-            p.M.I.seed = k
-            p.M.R.seed = k 
-            p.M.O.seed = k 
-            t.seed = k 
-            if last_dataset_params != p.D or not is_equal_except_seed(last_input_params, p.M.I):
-                dataset = dataset_init(P=p).to(mem.device)
-                last_dataset_params = p.D
-                last_input_params = p.M.I
-            model = best_epoch = None
-            try:
-                model = BooleanReservoir(p).to(mem.device)
-                best_epoch, model, _ = train_and_evaluate(model, dataset, record_stats=False, verbose=False, accuracy=accuracy)
-                model.to(cpu_device)
-            except (ValueError, AttributeError, TypeError) as error:
-                print("Error:", error)
-                model = BooleanReservoir
-                model.P = p
-                model.timestamp_utc = model.get_timestamp_utc()
-                model.save = lambda *args: None
-                best_epoch = {'eval': t.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
-            print(f"{model.timestamp_utc}: Config: {i+1:0{len(str(n_config))}d}/{n_config}, Sample: {j+1:0{len(str(n_sample))}d}/{n_sample}, Loss: {best_epoch['loss']:.4f}, Accuracy: {best_epoch['accuracy']:.4f}, Epoch: {best_epoch['epoch']}")
-            print(p.model)
-            if best_params is None or best_params.L.train_log.loss is None or (best_epoch['loss'] < best_params.L.train_log.loss):
-                best_params = model.P
-            log_data = dict()
-            log_data['timestamp_utc'] = model.timestamp_utc 
-            log_data['config'] = i+1
-            log_data['sample'] = j+1 
-            log_data.update(best_epoch)
-            log_data['params'] = p
-            model.save()
-            history.append(log_data)
-            pbar.update(1)
-    pbar.close()
-    print('saving history...')
-    history_df = pd.DataFrame(history)
-    file_path = L.out_path / 'log.h5'
-    history_df.to_hdf(file_path, key='df', mode='w')
-    print('making plots...')
-    plot_grid_search(file_path)
-    print('#'*60)
-    print(f'Best parameters:\n{best_params}')
-    return P, best_params

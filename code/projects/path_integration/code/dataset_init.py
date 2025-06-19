@@ -1,4 +1,4 @@
-from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
+from projects.boolean_reservoir.code.encoding import BooleanEncoder, min_max_normalization
 from projects.boolean_reservoir.code.parameters import Params
 from projects.boolean_reservoir.code.utils import balance_dataset
 from projects.boolean_reservoir.code.train_model import DatasetInit
@@ -13,7 +13,7 @@ class PathIntegrationDatasetInit(DatasetInit): # Note dont use I.seed here datas
         dataset.set_normalizer_x(min_max_normalization)
         dataset.set_normalizer_y(min_max_normalization)
         dataset.normalize()
-        encoder = lambda x: float_array_to_boolean(x, I)
+        encoder = BooleanEncoder(I)
         dataset.set_encoder_x(encoder)
         dataset.encode_x()
         dataset.split_dataset(split=D.split)

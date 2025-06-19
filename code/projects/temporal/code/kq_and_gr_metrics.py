@@ -2,10 +2,8 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir, BatchedTensorHistoryWriter
 from benchmarks.temporal.temporal_replication_study_density_parity_datasets import TemporalDensityDataset
-from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config, generate_param_combinations, Params
+from projects.boolean_reservoir.code.parameters import load_yaml_config, generate_param_combinations, Params
 from projects.boolean_reservoir.code.graphs import calc_spectral_radius 
-from projects.temporal.code.visualizations import plot_kq_and_gr, group_df_data_by_parameters, plot_kq_and_gr_many_config, plot_optimal_k_vs_n
-from projects.boolean_reservoir.code.visualizations import plot_activity_trace 
 import pandas as pd
 from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager
 from pathlib import Path
