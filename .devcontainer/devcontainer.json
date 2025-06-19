@@ -15,7 +15,10 @@
         "vscode": {
             "settings": {
                 "python.defaultInterpreterPath": "/opt/conda/envs/boolean_reservoir/bin/python"
-            }
+            },
+            "extensions": [
+                "ms-python.python"
+            ]
         }
     },
     "hostRequirements": {
