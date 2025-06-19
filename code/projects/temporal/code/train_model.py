@@ -47,8 +47,6 @@ if __name__ == '__main__':
     ]
 
     node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    print(f"Running on node: {node}")
-
     if "hpc10" in node:
         logger.info("This is the A100 node")
         configs = configs[::2]

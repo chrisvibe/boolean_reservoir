@@ -3,8 +3,8 @@ from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.train_model import train_and_evaluate
 from projects.boolean_reservoir.code.parameters import *
 from projects.boolean_reservoir.code.visualizations import plot_grid_search
-from projects.grid_search.code.train_model_parallel import generic_parallel_grid_search
-from projects.grid_search.code.parallel_utils import JobInterface
+from projects.parallel_grid_search.code.train_model_parallel import generic_parallel_grid_search
+from projects.parallel_grid_search.code.parallel_utils import JobInterface
 from copy import deepcopy
 import hashlib
 import torch

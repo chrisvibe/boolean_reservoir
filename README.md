@@ -29,9 +29,11 @@ Optionally, there is a Conda environment file located in the `/docker/src` direc
    - Install recommended devcontainer add-ons 
    - Atm there are no tutorials but you can now tinker with the project
 
+2. **Github code:**
+   git clone --recursive https://github.com/chrisvibe/boolean_reservoir.git
+
 ### Testing
-TODO
-Example:
+Examples:
 pytest /code/projects/boolean_reservoir/test/test_graphs.py
 pytest /code/projects/path_integration/test/test_load_and_save.py
 pytest /code/projects/path_integration/test/test_verification_models.py
