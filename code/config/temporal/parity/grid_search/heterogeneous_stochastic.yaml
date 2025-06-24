@@ -1,5 +1,5 @@
 logging:
-  out_path: out/temporal/grid_search/parity/heterogeneous-stochastic
+  out_path: out/temporal/parity/grid_search/heterogeneous-stochastic
   grid_search:
     seed: 0
     n_samples: 25

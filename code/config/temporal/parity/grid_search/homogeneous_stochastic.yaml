@@ -1,9 +1,9 @@
 logging:
-  out_path: out/temporal/grid_search/parity/homogeneous-stochastic
+  out_path: out/temporal/parity/grid_search/homogeneous-stochastic
   grid_search:
     seed: 0
     n_samples: 25
-  save_key: {parameters}
+  save_keys: [parameters]
 model:
   input_layer:
     bits_per_feature: 1

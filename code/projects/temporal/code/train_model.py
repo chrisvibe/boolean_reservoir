@@ -47,14 +47,22 @@ if __name__ == '__main__':
     ]
 
     node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    if "hpc10" in node:
-        logger.info("This is the A100 node")
-        configs = configs[::2]
-    elif "hpc11" in node:
-        configs = configs[1::2]
-        logger.info("This is the H100 node")
+    if "hpc" in node:
+        logger.info(f"This is hpc node: {node}")
     else:
         logger.warning(f"Unknown node detected: {node}")
+
+    node_job_assigments = {
+        5: [4, 5], # 2 done
+        6: [3], # not done
+        11: [6, 7], # 0, 1 done
+        'unknown': [0],
+    }
+    if node != 'unknown':
+        id = int(node[3:])
+        configs = [configs[idx] for idx in node_job_assigments[id]]
+    else:
+        configs = [configs[idx] for idx in node_job_assigments['unknown']]
 
     for c in configs:
         boolean_reservoir_grid_search(
@@ -63,5 +71,5 @@ if __name__ == '__main__':
             accuracy=a().accuracy,
             gpu_memory_per_job_gb = 0.5,
             cpu_memory_per_job_gb = 1,
-            cpu_cores_per_job = 4,
+            cpu_cores_per_job = 1,
         )
