@@ -6,8 +6,8 @@ from projects.boolean_reservoir.code.visualizations import plot_grid_search
 from projects.parallel_grid_search.code.train_model_parallel import generic_parallel_grid_search
 from projects.parallel_grid_search.code.parallel_utils import JobInterface
 from copy import deepcopy
-import hashlib
-import torch
+from typing import Callable
+from torch.utils.data import Dataset
 
 import logging
 logger = logging.getLogger(__name__)
@@ -17,16 +17,17 @@ class BooleanReservoirJob(JobInterface):
     """Specific implementation for Boolean Reservoir jobs"""
     
     def __init__(self, i: int, j: int, total_configs: int, total_samples: int, shared: dict, locks: dict, 
-                 P, dataset_init, accuracy):
+                 P, dataset_init: Callable[[], Dataset], accuracy):
         super().__init__(i, j, total_configs, total_samples, shared, locks)
         self.P = P
-        self.dataset_init = dataset_init
         self.accuracy = accuracy
+        self.dataset_init = dataset_init
     
     def _run(self, device):
         """Run job and process results internally"""
         # Train model
-        dataset = self._get_dataset(device)
+        with self.locks['dataset_lock']:
+            dataset = self.dataset_init(self.P)
         model = BooleanReservoir(self.P).to(device)
         best_epoch, trained_model, _ = train_and_evaluate(
             model, dataset, record_stats=False, verbose=False, accuracy=self.accuracy
@@ -58,45 +59,6 @@ class BooleanReservoirJob(JobInterface):
 
         return {'status': 'success', 'stats': best_epoch, 'timestamp_utc': timestamp_utc}
 
-    def _get_dataset(self, device: torch.device): # TODO make this a own class that can be inherited optionally in parallel_utils.py. Problem: self.P, connection to shared and locks...
-        """Get dataset from cache or create new one"""
-        cache_key = self._get_dataset_key(device)
-        logger.debug(f"Loading dataset for key {cache_key} on device {device}")
-        
-        dataset = self._get_dataset_from_cache(cache_key)
-        if dataset is None:
-            logger.debug(f"Initializing dataset for key {cache_key} on device {device}")
-            dataset = self.dataset_init(P=self.P)
-            self._put_dataset_in_cache(cache_key, dataset)
-        
-        return dataset.to(device)
-    
-    def _get_dataset_key(self, device: torch.device):
-        """Generate cache key for dataset"""
-        dataset_params = deepcopy(self.P.D)
-        param_str = str(sorted(dataset_params.model_dump()))
-        key_str = f"{param_str}:{device}"
-        return hashlib.md5(key_str.encode()).hexdigest()
-    
-    def _get_dataset_from_cache(self, key):
-        with self.locks['dataset_cache']:
-            dataset = self.shared['dataset_cache'].get(key, None)
-            if dataset is not None:
-                self.shared['dataset_scores'][key] = self.shared['dataset_scores'].get(key, 0) + 1
-            return dataset
-
-    def _put_dataset_in_cache(self, key, dataset, max_cache_size=10):
-        with self.locks['dataset_cache']:
-            if key not in self.shared['dataset_cache']:
-                if len(self.shared['dataset_cache']) >= max_cache_size:
-                    # Evict the dataset with the lowest score
-                    if self.shared['dataset_scores']:
-                        min_key = min(self.shared['dataset_scores'], key=self.shared['dataset_scores'].get)
-                        del self.shared['dataset_cache'][min_key]
-                        del self.shared['dataset_scores'][min_key]
-                self.shared['dataset_cache'][key] = dataset
-                self.shared['dataset_scores'][key] = 1
-
     
 # Factory for Boolean Reservoir jobs
 def boolean_reservoir_job_factory(P, param_combinations, dataset_init, accuracy):
@@ -117,6 +79,7 @@ def boolean_reservoir_job_factory(P, param_combinations, dataset_init, accuracy)
             accuracy=accuracy
         )
     return create_job
+
 
 def boolean_reservoir_grid_search(
     yaml_path: str,
