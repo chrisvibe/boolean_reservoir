@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # # debug 
     # #####################################
 
-    # from projects.boolean_reservoir.code.reservoir import BooleanReservoir
+    # from projects.boolean_reservoir.code.reservoir import BooleanReservoiear
     # from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix
     # import torch
     # x = torch.tensor([[[[int(bit)]] for bit in '0001001010']], dtype=torch.uint8)
