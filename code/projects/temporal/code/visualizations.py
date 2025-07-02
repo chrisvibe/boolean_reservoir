@@ -19,7 +19,7 @@ def plot_many_things(model, dataset, history):
     y_hat_test = model(dataset.data['x_test'][:500])
     plot_train_history(model.save_path, history)
     plot_predictions_and_labels(model.save_path, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[0, 1])
-    plot_dynamics_history(model.save_path)
+    # plot_dynamics_history(model.save_path)
     # plot_graph_with_weight_coloring_3D(model.graph, model.readout)
 
 def group_df_data_by_parameters(df):

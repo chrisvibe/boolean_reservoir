@@ -57,9 +57,8 @@ class BooleanReservoirJob(JobInterface):
                 self.shared['best_params']['params'] = self.P
 
         return {'status': 'success', 'stats': best_epoch, 'timestamp_utc': timestamp_utc}
-            
- 
-    def _get_dataset(self, device: torch.device):
+
+    def _get_dataset(self, device: torch.device): # TODO make this a own class that can be inherited optionally in parallel_utils.py. Problem: self.P, connection to shared and locks...
         """Get dataset from cache or create new one"""
         cache_key = self._get_dataset_key(device)
         logger.debug(f"Loading dataset for key {cache_key} on device {device}")

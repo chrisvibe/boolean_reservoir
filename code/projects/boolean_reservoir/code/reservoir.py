@@ -306,8 +306,8 @@ class BooleanReservoir(nn.Module):
         vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 
-    def reset_reservoir(self, batches):
-        self.states_parallel = self.initial_states.repeat(batches, 1)
+    def reset_reservoir(self, samples): # TODO could lead to bug if batch has say 1 samples then 100. you need a state to continue from.
+        self.states_parallel = self.initial_states.repeat(samples, 1)
    
     def forward(self, x):
         '''
@@ -321,13 +321,13 @@ class BooleanReservoir(nn.Module):
 
         how they perturb the reservoir if self.I.features == 2:
         1. m paralell samples 
-        2. s sequential step sets of inputs re-using w_in
+        2. s sequential step sets of inputs re-using w_in. Ie. if s>1, then w_in is re-used s times.
         3. f sequential input sets as per w_in[a_i:b_i, :] (w_in is partitioned per input so two parts in the example)
         4. b simultaneous bits as per w_in[a_i:b_i, :] (if input is the bit string abcd then we perturb with ab first, then cd)
         
         note that x only controls m and s (assume f and b dimensions match self.I.features and self.I.bits_per_feature)
         thus one can change pertubations behaviour via input shape or model configuration
-        w_in arbitratily maps bits to input_nodes, so there is no requirement for a 1:1 mapping
+        w_in can arbitratily map bits to input_nodes, so there is no requirement for a 1:1 mapping
         '''
 
         # handle batch size greater than paralell reservoirs

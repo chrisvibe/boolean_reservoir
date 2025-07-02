@@ -1,0 +1,69 @@
+dataset:
+  bit_stream_length: 10
+  generate_data: false
+  path: data/temporal/density/u-10/w-5/t-5/m-10000/r-0/dataset.pt
+  samples: 10000
+  seed: 0
+  split:
+    dev: 0.3
+    test: 0.3
+    train: 0.4
+  tao: 5
+  task: density
+  window_size: 5
+logging:
+  grid_search:
+    n_samples: 25
+    seed: 0
+  history:
+    buffer_size: 64
+    record_history: false
+    save_path: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_23_194701_979048/history
+  last_checkpoint: null
+  out_path: out/temporal/density/grid_search/homogeneous-deterministic
+  save_keys: [parameters]
+  save_path: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_23_194701_979048
+  timestamp_utc: '2025_06_23_194701_979048'
+  train_log:
+    accuracy: 0.5003364737550471
+    epoch: 2
+    loss: 0.6935309767723083
+model:
+  input_layer:
+    bits_per_feature: 1
+    connection: out-3:3:1
+    distribution: identity
+    encoding: base2
+    features: 10
+    interleaving: 0
+    n_nodes: 10
+    pertubation: override
+    redundancy: 1
+    resolution: 1
+    seed: 733105096
+    w_in: null
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+    seed: 733105096
+  reservoir_layer:
+    init: random
+    k_avg: 1.0
+    k_max: 1
+    k_min: 1
+    mode: homogeneous
+    n_nodes: 500
+    p: 0.5
+    reset: true
+    seed: 733105096
+    self_loops: null
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    drop_last: true
+    epochs: 40
+    evaluation: dev
+    learning_rate: 0.001
+    seed: 733105096
+    shuffle: true

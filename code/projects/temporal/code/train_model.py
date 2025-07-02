@@ -17,6 +17,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
+    pass 
+
+    # # debug 
+    # #####################################
+
+    # from projects.boolean_reservoir.code.reservoir import BooleanReservoir
+    # from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix
+    # import torch
+    # x = torch.tensor([[[[int(bit)]] for bit in '0001001010']], dtype=torch.uint8)
+    # model = BooleanReservoir(load_path='/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125038_810586/checkpoints/last_checkpoint')
+    # model(x)
+    # pass
+    
+    # # these just add to the grid search below a 50% model and a 100% model
+    # p, model, dataset, history = train_single_model('/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125038_810586/checkpoints/last_checkpoint/parameters.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
+    # p, model, dataset, history = train_single_model('/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125107_553781/checkpoints/last_checkpoint/parameters.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
+
+    # boolean_reservoir_grid_search(
+    #     'config/temporal/density/test/debug_homogeneous_deterministic.yaml',
+    #     dataset_init=d().dataset_init,
+    #     accuracy=a().accuracy,
+    #     gpu_memory_per_job_gb = 1/2,
+    #     cpu_memory_per_job_gb = 1/2,
+    #     cpu_cores_per_job = 1,
+    # )
 
     # # Simple run
     # #####################################
@@ -33,14 +60,16 @@ if __name__ == '__main__':
     # #####################################
     configs = [
         # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
+        # 'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
+        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
 
         'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
         'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
-        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
-
         'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
         'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
+
+        'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
+        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
         'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
         'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
 
@@ -53,9 +82,9 @@ if __name__ == '__main__':
         logger.warning(f"Unknown node detected: {node}")
 
     node_job_assigments = {
-        5: [4, 5], # 2 done
-        6: [3], # not done
-        11: [6, 7], # 0, 1 done
+        5: [],
+        1: [3],
+        11: [],
         'unknown': [0],
     }
     if node != 'unknown':
@@ -69,7 +98,7 @@ if __name__ == '__main__':
             c,
             dataset_init=d().dataset_init,
             accuracy=a().accuracy,
-            gpu_memory_per_job_gb = 0.5,
-            cpu_memory_per_job_gb = 1,
+            gpu_memory_per_job_gb = 1/2,
+            cpu_memory_per_job_gb = 1/2,
             cpu_cores_per_job = 1,
         )

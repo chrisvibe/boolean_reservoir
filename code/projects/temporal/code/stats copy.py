@@ -4,7 +4,6 @@ from projects.boolean_reservoir.code.utils import override_symlink
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm
-import statsmodels.formula.api as smf
 from statsmodels.formula.api import ols
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +33,7 @@ def load_data(variable):
     # training_paths.append('config/temporal/density/grid_search/heterogeneous_deterministic.yaml')
     # training_paths.append('config/temporal/density/grid_search/heterogeneous_stochastic.yaml')
 
-    training_paths.append('config/temporal/parity/grid_search/homogeneous_deterministic.yaml')
+    # training_paths.append('config/temporal/parity/grid_search/homogeneous_deterministic.yaml')
     # training_paths.append('config/temporal/parity/grid_search/homogeneous_stochastic.yaml')
     # training_paths.append('config/temporal/parity/grid_search/heterogeneous_deterministic.yaml')
     # training_paths.append('config/temporal/parity/grid_search/heterogeneous_stochastic.yaml')
@@ -119,37 +118,7 @@ def aggregate_and_merge_data(df1, df2, factors):
     # df.drop(['combo'], axis=1, inplace=True)
     return df
 
-def anova_analysis_discrete(out_path: Path):
-    '''
-    factorial ANOVA (interaction effects are interesting)
-    ----------------------
-    response parameter: accuracy (right-skewed and have heteroscedasticity - increasing spread with magnitude)
-       fyi: loss (BCE)
-    factors: categorical design choices
-    groups: parameter per design combination
-    samples per group: 25 independent samples
-    avoid normality and homogenity criteria by using generealized anova for discrete data with binomial model
-
-    - KQ/GR/Delta -> accuracy
-    What is the relationship between KQ/GR/Delta and Accuracy
-    What is the relationship between design choice and Accuracy
-    '''
-
-    response = 'accuracy'
-    df, factors, groups_dict = load_data(response)
-    df = df[['combo', response, 'delta', 'kq', 'gr'] + factors]
-
-    # TODO write a note here about how combinations + k_avg are too many and we split analysis in two stages
-
-    # group by k_avg to see effect of just that, use best k_avg as base (highest accuracy mean)
-    df2 = set_reference_category(df, 'R_k_avg', 2.0) 
-    model = check_factorial_glm_binomial_fixed_sample_size_per_row(df2, response, ['R_k_avg'])
-    print("\nANOVA Model:")
-    print(model.summary())
-
-    df2 = df # TODO using optimal k_avg find the best design combinations 
-
-def anova_analysis_continuous(out_path: Path):
+def anova_analysis(out_path: Path):
     '''
     factorial ANOVA (interaction effects are interesting)
     ----------------------
@@ -261,66 +230,6 @@ def check_factorial_anova(df, metric, factors):
     anova_table = sm.stats.anova_lm(model, typ=2)
     return anova_table, model
 
-def check_factorial_glm_binomial_fixed_sample_size_per_row(df, accuracy_col, factors):
-    """
-    Perform factorial analysis using a Binomial GLM from accuracy values with a fixed number of trials per row.
-
-    Assumptions:
-    - 'accuracy' is the proportion of correct predictions per row, computed as correct / total.
-    - The number of trials (total) is the same for every row and is not provided as a column.
-    - All factors specified are treated as categorical variables.
-
-    This approach models the log-odds of accuracy using a binomial likelihood and supports factorial designs.
-    """
-
-    df = df.copy()
-    df["proportion"] = df[accuracy_col] # correct/total for m samples (batch size)
-
-    formula = "proportion ~ " + " * ".join([f"C({factor})" for factor in factors])
-
-    model = smf.glm(
-        formula,
-        data=df,
-        family=sm.families.Binomial()
-    )
-    model_fit = model.fit()
-
-    return model_fit
-
-def set_reference_category(df, factor_name, reference_level):
-    """
-    Reorder factor levels to set a specific level as the reference category for GLM
-    
-    Parameters:
-    -----------
-    df : DataFrame
-        Input dataframe
-    factor_name : str
-        Name of the factor column to reorder
-    reference_level : 
-        The level to use as reference (will be first in category order)
-    """
-    # Get current levels
-    current_levels = sorted(df[factor_name].unique())
-    
-    # Check if reference level exists
-    if reference_level not in current_levels:
-        raise ValueError(f"Reference level '{reference_level}' not found in {factor_name}. "
-                       f"Available levels: {current_levels}")
-    
-    # Create new order with reference_level first
-    new_order = [reference_level] + [level for level in current_levels if level != reference_level]
-    
-    # Convert to categorical with the new order
-    df_copy = df.copy()
-    df_copy[factor_name] = pd.Categorical(df_copy[factor_name], 
-                                          categories=new_order, 
-                                          ordered=False)
-    
-    print(f"Set '{reference_level}' as reference for {factor_name}")
-    
-    return df_copy
-
 def plot_predictions(path, model, df, metric):
     """Plot real vs. predicted values."""
     plt.figure(figsize=(10, 6))
@@ -384,4 +293,4 @@ def plot_residuals(path, model, df, metric):
 
 if __name__ == '__main__':
     out_path = Path('/out/temporal/stats')
-    anova_analysis_discrete(out_path)
+    anova_analysis(out_path)

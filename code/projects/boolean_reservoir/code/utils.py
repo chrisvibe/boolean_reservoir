@@ -6,6 +6,7 @@ from pathlib import Path
 import networkx as nx
 
 # Ensure reproducibility by setting seeds globally
+# Wont work across architectures and GPU vs CPU etc
 def set_seed(seed=42):
     if seed is not None:
         random.seed(seed)
@@ -86,16 +87,29 @@ def print_pretty_binary_matrix(data, input_nodes=None, reservoir_nodes=None, pri
         return result
     
 def override_symlink(source: Path, link: Path = None):
+    """
+    Atomically create/update a symbolic link. Fails silently if unable.
+    """
+    if link is None:
+        link = Path(source.name)
+    
     try:
-        if link is None:
-            link = Path(source.name)
-        if link.is_symlink() or link.exists():
-            link.unlink()
-        link.symlink_to(source)
-    except FileExistsError:
-        print(f'ERROR: Could not create symlink; file already exists: {link}')
+        # Create a temporary symlink with unique name
+        temp_link = Path(f"{link}.tmp.{os.getpid()}.{time.time_ns()}")
+        temp_link.symlink_to(source)
+        
+        # Atomically replace the old symlink
+        os.replace(str(temp_link), str(link))
+        
     except Exception as e:
-        print(f'Unexpected error creating symlink: {e}')
+        # Clean up temp file if it exists
+        if 'temp_link' in locals() and temp_link.exists():
+            try:
+                temp_link.unlink()
+            except:
+                pass
+        # Fail silently - symlink is not critical
+        pass
 
 class CudaMemoryManager: # TODO This class works but is not recommended for multi-gpu setting...
     def __init__(self, ratio_threshold=0.9, verbose=True):

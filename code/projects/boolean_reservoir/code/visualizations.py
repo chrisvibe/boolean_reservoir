@@ -212,7 +212,7 @@ def plot_dynamics_history(path):
     history_normalized = np.nan_to_num(history_normalized) # columns with all 0's or 1's will divide by zero as variance = 0
     n_components = 2
 
-    pca = PCA(n_components=n_components)
+    pca = PCA(n_components=n_components) # TODO transpose for space and time pca and break up into smaller parts
     embedding = pca.fit_transform(history_normalized)
     df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)

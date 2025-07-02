@@ -9,6 +9,8 @@ from projects.boolean_reservoir.code.utils import generate_unique_seed, override
 from pathlib import Path
 from tqdm import tqdm
 
+# TODO consider parallelization like in grid search for CPU + GPU
+
 def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: list, config: int, sample: int):
     # nest history by metric (load from same model and evaluate on KQ and GR)
     nested_out = model.L.save_path / 'history' / metric
@@ -26,8 +28,8 @@ def process_batch(model: BooleanReservoir, x: torch.Tensor, metric: str, data: l
     # Load and calculate rank
     override_symlink(Path('../../checkpoint'), new_save_path / 'checkpoint')
     load_dict, history, expanded_meta, meta = model.history.reload_history()
-    filter = expanded_meta[expanded_meta['phase'] == 'output_layer']
-    filtered_history = history[filter.index].to(torch.float)
+    df_filter = expanded_meta[expanded_meta['phase'] == 'output_layer']
+    filtered_history = history[df_filter.index].to(torch.float)
     reservoir_node_history = filtered_history[:, ~model.input_nodes_mask]
 
     rank = torch.linalg.matrix_rank(reservoir_node_history)
@@ -151,6 +153,7 @@ if __name__ == '__main__':
 
     # generate data
     for path in paths:
+        print(path)
         df, P = calc_kernel_quality_and_generalization_rank(path)
         data_file_path = P.L.out_path / 'df.h5'
         df.to_hdf(data_file_path, key='df', mode='w')

@@ -20,3 +20,4 @@ class TemporalDatasetInit(DatasetInit): # Note dont use I.seed here dataset init
         if D.split:
             dataset.split_dataset()
         return dataset
+
