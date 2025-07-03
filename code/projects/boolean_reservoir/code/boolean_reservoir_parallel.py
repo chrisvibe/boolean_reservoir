@@ -27,7 +27,7 @@ class BooleanReservoirJob(JobInterface):
         """Run job and process results internally"""
         # Train model
         with self.locks['dataset_lock']:
-            dataset = self.dataset_init(self.P)
+            dataset = self.dataset_init(self.P).to(device)
         model = BooleanReservoir(self.P).to(device)
         best_epoch, trained_model, _ = train_and_evaluate(
             model, dataset, record_stats=False, verbose=False, accuracy=self.accuracy
