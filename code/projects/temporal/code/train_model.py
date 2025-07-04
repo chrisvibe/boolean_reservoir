@@ -9,7 +9,7 @@ from projects.boolean_reservoir.code.boolean_reservoir_parallel import boolean_r
 import logging
 import sys
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(process)d - %(filename)s - %(message)s',
     stream=sys.stdout,
     force=True
@@ -60,8 +60,6 @@ if __name__ == '__main__':
     # #####################################
     configs = [
         # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
-        # 'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
 
         'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
         'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
@@ -82,9 +80,11 @@ if __name__ == '__main__':
         logger.warning(f"Unknown node detected: {node}")
 
     node_job_assigments = {
-        5: [],
-        1: [3],
-        11: [],
+        1: [0, 2],
+        2: [1, 3],
+        3: [4, 6],
+        5: [5, 7],
+        10: [],
         'unknown': [0],
     }
     if node != 'unknown':
