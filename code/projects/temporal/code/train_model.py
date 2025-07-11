@@ -9,7 +9,7 @@ from projects.boolean_reservoir.code.boolean_reservoir_parallel import boolean_r
 import logging
 import sys
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(process)d - %(filename)s - %(message)s',
     stream=sys.stdout,
     force=True
@@ -59,8 +59,6 @@ if __name__ == '__main__':
     # # Grid search stuff 
     # #####################################
     configs = [
-        # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
-
         'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
         'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
         'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
@@ -71,6 +69,7 @@ if __name__ == '__main__':
         'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
         'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
 
+        'config/temporal/density/test/heterogeneous_deterministic.yaml',
     ]
 
     node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
@@ -85,7 +84,8 @@ if __name__ == '__main__':
         3: [4, 6],
         5: [5, 7],
         10: [],
-        'unknown': [0],
+        11: [],
+        'unknown': [8],
     }
     if node != 'unknown':
         id = int(node[3:])

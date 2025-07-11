@@ -5,9 +5,9 @@ import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import numpy as np
 from statsmodels.formula.api import ols
 import matplotlib.pyplot as plt
-import numpy as np
 import matplotlib
 import re
 matplotlib.use('Agg')
@@ -29,7 +29,7 @@ def load_data(variable):
     # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
 
     training_paths = list()
-    training_paths.append('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
+    # training_paths.append('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
     # training_paths.append('config/temporal/density/grid_search/homogeneous_stochastic.yaml')
     # training_paths.append('config/temporal/density/grid_search/heterogeneous_deterministic.yaml')
     # training_paths.append('config/temporal/density/grid_search/heterogeneous_stochastic.yaml')
@@ -135,6 +135,7 @@ def anova_analysis_discrete(out_path: Path):
     What is the relationship between design choice and Accuracy
     '''
 
+    out_path.mkdir(exist_ok=True)
     response = 'accuracy'
     df, factors, groups_dict = load_data(response)
     df = df[['combo', response, 'delta', 'kq', 'gr'] + factors]
@@ -143,11 +144,25 @@ def anova_analysis_discrete(out_path: Path):
 
     # group by k_avg to see effect of just that, use best k_avg as base (highest accuracy mean)
     df2 = set_reference_category(df, 'R_k_avg', 2.0) 
-    model = check_factorial_glm_binomial_fixed_sample_size_per_row(df2, response, ['R_k_avg'])
+    factors = ['R_k_avg']
+    df2[factors] = df2[factors].apply(pd.to_numeric)
+    # formula = "proportion ~ " + " * ".join(factors) # continuous factors
+    formula = "proportion ~ bs(R_k_avg, df=3)"
+    model = check_factorial_glm_binomial_fixed_sample_size_per_row(df2, response, formula)
     print("\nANOVA Model:")
     print(model.summary())
 
-    df2 = df # TODO using optimal k_avg find the best design combinations 
+    # Calculate predictions for different k values
+    k_values = np.arange(1, 11)
+    pred_df = pd.DataFrame({'R_k_avg': k_values})
+    probabilities = model.predict(pred_df)
+    plt.plot(k_values, probabilities)
+    plt.savefig(out_path / 'best_k_avg.png')
+
+    # TODO using optimal k_avg find the best design combinations 
+    # df2 = set_reference_category(df, 'R_k_avg', 2.0) 
+    # formula = "proportion ~ " + " * ".join([f"C({factor})" for factor in factors]) # categorical factors
+    # model = check_factorial_glm_binomial_fixed_sample_size_per_row(df2, response, formula)
 
 def anova_analysis_continuous(out_path: Path):
     '''
@@ -261,7 +276,7 @@ def check_factorial_anova(df, metric, factors):
     anova_table = sm.stats.anova_lm(model, typ=2)
     return anova_table, model
 
-def check_factorial_glm_binomial_fixed_sample_size_per_row(df, accuracy_col, factors):
+def check_factorial_glm_binomial_fixed_sample_size_per_row(df, accuracy_col, formula):
     """
     Perform factorial analysis using a Binomial GLM from accuracy values with a fixed number of trials per row.
 
@@ -276,7 +291,6 @@ def check_factorial_glm_binomial_fixed_sample_size_per_row(df, accuracy_col, fac
     df = df.copy()
     df["proportion"] = df[accuracy_col] # correct/total for m samples (batch size)
 
-    formula = "proportion ~ " + " * ".join([f"C({factor})" for factor in factors])
 
     model = smf.glm(
         formula,
