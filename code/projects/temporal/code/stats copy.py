@@ -7,7 +7,6 @@ from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from statsmodels.formula.api import ols
-from statsmodels.genmod.families import Binomial
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -20,8 +19,6 @@ import plotly.graph_objects as go
 from pathlib import Path
 from itertools import combinations, product
 from typing import Dict, List, Tuple, Any
-import warnings
-pio.templates.default = "plotly_white"
 matplotlib.use('Agg')
 
 GREEN = "\033[92m"
@@ -83,18 +80,8 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     factors = list(df_train[factors].nunique()[df_train[factors].nunique() > 1].index)
 
     df = aggregate_and_merge_data(df_metric, df_train, factors)
-    df, factors = fix_combo(df, factors)
     groups_dict = {k: v[variable].values for k, v in df.groupby('combo')}
     return df, factors, groups_dict
-
-def fix_combo(df, factors):
-    scores = [8, 2, 1, 0, 7] # manually set new order of factors to make most important factor first (put k_avg last)
-    factors = sorted(factors, key=lambda item: scores[factors.index(item)], reverse=True)
-    df['combo'] = df['combo'].apply(lambda x: tuple(sorted(x, key=lambda item: scores[x.index(item)], reverse=True)))
-    df['combo_str'] = df['combo'].apply(lambda t: "_".join(map(str, t)))
-    df['combo_no_k_avg'] = df['combo'].apply(lambda row: row[:-1])
-    df['combo_no_k_avg_str'] = df['combo_no_k_avg'].apply(lambda t: "_".join(map(str, t)))
-    return df, factors
 
 def process_grid_search_data(df, d_set, i_set, r_set):
     flatten_params = lambda x: pd.concat([
@@ -144,12 +131,38 @@ def aggregate_and_merge_data(df1, df2, factors):
     df.columns = [col[:-2] if col.endswith('_x') else col for col in df.columns]
     df.drop([col for col in df.columns if col.endswith('_y')], axis=1, inplace=True)
 
+    # df['group_id'], _ = pd.factorize(df['combo'])
+    # df.drop(['combo'], axis=1, inplace=True)
     df['combo'] = df.apply(lambda row: tuple(row[feature] for feature in factors), axis=1)
     return df
 
+# def graph_accuracy_vs_k_avg(out_path: Path, df, success_thresh):
+#     # visualize response variable
+#     fig, ax = plt.subplots(figsize=(16, 8))
+#     df['R_k_avg_w_jitter'] = df['R_k_avg'] + np.random.uniform(-0.5, 0.5, size=len(df))
+#     df['design'] = df['combo'].apply(lambda t: "_".join(map(str, t[:-1])))
+#     sns.scatterplot(data=df, x='R_k_avg_w_jitter', y='accuracy', hue='design', s=20, alpha=0.3, ax=ax, legend=False)
+#     plt.xticks(np.arange(df['R_k_avg'].min(), df['R_k_avg'].max() + 1, 1))
+#     # plt.legend(bbox_to_anchor=(1, 1.15), loc='upper right')
+#     plt.savefig(out_path / 'scatter_accuracy_vs_k_avg.png', bbox_inches='tight')
+#     plt.close()
+
+#     df["success"] = (df["accuracy"] > success_thresh).astype(int)
+#     fig, ax = plt.subplots(figsize=(16, 8))
+#     sns.scatterplot(data=df, x='R_k_avg_w_jitter', y='success', hue='design', s=20, alpha=0.3, ax=ax)
+#     plt.xticks(np.arange(df['R_k_avg'].min(), df['R_k_avg'].max() + 1, 1))
+#     plt.savefig(out_path / 'scatter_success_vs_k_avg.png')
+#     plt.close()
+
+    # fig, ax = plt.subplots(figsize=(16, 8))
+    # sns.swarmplot(data=df, x='R_k_avg', y='accuracy', hue='design', s=20, alpha=0.3, ax=ax)
+    # plt.xticks(np.arange(df['R_k_avg'].min(), df['R_k_avg'].max() + 1, 1))
+    # plt.savefig(out_path / 'swarm_success_vs_k_avg.png')
+    # plt.close()
+
 def graph_accuracy_vs_k_avg(out_path: Path, df, success_thresh):
     df['R_k_avg_w_jitter'] = df['R_k_avg'] + np.random.uniform(-0.5, 0.5, size=len(df))
-    df['design'] = df['combo_no_k_avg_str']
+    df['design'] = df['combo'].apply(lambda t: "_".join(map(str, t[:-1])))
     
     fig = px.scatter(
         df, 
@@ -170,7 +183,7 @@ def graph_accuracy_vs_k_avg(out_path: Path, df, success_thresh):
         tickmode='array',
         tickvals=list(range(x_min, x_max + 1, 1))
     )
-    # fig.update_layout(showlegend=False)
+    fig.update_layout(showlegend=False)
     fig.write_html(out_path / 'scatter_accuracy_vs_k_avg.html')
     pio.write_image(fig, out_path / 'scatter_accuracy_vs_k_avg.svg', format='svg', width=1200, height=1600)
     return fig
@@ -186,6 +199,7 @@ def binary_stats_analysis(out_path: Path, df: pd.DataFrame, response: str, succe
     
     # Convert to binary success
     df["success"] = (df["accuracy"] > success_thresh).astype(int)
+    df['combo_str'] = df['combo'].apply(lambda t: "_".join(map(str, t)))
     
     # Separate predictors vs design choices
     predictors = ['delta', 'kq', 'gr']  # Properties that should predict success
@@ -595,305 +609,88 @@ def save_results(df: pd.DataFrame, fisher_results: Dict,
     print(f"  - analysis_summary.txt")
     print(f"  - combination_stats.csv")
 
-def polar_design_plot(out_path: Path, df: pd.DataFrame, factors, success_thresh: float, title: str):
+def polar_design_plot(out_path: Path, df: pd.DataFrame, success_thresh: float, title: str):
     out_path.mkdir(parents=True, exist_ok=True)
+    scores = [8, 2, 1, 0, 7] # manually set new order of factors to make most important factor first (put k_avg last)
+    df['combo'] = df['combo'].apply(lambda x: tuple(sorted(x, key=lambda item: scores[x.index(item)], reverse=True)))
+
     df['success'] = (df['accuracy'] > success_thresh).astype(int)
-    cols = {'R_k_avg': 'first', 'success': 'mean', 'combo_no_k_avg': 'first'}
-    cols.update(dict.fromkeys(factors, 'first'))
-    df_grouped = df.groupby(['combo']).agg(cols).reset_index()
-    
+    df['combo_no_k_avg'] = df['combo'].apply(lambda row: row[:-1])
+    df_grouped = df.groupby(['combo']).agg({'R_k_avg': 'first', 'success': 'mean', 'combo_no_k_avg': 'first'}).reset_index()
+
     # Expand tuples and sort
-    ascending = [1, 1, 0, 1, 1] # sort within levels ascending or not
-    df_grouped = df_grouped.sort_values(factors, ascending=ascending).reset_index(drop=True)
-    
+    sort_order = [1, 1, 0, 1, 1, 1] # sort within levels ascending or not
+    temp_cols = [f'sort_col_{i}' for i in range(len(sort_order))]
+    for i, col in enumerate(temp_cols):
+        df_grouped[col] = df_grouped['combo'].apply(lambda x: x[i] if i < len(x) else '')
+    df_grouped = df_grouped.sort_values(temp_cols, ascending=[x == 1 for x in sort_order]).drop(temp_cols, axis=1).reset_index(drop=True)
+
     # refine sort to minimize difference in combo
     from projects.temporal.code.categorical_ordering import grayish_sort 
     sorted_indices = grayish_sort(df_grouped['combo_no_k_avg'])
     df_grouped = df_grouped.iloc[sorted_indices].reset_index(drop=True)
+
     codes, uniques = pd.factorize(df_grouped['combo_no_k_avg'])
     df_grouped['n'] = codes
-    df_grouped['direction_val'] = (df_grouped['n'] * 360) / len(uniques)
-    df_grouped['direction'] = df_grouped['direction_val'].round(1).astype(str) + '°'
-    
-    # Get unique directions for tick labels
-    unique_directions = df_grouped[['direction_val', 'direction']].drop_duplicates('direction_val').sort_values('direction_val')
-    
-    # Helper function to create polar layout configuration
-    def get_polar_config(for_svg=False):
-        axis_colors = {}
+    df_grouped['direction'] = (df_grouped['n'] * 360) / len(uniques)
+    df_grouped['direction_label'] = df_grouped['direction'].astype(int).astype(str) + '°'
 
-        # if for_svg:
-        #     axis_colors = {
-        #         'linecolor': 'black',
-        #         'gridcolor': 'lightgray'
-        #     }
-        
-        return dict(
-            angularaxis=dict(
-                tickmode='array',
-                tickvals=unique_directions['direction_val'].tolist(),
-                ticktext=unique_directions['direction'].tolist(),
-                rotation=90,
-                direction='clockwise',
-                showticklabels=True,
-                ticks='outside',
-                tickfont=dict(size=8 if for_svg else 10),
-                **axis_colors
-            ),
-            radialaxis=dict(
-                range=[0, 1],
-                tickfont=dict(size=8 if for_svg else 10),
-                **axis_colors
-            )
-        )
-   
-    # Create the polar plot with numerical theta values
-    polar_fig = px.line_polar(
-        df_grouped, 
-        r="success", 
-        theta="direction_val",  # Use numerical values
-        color="R_k_avg", 
-        line_close=True,
-        color_discrete_sequence=px.colors.sequential.Plasma_r
-    )
-    
-    # Set up base polar figure
-    polar_fig.update_layout(
-        polar=get_polar_config(for_svg=True),
-        template="plotly_dark",
-        # template="plotly_white",
-        showlegend=True,
-        legend=dict(title="R_k_avg", font=dict(size=10)),
-        margin=dict(l=5, r=5, t=20, b=20),
-        title=dict(
-            text=title,
-            x=0.85,
-            y=0.05,
-            xanchor='center',
-            yanchor='top',
-            font=dict(size=12)
-        ),
-        width=600,
-        height=500,
-    )
-    
-    # Create combined figure for HTML
     fig = make_subplots(
         rows=1, cols=2,
         column_widths=[0.4, 0.6],
-        horizontal_spacing=0.05,
+        horizontal_spacing=0.15,
         specs=[[{"type": "table"}, {"type": "polar"}]]
     )
-    
-    # Add traces to subplot
+
+    # Add the polar plot
+    polar_fig = px.line_polar(df_grouped, r="success", theta="direction", color="R_k_avg", line_close=True,
+                            color_discrete_sequence=px.colors.sequential.Plasma_r,
+                            template="plotly_dark")
+
     for trace in polar_fig.data:
         fig.add_trace(trace, row=1, col=2)
-    
-    # Update combined figure layout
-    fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.85,
-            y=0.05,
-            xanchor='center',
-            yanchor='top'
-        ),
-        polar2=get_polar_config(for_svg=False),  # Use polar2 for column 2
-        template="plotly_dark",
-        margin=dict(l=5, r=5, t=20, b=20),
-        showlegend=True,
-        legend=dict(title="R_k_avg")
-    )
-    
-    # Add mapping table to column 1
-    df2 = df_grouped.groupby('direction').head(1).reset_index()
+
+    # Add mapping table
+    df2 = df_grouped.groupby('direction_label').head(1).reset_index()
     combo_split = df2['combo_no_k_avg'].apply(pd.Series)
-    combo_split.columns = factors[:-1]
-    df_expanded = pd.concat([df2[['direction']], combo_split], axis=1)
-    table_headers = df_expanded.columns.tolist()
-    table_values = df_expanded.values.T.tolist()
+    num_combo_parts = combo_split.shape[1]
+    table_headers = ["Direction"] + list(combo_split.columns)
+    table_values = [df2['direction_label']] + [combo_split[i] for i in range(num_combo_parts)]
     table = go.Table(
-        header=dict(
-            values=table_headers,
-            fill_color="darkblue",
-            font=dict(color="white", size=10)
+        header=dict(values=table_headers,
+                fill_color="darkblue",
+                font=dict(color="white", size=10)),
+        cells=dict(values=table_values,
+                fill_color="brown",
+                font=dict(color="white", size=8)
         ),
-        cells=dict(
-            values=table_values,
-            fill_color="brown",
-            font=dict(color="white", size=8)
-        ),
+        # columnwidth=[4] + [8] * (len(table_headers) - 1),
     )
     fig.add_trace(table, row=1, col=1)
-    
-    # Save outputs
+
+    fig.update_layout(
+        polar=dict(
+            angularaxis=dict(
+                tickvals=df_grouped['direction'],
+                ticktext=df_grouped['direction_label'],
+            ),
+            radialaxis=dict(range=[0, 1])
+        ),
+        template="plotly_dark",
+        margin=dict(l=50, r=50, t=25, b=25),
+        showlegend=True,
+        title=title,
+    )
+
+    fig.show()
     fig.write_html(out_path / 'polar_design.html')
-    pio.write_image(polar_fig, out_path / 'polar_plot.svg', format='svg')
-    
-    # Save LaTeX table
-    output_tex = out_path / 'direction_table.tex'
-    df_expanded.columns = [col.replace('_', '-') for col in df_expanded.columns]
-    with open(output_tex, "w") as f:
-        f.write(df_expanded.to_latex(index=False, header=True))
+    pio.write_image(fig, out_path / 'polar_design.svg', format='svg', width=1200, height=1600)
 
-def mixed_effects_by_level(df, response, success_thresh, categorical_factors, numerical_factor, out_path):
-    """
-    Run mixed effects logistic regression separately for each level of numerical factor.
-    Returns DataFrame with all results for easy analysis and comparison.
-    """
-    out_path = Path(out_path)
-    out_path.mkdir(exist_ok=True, parents=True)
-    
-    # Create binary success variable
-    df = df.copy()
-    df["success"] = (df[response] > success_thresh).astype(int)
-    df['combo_str'] = df['combo'].apply(lambda t: "_".join(map(str, t)))
-    df['combo_id'], _ = pd.factorize(df['combo_str'])
-    
-    all_results = []
-    
-    # Loop through each numerical level
-    for level in sorted(df[numerical_factor].unique()):
-        print(f"\n{'='*50}")
-        print(f"ANALYSIS FOR {numerical_factor} = {level}")
-        print(f"{'='*50}")
-        
-        # Filter data for this level
-        df_level = df[df[numerical_factor] == level].copy()
-        
-        print(f"Data: {len(df_level)} trials, {df_level['combo_str'].nunique()} combos")
-        success_rate = df_level['success'].mean()
-        print(f"Success rate: {success_rate:.3f}")
-        
-        # Skip levels with perfect separation
-        if success_rate == 0 or success_rate == 1:
-            print(f"⚠️  Skipping level {level}: perfect separation (success rate = {success_rate})")
-            print("   Cannot estimate coefficients with 0% or 100% success rate")
-            continue
-        
-        try:
-            # Ensure categorical factors are proper dtypes
-            for factor in categorical_factors:
-                if factor in df_level.columns:
-                    df_level[factor] = df_level[factor].astype('category')
-            
-            # Create formula with categorical factors
-            formula_terms = [f'C({factor})' for factor in categorical_factors if factor in df_level.columns]
-            formula = f"success ~ {' + '.join(formula_terms)}"
-            print(f"Formula: {formula}")
-            
-            # Fit GEE model (accounts for clustering)
-            model = smf.gee(formula, groups=df_level['combo_id'], 
-                           data=df_level, family=Binomial()).fit()
-            
-            print(f"QIC: {model.qic()[0]:.2f}")
-            
-            # Get reference categories
-            reference_categories = {}
-            for factor in categorical_factors:
-                if factor in df_level.columns:
-                    reference_categories[factor] = sorted(df_level[factor].unique())[0]
-            
-            print("\nReference categories (baseline for comparisons):")
-            for factor, ref_cat in reference_categories.items():
-                print(f"  {factor}: {ref_cat}")
-            
-            # Add reference categories to results (OR = 1.0)
-            for factor, ref_category in reference_categories.items():
-                all_results.append({
-                    'numerical_factor': level,
-                    'categorical_factor': factor,
-                    'level': ref_category,
-                    'is_reference': True,
-                    'success_rate': success_rate,
-                    'n_samples': len(df_level),
-                    'OR': 1.0,
-                    'p_value': np.nan,
-                    'coefficient': 0.0,
-                    'std_err': np.nan,
-                    'QIC': model.qic()[0]
-                })
-            
-            # Process model results
-            print("\nSignificant effects (p < 0.05):")
-            
-            sig_effects = model.pvalues[model.pvalues < 0.05]
-            has_significant = False
-            
-            for param in model.params.index:
-                if param == 'Intercept':
-                    continue
-                    
-                coef = model.params[param]
-                p_val = model.pvalues[param]
-                std_err = model.bse[param]
-                odds_ratio = np.exp(coef)
-                is_significant = p_val < 0.05
-                
-                if is_significant:
-                    has_significant = True
-                
-                # Extract factor and level from parameter name
-                if '[T.' in param:
-                    factor_part = param.split(']')[0].split('[T.')[0].replace('C(', '').replace(')', '')
-                    level_part = param.split('[T.')[1].split(']')[0]
-                    
-                    all_results.append({
-                        'numerical_factor': level,
-                        'categorical_factor': factor_part,
-                        'level': level_part,
-                        'is_reference': False,
-                        'success_rate': success_rate,
-                        'n_samples': len(df_level),
-                        'OR': odds_ratio,
-                        'p_value': p_val,
-                        'coefficient': coef,
-                        'std_err': std_err,
-                        'QIC': model.qic()[0]
-                    })
-                    
-                    if is_significant:
-                        print(f"  {factor_part} = '{level_part}' vs reference: OR={odds_ratio:.3f}, p={p_val:.3f}")
-            
-            if not has_significant:
-                print("  None")
-        
-        except Exception as e:
-            print(f"Model failed: {e}")
-            warnings.warn(f"Analysis failed for {numerical_factor}={level}: {e}")
-    
-    # Convert to DataFrame
-    results_df = pd.DataFrame(all_results)
-    
-    if len(results_df) > 0:
-        # Sort for better readability
-        results_df = results_df.sort_values(['numerical_factor', 'categorical_factor', 'is_reference'], 
-                                          ascending=[True, True, False]).reset_index(drop=True)
-        
-        print(f"\n{'='*60}")
-        print("SUMMARY - ALL RESULTS")
-        print(f"{'='*60}")
-        print(f"Total rows: {len(results_df)}")
-        print(f"Significant effects: {len(results_df[results_df['p_value'] < 0.05])}")
-        
-        # Save all results
-        results_df.to_csv(out_path / 'mixed_effects_all_results.csv', index=False)
-        print(f"All results saved to: {out_path / 'mixed_effects_all_results.csv'}")
-        
-        # Save significant results only
-        sig_results_df = results_df[
-            (results_df['p_value'] < 0.05) | results_df['is_reference']
-        ].copy()
-        
-        sig_results_df.to_csv(out_path / 'mixed_effects_significant_results.csv', index=False)
-        print(f"Significant results saved to: {out_path / 'mixed_effects_significant_results.csv'}")
-        print(f"Significant results rows: {len(sig_results_df)}")
-        
-        return results_df
-    else:
-        print("No results to save - all levels had perfect separation")
-        return pd.DataFrame()
-
+    # df['R_k_avg'] = df['R_k_avg'].astype('int64')
+    # df['combo_no_k_avg_str'] = df['combo_no_k_avg'].apply(str)
+    # plt.figure(figsize=(20, 12))
+    # sns.boxplot(data=df, x='combo_no_k_avg_str', y='accuracy', hue='R_k_avg')
+    # plt.savefig(out_path / 'boxplot.png')
 
 if __name__ == '__main__':
     out_path = Path('/out/temporal/stats/design_evaluation')
@@ -902,25 +699,20 @@ if __name__ == '__main__':
 
     # statistical evauluation
     ####################################
-    # for i in [1, 3, 5]:
-    #     for j in [1, 3, 5]:
-    for i in [3]:
-        for j in [3]:
-
-            path = out_path / 'density' / f'delay-{i}_window-{j}'
+    for i in [1, 3, 5]:
+        for j in [1, 3, 5]:
+            path = out_path / 'density' / f'delay={i}-win={j}'
             print(path)
             print('#'*60)
             df, factors, groups_dict = load_custom_data(response, '0110', i, j)
-            polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            # graph_accuracy_vs_k_avg(path, df, success_thresh)
             # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-            # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+            # polar_design_plot(path, df, success_thresh, f'task:{path.parent.name} delay:{i} win:{j}')
+            graph_accuracy_vs_k_avg(path, df, success_thresh)
 
-            path = out_path / 'parity' / f'delay-{i}_window-{j}'
+            path = out_path / 'parity' / f'delay={i}-win={j}'
             print(path)
             print('#'*60)
             df, factors, groups_dict = load_custom_data(response, '0101', i, j)
-            polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            # graph_accuracy_vs_k_avg(path, df, success_thresh)
             # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-            # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+            # polar_design_plot(path, df, success_thresh, f'task:{path.parent.name} delay:{i} win:{j}')
+            graph_accuracy_vs_k_avg(path, df, success_thresh)

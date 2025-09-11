@@ -1,27 +1,26 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from projects.boolean_reservoir.code.utils import set_seed
 from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
 from projects.boolean_reservoir.code.parameters import InputParams
-from benchmarks.path_integration.constrained_foraging_path import random_walk, Boundary, NoBoundary, positions_to_p_v_pairs, generate_polygon_points, stretch_polygon, PolygonBoundary, LevyFlightStrategy 
-from numpy import pi
-from pathlib import Path
-from math import floor
+from benchmarks.path_integration.constrained_foraging_path import random_walk, positions_to_p_v_pairs
+from benchmarks.path_integration.visualizations import plot_random_walk
+from benchmarks.path_integration.parameters import PathIntegrationDatasetParams
+from benchmarks.utils.base_dataset import BaseDataset
+import yaml
 
-class ConstrainedForagingPathDataset(Dataset):
-    def __init__(self, samples=100, n_steps=25, n_dimensions=2, strategy=random_walk, boundary: Boundary=NoBoundary, data_path='data/test/dataset.pt', generate_data=False, seed=0):
-        set_seed(seed)
-        self.data_path = Path(data_path)
-        self.n_dimensions = n_dimensions
-        self.boundary = boundary
+class ConstrainedForagingPathDataset(BaseDataset):
+    def __init__(self, D: PathIntegrationDatasetParams):
+        self.D = D
+        set_seed(D.seed)
         self.normalizer_x = None
         self.normalizer_y = None
         self.encoder_x = None
         
-        if self.data_path.exists() and not generate_data:
+        if D.path.exists() and not D.generate_data:
             self.load_data()
         else:
-            self.data = self.generate_data(n_dimensions, samples, n_steps, strategy, boundary)
+            self.data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy, D.boundary)
             self.save_data()
 
     @staticmethod
@@ -42,99 +41,52 @@ class ConstrainedForagingPathDataset(Dataset):
             'y': torch.stack(data_y),
         }
 
-    def split_dataset(self, split=(0.8, 0.1, 0.1)):
-        # TODO copy temporal
-        split = (split.train, split.dev, split.test)
-        assert float(sum((split))) == 1.0, "Split ratios must sum to 1."
-        # split_train = split[0] if self.split is None else self.split.train
-        # split_dev = split[1] if self.split is None else self.split.dev
-        # split_test = split[2] if self.split is None else self.split.test
-        # assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
-
-        x, y = self.data['x'], self.data['y']
-        idx = torch.randperm(x.size(0))
-
-        train_end, dev_end = floor(split[0] * x.size(0)), floor((split[0] + split[1]) * x.size(0))
-
-        self.data = {
-            'x': x[idx[:train_end]],
-            'y': y[idx[:train_end]],
-            'x_dev': x[idx[train_end:dev_end]],
-            'y_dev': y[idx[train_end:dev_end]],
-            'x_test': x[idx[dev_end:]],
-            'y_test': y[idx[dev_end:]],
-        }
-
-    def to(self, device):
-        for key in self.data.keys():
-            self.data[key] = self.data[key].to(device)
-        return self
-    
-    def save_data(self):
-        self.data_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.data, self.data_path)
-
-    def load_data(self):
-        self.data = torch.load(self.data_path, weights_only=True)
-    
-    def set_normalizer_x(self, normalizer_x):
-        self.normalizer_x = normalizer_x
-
-    def set_normalizer_y(self, normalizer_y):
-        self.normalizer_y = normalizer_y
-
-    def set_encoder_x(self, encoder_x):
-        self.encoder_x = encoder_x
-
-    def __len__(self):
-        return self.data['x'].size(0)
-    
-    def __getitem__(self, idx):
-        x = self.data['x'][idx]
-        y = self.data['y'][idx]
-        return x, y
-
-    def normalize(self):
-        self.data['x'] = self.normalizer_x(self.data['x'])
-        self.data['y'] = self.normalizer_y(self.data['y'])
-    
-    def encode_x(self):
-        self.data['x'] = self.encoder_x(self.data['x'])
-
 
 if __name__ == '__main__':
-    # Parameters: Path Integration
-    n_dimensions = 2
-    n_steps = 5
-    strategy = LevyFlightStrategy(momentum=0.9, bias=0)
+    # demo of dataset init 
+    yaml_content = """
+    dimensions: 2
+    steps: 500
+    strategy_config:
+        type: LevyFlightStrategy
+        params:
+            alpha: 3
+            momentum: 0.9
+    boundary_config:
+        type: PolygonBoundary
+        params:
+            n_sides: 4
+            radius: 1
+            rotation: pi/4 
+            stretch_x: 2 
+            stretch_y: 1/2
+        split:
+            train: 0.4
+            dev: 0.3
+            test: 0.3
+    samples: 10000
+    seed: 0
+    """
+    config = yaml.safe_load(yaml_content)
+    p = PathIntegrationDatasetParams.from_yaml(config)
+    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
+    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='demo_path')
 
-    # Make boundary of path traversal
-    square = generate_polygon_points(4, 10, rotation=pi/4) 
-    rectangle = stretch_polygon(square, 2, 1/2) 
-    boundary = PolygonBoundary(points=rectangle)
+    dataset = ConstrainedForagingPathDataset(p)
+    dataset.set_normalizer_x(min_max_normalization)
+    dataset.set_normalizer_y(min_max_normalization)
+    dataset.normalize()
     
     # Parameters: Input Layer
     encoding = 'base2'
     bits_per_feature = 3  # Number of bits per dimension
     n_features = 2  # Number of dimensions
-
-    # Parameters: Output Layer
-    output_size = 2  # Number of dimensions
-
-    # Parameters: Other
-    samples = 6
-    batch_size = 2
-
-    dataset = ConstrainedForagingPathDataset(samples=samples, n_steps=n_steps, n_dimensions=n_dimensions, strategy=strategy, boundary=boundary, generate_data=True)
-    dataset.set_normalizer_x(min_max_normalization)
-    dataset.set_normalizer_y(min_max_normalization)
-    dataset.normalize()
-
     I = InputParams(bits_per_feature=bits_per_feature, encoding=encoding, features=n_features)
+
     encoder = lambda x: float_array_to_boolean(x, I)
     dataset.set_encoder_x(encoder)
     dataset.encode_x()
-    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    data_loader = DataLoader(dataset, batch_size=2, shuffle=True)
 
     for x, y in data_loader:
         print('-'*50, x.shape)
@@ -142,3 +94,88 @@ if __name__ == '__main__':
         print('-'*50, y.shape)
         print(y)
         break
+
+    ################################################
+
+    # generate_dataset_2D_levy_square
+    yaml_content = """
+    dimensions: 2
+    steps: 5
+    strategy_config:
+        type: LevyFlightStrategy
+        params:
+            alpha: 3
+            momentum: 0.9
+    boundary_config:
+        type: PolygonBoundary
+        params:
+            n_sides: 4
+            radius: 0.1
+            rotation: pi/4 
+        split:
+            train: 0.4
+            dev: 0.3
+            test: 0.3
+    samples: 10000
+    seed: 0
+    """
+    config = yaml.safe_load(yaml_content)
+    p = PathIntegrationDatasetParams.from_yaml(config)
+    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
+    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='generate_dataset_2D_levy_square')
+    
+
+    # generate_dataset_1D_levy_interval
+    yaml_content = """
+    dimensions: 1
+    steps: 5
+    strategy_config:
+        type: LevyFlightStrategy
+        params:
+            alpha: 3
+            momentum: 0.9
+    boundary_config:
+        type: IntervalBoundary
+        params:
+            radius: .2
+    split:
+        train: 0.4
+        dev: 0.3
+        test: 0.3
+    samples: 10000
+    seed: 0
+    """
+    config = yaml.safe_load(yaml_content)
+    p = PathIntegrationDatasetParams.from_yaml(config)
+    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
+    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='generate_dataset_1D_levy_interval')
+
+    # test verification model 2D 
+    yaml_content = """
+    dimensions: 2
+    steps: 5
+    strategy_config:
+        type: LevyFlightStrategy
+        params:
+            alpha: 3
+            momentum: 0.9
+    boundary_config:
+        type: PolygonBoundary
+        params:
+            n_sides: 4
+            radius: 0.5
+            rotation: pi/4 
+    split:
+        train: 0.4
+        dev: 0.3
+        test: 0.3
+    samples: 10000
+    seed: 0
+    """
+    config = yaml.safe_load(yaml_content)
+    p = PathIntegrationDatasetParams.from_yaml(config)
+    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
+    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='test_verification_model')
+    
+
+

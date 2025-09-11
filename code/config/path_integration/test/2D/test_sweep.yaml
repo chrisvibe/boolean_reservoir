@@ -27,4 +27,23 @@ logging:
     seed: 0
     n_samples: 2
 dataset:
-  path: 'data/path_integration/d-2/s-LevyFlightStrategy/b-PolygonBoundary/n-5/m-10000/r-0/dataset.pt'
+  dimensions: 2
+  steps: 5
+  strategy_config:
+    type: LevyFlightStrategy
+    params:
+      alpha: 3
+      momentum: 0.9
+      bias: 0
+  boundary_config:
+    type: PolygonBoundary
+    params:
+      n_sides: 4
+      radius: 0.5
+      rotation: 0 
+  split:
+    train: 0.4
+    dev: 0.3
+    test: 0.3
+  samples: 10000
+  seed: 0

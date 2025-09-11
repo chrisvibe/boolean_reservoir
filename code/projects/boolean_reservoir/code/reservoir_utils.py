@@ -133,9 +133,8 @@ class SaveAndLoadModel:
         checkpoint_path.mkdir(parents=True, exist_ok=False)
         override_symlink(save_path.name, save_path.parent / 'last_run')
 
-        paths = {key: checkpoint_path / f"{key}.pt" for key in P.L.save_keys}
-        if 'parameters' in paths:
-            paths['parameters'] = checkpoint_path / 'parameters.yaml'
+        all_paths = SaveAndLoadModel.make_load_path_dict(checkpoint_path)
+        paths = {k: all_paths[k] for k in P.L.save_keys if k in all_paths}
 
         save_map = {
             'parameters': lambda path: save_yaml_config(P, path),
@@ -183,7 +182,7 @@ class SaveAndLoadModel:
             path_dict = SaveAndLoadModel.make_load_path_dict(checkpoint_path)
 
         if load_key_include_set is not None:
-            path_dict = {k: path_dict[k] for k, v in load_key_exclude_set.items()}
+            path_dict = {k: path_dict[k] for k in load_key_include_set}
 
         if load_key_exclude_set is not None:
             path_dict = {k: v for k, v in path_dict.items() if k not in load_key_exclude_set}

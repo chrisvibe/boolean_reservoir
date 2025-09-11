@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator, ConfigDict
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Callable
 from pathlib import Path
 
 class Split(BaseModel):
@@ -25,3 +25,14 @@ class DatasetParameters(BaseModel):
         arbitrary_types_allowed=True,
         extra='allow'
     )
+
+def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
+    # list-list, list-value, value-list, value-value
+    if isinstance(a, list) and isinstance(b, list):
+        return [operator(a[i], b[i]) for i in range(len(a))]
+    elif isinstance(a, list):
+        return [operator(x, b) for x in a]
+    elif isinstance(b, list):
+        return [operator(a, y) for y in b]
+    else:
+        return operator(a, b)

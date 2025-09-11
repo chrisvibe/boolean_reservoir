@@ -43,7 +43,7 @@ def plot_train_history(path, history):
 def plot_grid_search(data_file_path: Path):
     data_file_path = Path(data_file_path)
     out_path = data_file_path.parent / 'visualizations'
-    out_path.mkdir(exist_ok=True)
+    out_path.mkdir(exist_ok=True, parents=True)
     print('making grid search plots:', out_path)
     df = pd.read_hdf(data_file_path, 'df') 
     df = df[df['loss'] != float('inf')] # filter out error configs (if they are illegal)
@@ -240,69 +240,134 @@ def plot_dynamics_history(path):
     file = f"tsne.png"
     plt.savefig(save_path / file, bbox_inches='tight')
 
-
-def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_phase.png", highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0]):
+def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_phase.svg", 
+                                    highlight_input_nodes=True, data_filter=lambda df: df, 
+                                    aggregation_handle=lambda df: df[df['sample_id'] == 0], figsize=(5,5), cell_aspect_ratio=1):
+    """
+    Plot activity trace with phase band underneath - using constrained_layout.
+    """
     path = Path(path)
     save_path = save_path if save_path else path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
-
+    
     # Load history and metadata
-    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history(include={'parameters', 'w_in'})
+    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(path / 'history').reload_history(
+        include={'parameters', 'w_in', 'graph'}
+    )
     expanded_meta = data_filter(expanded_meta)
-    expanded_meta = aggregation_handle(expanded_meta) 
+    expanded_meta = aggregation_handle(expanded_meta)
     history = history[expanded_meta.index]
-    expanded_meta = expanded_meta.set_index(['time'], drop=False)
-
-    # Create a DataFrame for phase and map to integer representations for plotting
-    phase_df = expanded_meta[['time', 'phase']].copy()
-    unique_phases = phase_df['phase'].unique()
+    
+    # Get dimensions
+    n_times = len(history)
+    n_nodes = history.shape[1]
+    
+    # Create phase mapping
+    unique_phases = expanded_meta['phase'].unique()
     phase_to_int = {phase: idx for idx, phase in enumerate(unique_phases)}
-    phase_df['phase'] = phase_df['phase'].map(phase_to_int)
-
-    # Plotting heatmaps
+    phase_array = expanded_meta['phase'].map(phase_to_int).values
+    
+    # Setup colors
     phase_colors = sns.color_palette("husl", len(unique_phases))
-    cmap_phase = ListedColormap(phase_colors)
-    colorbar_labels = {v: k for k, v in phase_to_int.items()}
-    fig, (ax_heatmap, ax_phase) = plt.subplots(nrows=2, figsize=(15, 12), gridspec_kw={'height_ratios': [10, 0.5], 'hspace': 0.2})
-
-    # Main activity trace heatmap
-    sns.heatmap(history.T, cmap='viridis', cbar=True, ax=ax_heatmap)
-    expanded_meta = expanded_meta.set_index(['time'], drop=False)
-    ax_heatmap.set_title('Activity trace of node states over time', pad=50)
-    ax_heatmap.set_xlabel('Time')
-    ax_heatmap.set_ylabel('Nodes')
-
-    # Highlight the input nodes on the y-axis with transparency
-    # since recording captures each pertubation round various parts of the reservoir are highlighted per time step
+    
+    # Create combined data array
+    combined_data = np.zeros((n_nodes + 1, n_times))
+    combined_data[0, :] = phase_array
+    combined_data[1:, :] = history.T
+    
+    # Create figure with constrained_layout for automatic centering
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+    
+    # Prepare subtitle if needed
+    ax.set_title('Activity trace of node states over time', fontsize=16, pad=40)
     if highlight_input_nodes:
         p = load_dict['parameters']
         w_in = load_dict['w_in']
+        g = load_dict['graph']
+        ir_edges = [(u, v) for u, v, data in g.edges(data=True) if data.get('quadrant') == 'IR']
+        ir_map = {u: v for u, v in ir_edges}
+        subtitle = 'I→R: ' + str(ir_map)
+        ax.text(0.5, 1.02, subtitle, transform=ax.transAxes, fontsize=10, ha='center', va='bottom')
+    
+    # Plot node data
+    node_data = combined_data[1:, :]
+    im_nodes = ax.imshow(node_data, cmap='Greys', aspect=cell_aspect_ratio, origin='lower',
+                         interpolation='nearest', extent=[0, n_times, 0, n_nodes])
+    
+    # Plot phase data as colored rectangles
+    for t in range(n_times):
+        phase_idx = int(phase_array[t])
+        color = phase_colors[phase_idx]
+        rect = plt.Rectangle((t, -1), 1, 1, facecolor=color, edgecolor='none')
+        ax.add_patch(rect)
+    
+    # Set axis limits and labels
+    ax.set_xlim(0, n_times)
+    ax.set_ylim(-1, n_nodes)
+    ax.set_xlabel('Time', fontsize=12)
+    ax.set_ylabel('Nodes', fontsize=12)
+    
+    # Adjust ticks - offset by 0.5 to center on boxes
+    y_tick_interval = 1 if n_nodes <= 50 else max(1, n_nodes//10)
+    y_ticks = [-0.5] + [i + 0.5 for i in range(0, n_nodes, y_tick_interval)]
+    y_labels = ['Phase'] + [str(i) for i in range(0, n_nodes, y_tick_interval)]
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels(y_labels)
+    
+    x_tick_interval = 1 if n_times <= 50 else max(1, n_times//20)
+    x_ticks = [i + 0.5 for i in range(0, n_times, x_tick_interval)]
+    x_labels = [str(i) for i in range(0, n_times, x_tick_interval)]
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_labels)
+    
+    # Add horizontal line
+    ax.axhline(y=0, color='black', linewidth=0.5)
+    
+    # Create colorbar
+    cbar_grey = plt.colorbar(im_nodes, ax=ax, label='Activity', pad=0.02)
+    
+    # Create phase legend
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor=phase_colors[i], label=phase) 
+                       for i, phase in enumerate(unique_phases)]
+    
+    phase_legend = ax.legend(handles=legend_elements, 
+                            loc='upper center', 
+                            bbox_to_anchor=(0.5, -0.08),
+                            ncol=min(len(unique_phases), 5),
+                            frameon=True,
+                            title='Phases',
+                            title_fontsize=10,
+                            fontsize=9)
+    
+    # Highlight input nodes if requested
+    if highlight_input_nodes:
         alpha_value = 0.8
         a = b = 0
         I = p.M.I
-        input_times = (t for t in expanded_meta[expanded_meta['phase'] == 'input_layer']['time'])
-        for i in input_times:
+        
+        input_indices = expanded_meta[expanded_meta['phase'] == 'input_layer'].index
+        time_positions = {idx: pos for pos, idx in enumerate(expanded_meta.index)}
+        
+        for idx in input_indices:
             b += I.bits_per_feature
             w_in_i = w_in[a:b]
             selected_input_indices = w_in_i.sum(axis=0).nonzero(as_tuple=True)[0]
             a = b
-            for idx in selected_input_indices:
-                ax_heatmap.add_patch(
-                    plt.Rectangle((i, idx), 1, 1, fill=False,
-                                edgecolor=(1, 0, 0, alpha_value), lw=1)
+            
+            time_pos = time_positions[idx]
+            
+            for node_idx in selected_input_indices:
+                ax.add_patch(
+                    plt.Rectangle((time_pos, node_idx), 1, 1, fill=False,
+                                edgecolor=(1, 0, 0, alpha_value), lw=2)
                 )
-        subtitle = 'mapping I→R: ' + str({i: np.argwhere(w_in[i])[0].tolist() for i in range(w_in.shape[0])})
-        plt.text(0.5, 1.05, subtitle, ha='center', va='center', transform=ax_heatmap.transAxes, fontsize=10)
-
-    # Phase heatmap using integer mapping for consistent color representation
-    sns.heatmap(phase_df[['phase']].T, cmap=cmap_phase, cbar=True, ax=ax_phase, xticklabels=False, yticklabels=False, cbar_kws={'ticks': list(colorbar_labels.keys())})
-    cbar = ax_phase.collections[0].colorbar
-    cbar.ax.set_yticklabels([colorbar_labels[v] for v in cbar.get_ticks()])
-    ax_phase.set_title('Phases over Time')
-    ax_phase.set_xlabel('')
-    ax_phase.set_ylabel('')
-    plt.savefig(save_path / file_name, bbox_inches='tight')
+    
+    # Save figure
+    plt.savefig(save_path / file_name, bbox_inches='tight', dpi=300)
     plt.close()
+    
+    return fig
 
 def plot_reconstructed_manifold(path, adjacency_matrix):
     path = Path(path)

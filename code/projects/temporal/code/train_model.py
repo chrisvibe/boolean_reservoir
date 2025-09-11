@@ -52,53 +52,55 @@ if __name__ == '__main__':
     # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    # p, model, dataset, history = train_single_model('config/temporal/density/single_run/sample_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    p, model, dataset, history = train_single_model('config/temporal/density/single_run/sample_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
-    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
     # # Grid search stuff 
     # #####################################
-    configs = [
-        'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
-        'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
-        'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
+    # configs = [
+    #     'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+    #     'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
+    #     'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
 
-        'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
-        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
-        'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
+    #     'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
+    #     'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
+    #     'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
 
-        'config/temporal/density/test/heterogeneous_deterministic.yaml',
-    ]
+    #     'config/temporal/density/test/heterogeneous_deterministic.yaml',
+    # ]
 
-    node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    if "hpc" in node:
-        logger.info(f"This is hpc node: {node}")
-    else:
-        logger.warning(f"Unknown node detected: {node}")
+    # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
+    # if "hpc" in node:
+    #     logger.info(f"This is hpc node: {node}")
+    # else:
+    #     logger.warning(f"Unknown node detected: {node}")
 
-    node_job_assigments = {
-        1: [0, 2],
-        2: [1, 3],
-        3: [4, 6],
-        5: [5, 7],
-        10: [],
-        11: [],
-        'unknown': [8],
-    }
-    if node != 'unknown':
-        id = int(node[3:])
-        configs = [configs[idx] for idx in node_job_assigments[id]]
-    else:
-        configs = [configs[idx] for idx in node_job_assigments['unknown']]
+    # node_job_assigments = {
+    #     1: [0, 2],
+    #     2: [1, 3],
+    #     3: [4, 6],
+    #     5: [5, 7],
+    #     10: [],
+    #     11: [],
+    #     'unknown': [-1],
+    # }
+    # if node != 'unknown':
+    #     id = int(node[3:])
+    #     configs = [configs[idx] for idx in node_job_assigments[id]]
+    # else:
+    #     configs = [configs[idx] for idx in node_job_assigments['unknown']]
 
-    for c in configs:
-        boolean_reservoir_grid_search(
-            c,
-            dataset_init=d().dataset_init,
-            accuracy=a().accuracy,
-            gpu_memory_per_job_gb = 1/2,
-            cpu_memory_per_job_gb = 1/2,
-            cpu_cores_per_job = 1,
-        )
+    # for c in configs:
+    #     boolean_reservoir_grid_search(
+    #         c,
+    #         dataset_init=d().dataset_init,
+    #         accuracy=a().accuracy,
+    #         gpu_memory_per_job_gb = 1/2,
+    #         cpu_memory_per_job_gb = 1/2,
+    #         cpu_cores_per_job = 1,
+    #     )
+
+    pass

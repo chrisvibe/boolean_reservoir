@@ -3,18 +3,17 @@
 # df[(df['accuracy'] < 0.85) & (df['accuracy'] > .8)]['params'].apply(lambda p: p.model)
 # out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/checkpoints/2025_05_09_014405_021874
 dataset:
-  bit_stream_length: 10
+  bit_stream_length: 5
   generate_data: false
-  path: data/temporal/density/u-10/w-3/t-7/m-10000/r-0/dataset.pt
-  samples: 10000
-  seed: 0
+  samples: 1000
+  seed: 4
   split:
     dev: 0.3
     test: 0.3
     train: 0.4
-  tao: 7
+  tao: 0
   task: density
-  window_size: [1, 3, 5]
+  window_size: 3
 logging:
   grid_search:
     n_samples: 10
@@ -22,11 +21,7 @@ logging:
   history:
     buffer_size: 64
     record_history: true
-    save_path: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/history
-  last_checkpoint: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/checkpoints/2025_05_09_014405_021874
   out_path: out/temporal/density/single_run/homogeneous-deterministic-sample_model
-  save_path: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455
-  timestamp_utc: '2025_05_09_014400_078455'
   train_log:
     accuracy: 0.7519198664440735
     epoch: 40
@@ -34,12 +29,12 @@ logging:
 model:
   input_layer:
     bits_per_feature: 1
-    connection: out-2:2:1
+    connection: out-1:1:1
     distribution: identity
     encoding: base2
-    features: 10
+    features: 5
     interleaving: 0
-    n_nodes: 10
+    n_nodes: 5
     pertubation: override
     redundancy: 1
     resolution: 1
@@ -51,11 +46,11 @@ model:
     seed: 1541552926
   reservoir_layer:
     init: zeros
-    k_avg: 2.0
-    k_max: 2
-    k_min: 2
+    k_avg: 4.0
+    k_max: 4
+    k_min: 4
     mode: homogeneous
-    n_nodes: 25
+    n_nodes: 10
     p: 0.5
     reset: true
     seed: 1541552926
@@ -65,7 +60,7 @@ model:
     batch_size: 100
     criterion: BCE
     drop_last: true
-    epochs: 40
+    epochs: 4
     evaluation: test
     learning_rate: 0.001
     seed: 1541552926

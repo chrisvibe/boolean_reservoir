@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
-from projects.boolean_reservoir.code.encoding import bin2dec
+from projects.boolean_reservoir.code.encoding import bin2dec, dec2bin
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -19,6 +19,7 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
         self.P = params
         self.I = self.P.M.I
         self.scale = nn.Linear(self.I.features, self.I.features)
+        self.test_encoding_precision(self.I.bits_per_feature)
 
     def forward(self, x):
         m, s, d, b = x.shape
@@ -32,6 +33,20 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
     
     def save(self):
         pass
+
+    @staticmethod
+    def test_encoding_precision(bits):
+        # Create a range of values
+        original = torch.linspace(0, 1, 1000)
+        
+        # Encode and decode with b bits
+        encoded = dec2bin(original, bits=bits)
+        decoded = bin2dec(encoded, bits=bits)
+        
+        # Check error
+        errors = (original - decoded).abs()
+        print(f"Max single-value error: {errors.max():.6f}")
+        print(f"Mean error: {errors.mean():.6f}")
 
 
 class PathIntegrationVerificationModel(nn.Module):
@@ -74,9 +89,11 @@ def test_path_integration_verification_models(model_class, config_path):
     logging.debug(f"Model instance created: {model_instance}")
     
     p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    logging.debug(f"Training completed with accuracy {trained_model.P.L.train_log.accuracy}")
+    logging.debug(f"Training completedpytest /code/projects/path_integration/test/test_load_and_save.py with accuracy {trained_model.P.L.train_log.accuracy}")
     
     assert trained_model.P.L.train_log.accuracy >= 0.99, f"Accuracy {trained_model.P.L.train_log.accuracy} is below 0.99"
+
+
 
 
 if __name__ == '__main__':

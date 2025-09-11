@@ -8,24 +8,26 @@ from projects.boolean_reservoir.code.boolean_reservoir_parallel import boolean_r
 if __name__ == '__main__':
     # # Simple run
     # #####################################
-    # p, model, dataset, history = train_single_model('config/path_integration/1D/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # p, model, dataset, history = train_single_model('config/path_integration/1D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
-    # p, model, dataset, history = train_single_model('config/path_integration/2D/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    # plot_many_things(model, dataset, history)
+    p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    plot_many_things(model, dataset, history)
 
-    # # Grid search stuff 
-    # #####################################
-    configs = [
-        'config/path_integration/1D/initial_sweep.yaml',
-        'config/path_integration/2D/initial_sweep.yaml',
-    ]
-    for c in configs:
-        boolean_reservoir_grid_search(
-            c,
-            dataset_init=d().dataset_init,
-            accuracy=a().accuracy,
-            gpu_memory_per_job_gb = 0.5,
-            cpu_memory_per_job_gb = 1,
-            cpu_cores_per_job = 2,
-        )
+    # # # Grid search stuff 
+    # # #####################################
+    # configs = [
+    #     # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
+    #     'config/path_integration/2D/grid_search/initial_sweep.yaml',
+    #     # 'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
+    # ]
+    # for c in configs:
+    #     boolean_reservoir_grid_search(
+    #         c,
+    #         dataset_init=d().dataset_init,
+    #         accuracy=a().accuracy,
+    #         gpu_memory_per_job_gb = 1/2,
+    #         cpu_memory_per_job_gb = 1/2,
+    #         cpu_cores_per_job = 1,
+    #     )
+
 

@@ -8,13 +8,13 @@ class PathIntegrationDatasetInit(DatasetInit): # Note dont use I.seed here datas
     def dataset_init(self, P: Params):
         D = P.D
         I = P.M.I
-        dataset = ConstrainedForagingPathDataset(data_path=D.path, seed=D.seed)
-        balance_dataset(dataset, num_bins=100) # Note that data range affects bin assignment (outliers dangerous)
+        dataset = ConstrainedForagingPathDataset(D)
+        dataset = balance_dataset(dataset, num_bins=100) # Note that data range affects bin assignment (outliers dangerous)
         dataset.set_normalizer_x(min_max_normalization)
         dataset.set_normalizer_y(min_max_normalization)
         dataset.normalize()
         encoder = BooleanEncoder(I)
         dataset.set_encoder_x(encoder)
         dataset.encode_x()
-        dataset.split_dataset(split=D.split)
+        dataset.split_dataset()
         return dataset

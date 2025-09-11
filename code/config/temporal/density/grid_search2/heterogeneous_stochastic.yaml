@@ -1,0 +1,48 @@
+logging:
+  out_path: out/temporal/density/grid_search/heterogeneous-stochastic
+  grid_search:
+    seed: 0
+    n_samples: 25
+  save_keys: [parameters]
+model:
+  input_layer:
+    bits_per_feature: 1
+    distribution: identity
+    connection: [out-0:b:1/b, out-1:b:1/b] # I→R mapping: stochastic out-degree
+    encoding: base2
+    interleaving: 0
+    features: 10
+    pertubation: [override, xor]
+    redundancy: 1
+    w_in: null
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+  reservoir_layer:
+    init: [zeros, random]
+    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    k_min: 0
+    k_max: 25
+    mode: heterogeneous
+    n_nodes: 500
+    p: 0.5
+    reset: true
+    self_loops: null
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: BCE
+    epochs: 40
+    evaluation: dev
+    learning_rate: 0.001
+dataset:
+  task: density
+  bit_stream_length: 10
+  window_size: [1, 3, 5]
+  tao: [1, 3, 5]
+  split:
+    train: 0.4
+    dev: 0.3
+    test: 0.3
+  samples: 10000
+  seed: 0

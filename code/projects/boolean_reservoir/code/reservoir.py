@@ -110,6 +110,7 @@ class BooleanReservoir(nn.Module):
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
             self.device = None
+            self.add_graph_labels(self.graph)
     
     def to(self, device=None, dtype=None, non_blocking=False):
         super().to(device=device, dtype=dtype, non_blocking=non_blocking)
@@ -159,6 +160,8 @@ class BooleanReservoir(nn.Module):
                 quadrant = 'RR'  # Both nodes in second partition (R-R)
             edge_quadrants[(u, v)] = quadrant
         nx.set_edge_attributes(graph, edge_quadrants, 'quadrant')
+        # to get subgraph: ir_subgraph = g.edge_subgraph([(u, v) for u, v, data in g.edges(data=True) if data.get('quadrant') == 'IR'])
+
 
     def build_graph_from_quadrants(self, w_ii, w_ir, w_ri, w_rr):
         w_i = torch.cat((w_ii, w_ir), dim=1)
@@ -379,7 +382,7 @@ class BooleanReservoir(nn.Module):
 
                 idx = self.bin2int(neighbour_states_paralell)
 
-                # Update the state with LUT for each node
+                # Update the state with LUT for each node I + R
                 # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
                 states_parallel = self.lut[self.node_indices, idx]
                 states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]

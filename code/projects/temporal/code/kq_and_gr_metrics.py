@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir, BatchedTensorHistoryWriter
-from benchmarks.temporal.temporal_replication_study_density_parity_datasets import TemporalDensityDataset
+from benchmarks.temporal.temporal_density_parity_datasets import TemporalDensityDataset
 from projects.boolean_reservoir.code.parameters import load_yaml_config, generate_param_combinations, Params
 from projects.boolean_reservoir.code.graphs import calc_spectral_radius 
 import pandas as pd

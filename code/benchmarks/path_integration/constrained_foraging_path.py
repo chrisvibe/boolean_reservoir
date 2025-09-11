@@ -2,25 +2,34 @@ import numpy as np
 import math
 from shapely.geometry import Point, Polygon
 from abc import ABC, abstractmethod
-from projects.path_integration.code.visualizations import plot_random_walk
+from benchmarks.path_integration.visualizations import plot_random_walk
 
 class Boundary(ABC):
     def __init__(self, points):
         self.points = points
 
     @abstractmethod
-    def is_inside(self, p):
+    def is_inside(self, p: np.array):
         pass
     
     @abstractmethod
     def get_closest_distance_from_edge(self, p):
         pass
     
-    def generate_polygon_points(self):
+    def get_points(self):
         return self.points
     
     def __str__(self):
         return f'{self.__class__.__name__}'
+
+    @staticmethod
+    def _ensure_numpy_array(p):
+        """Ensure input is a numpy array with proper shape"""
+        p = np.asarray(p)
+        # Handle scalar case (0D array) by converting to 1D
+        if p.ndim == 0:
+            p = np.array([p.item()])
+        return p
 
 
 class PolygonBoundary(Boundary):
@@ -29,26 +38,32 @@ class PolygonBoundary(Boundary):
         self.polygon = Polygon(points)
 
     def is_inside(self, p):
-        point = Point(p)
-        return self.polygon.contains(point)
+        return self.polygon.contains(Point(p))
 
     def get_closest_distance_from_edge(self, p):
-        point = Point(p)
-        return self.polygon.exterior.distance(point)
+        return self.polygon.exterior.distance(Point(p))
 
 class IntervalBoundary(Boundary):
-    def __init__(self, interval):
+    def __init__(self, interval, center=None):
         self.interval = interval
-
+        if center is None: self.center = 0
+        self.effective_interval = tuple(x + self.center for x in self.interval)
+        self.min = min(self.effective_interval)
+        self.max = max(self.effective_interval)
+        self.points = (self.min, self.max)
+    
     def is_inside(self, p):
-        return self.interval[0] <= p <= self.interval[1]
-
+        return self.effective_interval[0] <= p <= self.effective_interval[1]
+    
     def get_closest_distance_from_edge(self, p):
-        closest_distance = float('inf')
         if self.is_inside(p):
-            return min(abs(p - self.min), abs(self.max - p))
-        return closest_distance
-
+            return min(abs(p - self.min), abs(p - self.max))
+        else:
+            if p < self.min:
+                return self.min - p
+            else:
+                return p - self.max
+    
 class NoBoundary(Boundary):
     def __init__(self):
         super().__init__([])
@@ -68,41 +83,62 @@ class WalkStrategy(ABC):
         return f'{self.__class__.__name__}'
 
 class SimpleRandomWalkStrategy(WalkStrategy):
-    def compute_step(self, p, boundary):
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def compute_step(p, boundary):
         dp = np.random.uniform(-1, 1, p.shape)
         
         # Update position ensuring it stays inside the boundary
         new_p = p + dp 
-        if not boundary.is_inside(p):
+        if not boundary.is_inside(new_p):
             new_p = p 
         
         return new_p 
 
-
 class LevyFlightStrategy(WalkStrategy):
-    def __init__(self, dim=2, alpha=1.5, bias=1, momentum=0.9):
+    def __init__(self, dim=2, alpha=1.5, momentum=0.9, momentum_bias=0, bias_direction=None):
         self.dim = dim
         self.alpha = alpha
-        self.bias = bias
         self.momentum = momentum
-
+        self.momentum_bias = momentum_bias  # Scalar magnitude
+        
+        # Set bias direction vector (unit vector)
+        if bias_direction is None:
+            # Default: no directional bias
+            self.bias_direction = np.zeros(dim)
+        else:
+            # Normalize the direction vector
+            direction = np.array(bias_direction)
+            norm = np.linalg.norm(direction)
+            if norm > 0:
+                self.bias_direction = direction / norm
+            else:
+                self.bias_direction = np.zeros(dim)
+        
+        # Create the bias vector (like a gravity/force vector)
+        self.bias_vector = self.momentum_bias * self.bias_direction
+        
         # Initialize previous velocities with zeros
         self.v_prev = np.zeros(dim)
     
     def compute_step(self, p, boundary):
-        # Generate step length from a power-law distribution
-        dp = (np.random.pareto(self.alpha, self.dim) + self.bias) * np.random.choice([-1, 1], size=p.shape)
+        # Generate step length from a power-law distribution (random impulse)
+        dp = np.random.pareto(self.alpha, self.dim) * np.random.choice([-1, 1], size=p.shape)
         
-        # Apply momentum by preserving contribution from previous values
-        dp = self.momentum * self.v_prev + (1 - self.momentum) * dp
-
+        # Apply momentum: preserve previous velocity, add random impulse, and add constant bias
+        dp = self.momentum * self.v_prev + (1 - self.momentum) * dp + self.bias_vector
+        
         # Update previous velocities
-        self.vp_prev = dp
+        self.v_prev = dp
         
         # Update position ensuring it stays inside the boundary
         new_p = p + dp
         if not boundary.is_inside(new_p):
             new_p = p
+            # reset momentum when hitting boundary
+            self.v_prev = np.zeros(self.dim)
         
         return new_p
 
@@ -122,45 +158,38 @@ def positions_to_p_v_pairs(positions: np.array):
     return positions, velocities 
 
 
-# Define a set of points for the boundary (example: hexagon centered at (0, 0))
-def generate_polygon_points(n, radius, rotation=0):
+def generate_polygon_points(n, radius, rotation=0, center=None):
     """
     Generate points representing a regular polygon shape with n sides, the given radius, and rotation.
-    The polygon will be centered around the origin (0,0).
-    
+    The polygon will be centered around the specified center point.
     :param n: Number of sides of the polygon
     :param radius: Radius of the polygon
     :param rotation: Rotation of the polygon in radians
+    :param center: Center point of the polygon, defaults to (0, 0)
     :return: List of points (tuples) representing the vertices of the polygon
     """
+    if center is None: center = (0, 0)
     points = []
     angle_step = 2 * math.pi / n
-
     for i in range(n):
-        angle = i * angle_step
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-
-        # Apply rotation
-        rotated_x = x * math.cos(rotation) - y * math.sin(rotation)
-        rotated_y = x * math.sin(rotation) + y * math.cos(rotation)
-
-        points.append((rotated_x, rotated_y))
-
+        # Calculate the base angle and apply rotation
+        angle = i * angle_step + rotation
+        
+        # Generate point relative to center
+        x = radius * math.cos(angle) + center[0]
+        y = radius * math.sin(angle) + center[1]
+        
+        points.append((x, y))
     return points
 
-
-def stretch_polygon(points, stretch_x, stretch_y):
+def stretch_polygon(polygon_boundary: PolygonBoundary, stretch_x: float, stretch_y: float):
     """
     Stretch the polygon points along the x and y axes.
-    
-    :param points: List of points (tuples) representing the vertices of the polygon
-    :param stretch_x: Stretch factor along the x-axis
-    :param stretch_y: Stretch factor along the y-axis
-    :return: List of points (tuples) representing the stretched polygon
     """
-    stretched_points = [(x * stretch_x, y * stretch_y) for x, y in points]
-    return stretched_points
+    stretched_points = [(x * stretch_x, y * stretch_y) for x, y in polygon_boundary.get_points()]
+    polygon_boundary.points = stretched_points
+    polygon_boundary.polygon = Polygon(stretched_points)
+    return polygon_boundary
 
 
 if __name__ == '__main__':
@@ -175,8 +204,8 @@ if __name__ == '__main__':
     # boundary = NoBoundary()
     square = generate_polygon_points(4, .1, rotation=np.pi/4) 
     boundary = PolygonBoundary(points=square)
-    # strategy = SimpleRandomWalkStrategy(dim=dim)
-    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
+    strategy = SimpleRandomWalkStrategy()
+    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
 
     # Simulate the walk
     steps = 5

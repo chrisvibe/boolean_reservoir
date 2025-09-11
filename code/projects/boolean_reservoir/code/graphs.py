@@ -39,7 +39,7 @@ def remove_isolated_nodes(graph: nx.Graph, remove_connected_to_self_only=False):
 def constrain_degree_of_bipartite_mapping(a, b, min_degree, max_degree, p, in_degree=True):
     '''
     a and b repesent a bipartite mapping a→b
-    to build adjacency matrices for this we use and analogy of pigeons finding pigeon holes of a certain capacity
+    to build adjacency matrices for this we use an analogy of pigeons finding pigeon holes of a certain capacity
     in_degree: sets control of in-degree vs out-degree
     constraint: sets min max constrain on a or b
     p: probability of connection from max - min

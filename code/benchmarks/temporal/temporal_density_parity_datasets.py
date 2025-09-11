@@ -1,31 +1,31 @@
 import torch
-from torch.utils.data import Dataset
 from pathlib import Path
-from math import floor
 import numpy as np
 from projects.boolean_reservoir.code.utils import set_seed
 from benchmarks.temporal.parameters import TemporalDatasetParams
 from projects.boolean_reservoir.code.utils import set_seed
+from benchmarks.utils.base_dataset import BaseDataset
 
-class TemporalDatasetBase(Dataset):
-    def __init__(self, task, p: TemporalDatasetParams):
+class TemporalDatasetBase(BaseDataset):
+    def __init__(self, task, D: TemporalDatasetParams):
         # bit_stream_length i.e. 12: 101010111010
         # window size (in the bit stream) i.e. 4: 10101011[1010]
         # tao is the delay (for the window) i.e. 1: 1010101[1101]0
-        set_seed(p.seed)
-        self.data_path = Path(p.path)
+        self.D = D
+        set_seed(D.seed)
         self.task = task
-        self.p = p
+        self.normalizer_x = None
+        self.normalizer_y = None
+        self.encoder_x = None
         
-        if self.data_path.exists() and not p.generate_data:
+        if self.D.path.exists() and not D.generate_data:
             self.load_data()
         else:
-            if p.bit_stream_length < p.window_size + p.tao:
+            if D.bit_stream_length < D.window_size + D.tao:
                 print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
-                p.bit_stream_length = p.window_size + p.tao
-            self.data = self.generate_data(p.samples, p.bit_stream_length, p.tao, p.window_size)
+                D.bit_stream_length = D.window_size + D.tao
+            self.data = self.generate_data(D.samples, D.bit_stream_length, D.tao, D.window_size)
             self.save_data()
-        self.split = p.split
 
     def generate_data(self, samples, stream_length, tao, window_size):
         data_x = []
@@ -42,63 +42,24 @@ class TemporalDatasetBase(Dataset):
             'x': torch.stack(data_x),
             'y': torch.stack(data_y),
         }
-
-    def split_dataset(self, split=[0.8, 0.1, 0.1]):
-        split_train = split[0] if self.split is None else self.split.train
-        split_dev = split[1] if self.split is None else self.split.dev
-        split_test = split[2] if self.split is None else self.split.test
-        assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
-        x, y = self.data['x'], self.data['y']
-        idx = torch.randperm(x.size(0))
-
-        train_end, dev_end = floor(split_train * x.size(0)), floor((split_train + split_dev) * x.size(0))
-
-        self.data = {
-            'x': x[idx[:train_end]],
-            'y': y[idx[:train_end]],
-            'x_dev': x[idx[train_end:dev_end]],
-            'y_dev': y[idx[train_end:dev_end]],
-            'x_test': x[idx[dev_end:]],
-            'y_test': y[idx[dev_end:]],
-        }
-
-    def to(self, device):
-        for key in self.data.keys():
-            self.data[key] = self.data[key].to(device)
-        return self
-    
-    def save_data(self):
-        self.data_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.data, self.data_path)
-
-    def load_data(self):
-        self.data = torch.load(self.data_path, weights_only=True)
-    
-    def __len__(self):
-        return self.data['x'].size(0)
-    
-    def __getitem__(self, idx):
-        x = self.data['x'][idx]
-        y = self.data['y'][idx]
-        return x, y
-    
+   
     @staticmethod
     def gen_boolean_array(n):
         return np.random.randint(0, 2, size=n, dtype=bool)
     
     def demo(self, iterations=5):
-        print(f"\n=== {self.p.task.upper()} TASK DEMO ===")
+        print(f"\n=== {self.D.task.upper()} TASK DEMO ===")
         for i in range(iterations):
             input_stream = self.gen_boolean_array(10)
-            colored_stream = color_the_stream(input_stream, self.p.tao, self.p.window_size)
-            result = self.task(input_stream, self.p.tao, self.p.window_size)
+            colored_stream = color_the_stream(input_stream, self.D.tao, self.D.window_size)
+            result = self.task(input_stream, self.D.tao, self.D.window_size)
 
-            if self.p.task.lower() == "density":
+            if self.D.task.lower() == "density":
                 result_text = "more 1's than 0's" if result else "more 0's than 1's"
-            elif self.p.task.lower() == "parity":
+            elif self.D.task.lower() == "parity":
                 result_text = "odd number of 1's" if result else "even number of 1's"
             else:
-                print(f"Unknown task: {self.p.task}. Available tasks: 'density', 'parity'")
+                print(f"Unknown task: {self.D.task}. Available tasks: 'density', 'parity'")
                 return
             print(f"Run {i+1} - Stream: {colored_stream} -> {result_text}")
 

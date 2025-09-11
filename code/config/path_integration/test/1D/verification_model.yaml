@@ -23,4 +23,20 @@ model:
 logging:
   out_path: 'out/path_integration/test/1D/verification_model/single_run'
 dataset:
-  path: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
+  dimensions: 1
+  steps: 5
+  strategy_config:
+    type: LevyFlightStrategy
+    params:
+      alpha: 3
+      momentum: 0.9
+  boundary_config:
+    type: IntervalBoundary
+    params:
+      radius: 0.2
+  split:
+    train: 0.4
+    dev: 0.3
+    test: 0.3
+  samples: 10000
+  seed: 0

@@ -4,6 +4,8 @@ import random
 from hashlib import sha256
 from pathlib import Path
 import networkx as nx
+import time
+from os import getpid, replace
 
 # Ensure reproducibility by setting seeds globally
 # Wont work across architectures and GPU vs CPU etc
@@ -95,11 +97,11 @@ def override_symlink(source: Path, link: Path = None):
     
     try:
         # Create a temporary symlink with unique name
-        temp_link = Path(f"{link}.tmp.{os.getpid()}.{time.time_ns()}")
+        temp_link = Path(f"{link}.tmp.{getpid()}.{time.time_ns()}")
         temp_link.symlink_to(source)
         
         # Atomically replace the old symlink
-        os.replace(str(temp_link), str(link))
+        replace(str(temp_link), str(link))
         
     except Exception as e:
         # Clean up temp file if it exists

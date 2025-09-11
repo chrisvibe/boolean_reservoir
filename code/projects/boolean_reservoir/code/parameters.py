@@ -55,7 +55,7 @@ class InputParams(BaseModel):
         )
     )
     connection: Union[str, List[str]] = Field('out-1:b:1/b', description="See distribution property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
-    w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by adjacency matrix w_in:[input_bits, n_nodes]. Parameter is a path to a stored tensor. Overrides distribution parameter")
+    w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by an adjacency matrix B->I. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
     features: Union[int, List[int]] = Field(1, description="Dimension of input data before binary encoding")
