@@ -46,7 +46,7 @@ class PolygonBoundary(Boundary):
 class IntervalBoundary(Boundary):
     def __init__(self, interval, center=None):
         self.interval = interval
-        if center is None: self.center = 0
+        self.center = 0 if center is None else center
         self.effective_interval = tuple(x + self.center for x in self.interval)
         self.min = min(self.effective_interval)
         self.max = max(self.effective_interval)

@@ -68,114 +68,19 @@ if __name__ == '__main__':
     seed: 0
     """
     config = yaml.safe_load(yaml_content)
-    p = PathIntegrationDatasetParams.from_yaml(config)
-    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
-    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='demo_path')
+    D = PathIntegrationDatasetParams(**config)
+    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='demo_path')
 
-    dataset = ConstrainedForagingPathDataset(p)
-    dataset.set_normalizer_x(min_max_normalization)
-    dataset.set_normalizer_y(min_max_normalization)
-    dataset.normalize()
+
+    from projects.boolean_reservoir.code.parameters import load_yaml_config 
+    P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
+    D = P.D
+    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
     
-    # Parameters: Input Layer
-    encoding = 'base2'
-    bits_per_feature = 3  # Number of bits per dimension
-    n_features = 2  # Number of dimensions
-    I = InputParams(bits_per_feature=bits_per_feature, encoding=encoding, features=n_features)
-
-    encoder = lambda x: float_array_to_boolean(x, I)
-    dataset.set_encoder_x(encoder)
-    dataset.encode_x()
-    data_loader = DataLoader(dataset, batch_size=2, shuffle=True)
-
-    for x, y in data_loader:
-        print('-'*50, x.shape)
-        print(x.to(torch.int))
-        print('-'*50, y.shape)
-        print(y)
-        break
-
-    ################################################
-
-    # generate_dataset_2D_levy_square
-    yaml_content = """
-    dimensions: 2
-    steps: 5
-    strategy_config:
-        type: LevyFlightStrategy
-        params:
-            alpha: 3
-            momentum: 0.9
-    boundary_config:
-        type: PolygonBoundary
-        params:
-            n_sides: 4
-            radius: 0.1
-            rotation: pi/4 
-        split:
-            train: 0.4
-            dev: 0.3
-            test: 0.3
-    samples: 10000
-    seed: 0
-    """
-    config = yaml.safe_load(yaml_content)
-    p = PathIntegrationDatasetParams.from_yaml(config)
-    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
-    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='generate_dataset_2D_levy_square')
-    
-
-    # generate_dataset_1D_levy_interval
-    yaml_content = """
-    dimensions: 1
-    steps: 5
-    strategy_config:
-        type: LevyFlightStrategy
-        params:
-            alpha: 3
-            momentum: 0.9
-    boundary_config:
-        type: IntervalBoundary
-        params:
-            radius: .2
-    split:
-        train: 0.4
-        dev: 0.3
-        test: 0.3
-    samples: 10000
-    seed: 0
-    """
-    config = yaml.safe_load(yaml_content)
-    p = PathIntegrationDatasetParams.from_yaml(config)
-    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
-    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='generate_dataset_1D_levy_interval')
-
-    # test verification model 2D 
-    yaml_content = """
-    dimensions: 2
-    steps: 5
-    strategy_config:
-        type: LevyFlightStrategy
-        params:
-            alpha: 3
-            momentum: 0.9
-    boundary_config:
-        type: PolygonBoundary
-        params:
-            n_sides: 4
-            radius: 0.5
-            rotation: pi/4 
-    split:
-        train: 0.4
-        dev: 0.3
-        test: 0.3
-    samples: 10000
-    seed: 0
-    """
-    config = yaml.safe_load(yaml_content)
-    p = PathIntegrationDatasetParams.from_yaml(config)
-    positions = random_walk(p.dimensions, p.steps, p.strategy, p.boundary)
-    plot_random_walk('/out', positions, p.strategy, p.boundary, file_prepend='test_verification_model')
-    
-
-
+    from projects.boolean_reservoir.code.parameters import load_yaml_config 
+    P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
+    D = P.D
+    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
