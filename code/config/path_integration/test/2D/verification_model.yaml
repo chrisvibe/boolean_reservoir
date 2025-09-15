@@ -3,7 +3,7 @@ model:
     pertubation: 'xor'
     encoding: 'base2'
     features: 2
-    bits_per_feature: 8
+    bits_per_feature: 8 
     redundancy: 1
   reservoir_layer:
     n_nodes: 100
@@ -29,17 +29,17 @@ dataset:
   strategy_config:
     type: LevyFlightStrategy
     params:
-      alpha: 3
-      momentum: 0.9
+      alpha: 1.5 
+      momentum: 0.3
   boundary_config:
     type: PolygonBoundary
     params:
-      n_sides: 4
-      radius: 0.5
+      n_sides: 8 # avoid corner effects
+      radius: 1.0
       rotation: pi/4 
   split:
-    train: 0.4
-    dev: 0.3
-    test: 0.3
+    train: 0.8
+    dev: 0.1
+    test: 0.1
   samples: 10000
   seed: 0

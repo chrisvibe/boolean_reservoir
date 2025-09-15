@@ -28,15 +28,15 @@ dataset:
   strategy_config:
     type: LevyFlightStrategy
     params:
-      alpha: 3
-      momentum: 0.9
+      alpha: 1.5 
+      momentum: 0.3
   boundary_config:
     type: IntervalBoundary
     params:
-      radius: 0.2
+      radius: 1.0
   split:
-    train: 0.4
-    dev: 0.3
-    test: 0.3
+    train: 0.8
+    dev: 0.1
+    test: 0.1
   samples: 10000
   seed: 0
