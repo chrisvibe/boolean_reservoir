@@ -1,6 +1,7 @@
 import numpy as np
 import math
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, LineString
+from shapely.ops import nearest_points
 from abc import ABC, abstractmethod
 from benchmarks.path_integration.visualizations import plot_random_walk
 
@@ -11,59 +12,18 @@ class Boundary(ABC):
     @abstractmethod
     def is_inside(self, p: np.array):
         pass
-    
+
     @abstractmethod
-    def get_closest_distance_from_edge(self, p):
+    def handle_boundary_crossing(self, p_start, p_end):
+        """Handle when step crosses boundary. Returns valid end position."""
         pass
-    
+        
     def get_points(self):
         return self.points
     
     def __str__(self):
         return f'{self.__class__.__name__}'
 
-    @staticmethod
-    def _ensure_numpy_array(p):
-        """Ensure input is a numpy array with proper shape"""
-        p = np.asarray(p)
-        # Handle scalar case (0D array) by converting to 1D
-        if p.ndim == 0:
-            p = np.array([p.item()])
-        return p
-
-
-class PolygonBoundary(Boundary):
-    def __init__(self, points):
-        super().__init__(points)
-        self.polygon = Polygon(points)
-
-    def is_inside(self, p):
-        return self.polygon.contains(Point(p))
-
-    def get_closest_distance_from_edge(self, p):
-        return self.polygon.exterior.distance(Point(p))
-
-class IntervalBoundary(Boundary):
-    def __init__(self, interval, center=None):
-        self.interval = interval
-        self.center = 0 if center is None else center
-        self.effective_interval = tuple(x + self.center for x in self.interval)
-        self.min = min(self.effective_interval)
-        self.max = max(self.effective_interval)
-        self.points = (self.min, self.max)
-    
-    def is_inside(self, p):
-        return self.effective_interval[0] <= p <= self.effective_interval[1]
-    
-    def get_closest_distance_from_edge(self, p):
-        if self.is_inside(p):
-            return min(abs(p - self.min), abs(p - self.max))
-        else:
-            if p < self.min:
-                return self.min - p
-            else:
-                return p - self.max
-    
 class NoBoundary(Boundary):
     def __init__(self):
         super().__init__([])
@@ -71,45 +31,123 @@ class NoBoundary(Boundary):
     def is_inside(self, p):
         return True 
 
-    def get_closest_distance_from_edge(self, p):
-        return np.inf
+    def handle_boundary_crossing(self, p_start, p_end):
+        return p_end
+
+class IntervalBoundary(Boundary):
+    def __init__(self, interval, center=None, boundary_tolerance=1e-10):
+        self.interval = interval
+        self.center = 0 if center is None else center
+        self.effective_interval = tuple(x + self.center for x in self.interval)
+        self.min = min(self.effective_interval)
+        self.max = max(self.effective_interval)
+        self.points = (self.min, self.max)
+        self.boundary_tolerance = boundary_tolerance
+    
+    def is_inside(self, p):
+        """Works with both scalar and array input"""
+        val = np.asarray(p).flat[0]
+        return self.min <= val <= self.max
+    
+    def is_on_boundary(self, p):
+        val = np.asarray(p).flat[0]
+        return (abs(val - self.min) < self.boundary_tolerance or 
+                abs(val - self.max) < self.boundary_tolerance)
+    
+    def handle_boundary_crossing(self, p_start, p_end):
+        """Preserves input shape/type"""
+        # Work with arrays consistently
+        p_end = np.asarray(p_end)
+        
+        if self.is_inside(p_end):
+            return p_end
+        
+        # Clamp to boundary, preserving shape
+        end_val = p_end.flat[0]
+        if end_val < self.min:
+            clamped = self.min
+        else:
+            clamped = self.max
+        
+        # Return with same shape as p_end
+        result = p_end.copy()
+        result.flat[0] = clamped
+        return result
+    
+class PolygonBoundary(Boundary):
+    def __init__(self, points, boundary_tolerance=1e-10):
+        super().__init__(points)
+        self.polygon = Polygon(points)
+        self.boundary = self.polygon.boundary
+        self.boundary_tolerance = boundary_tolerance
+    
+    def get_points(self):
+        return self.polygon.exterior.coords
+
+    def is_inside(self, p):
+        """Check if point is inside polygon (including boundary)"""
+        point = Point(p)
+        return self.polygon.contains(point) or self.polygon.touches(point)
+
+    def handle_boundary_crossing(self, p_start, p_end):
+        if self.is_inside(p_end):
+            return p_end
+        
+        intersections = self.boundary.intersection(LineString([p_start, p_end]))
+        if intersections.is_empty:
+            return p_start
+        
+        _, closest = nearest_points(Point(p_start), intersections)
+        intersection_coords = np.array(closest.coords[0])
+        
+        # Project back if needed due to numerical errors
+        if not self.is_inside(intersection_coords):
+            boundary_point = self.polygon.boundary.interpolate(
+                self.polygon.boundary.project(Point(intersection_coords))
+            )
+            intersection_coords = np.array(boundary_point.coords[0])
+        
+        return intersection_coords
 
 class WalkStrategy(ABC):
     @abstractmethod
-    def compute_step(self, p, boundary):
+    def compute_step(self, p, boundary: Boundary):
         pass
 
     def __str__(self):
         return f'{self.__class__.__name__}'
 
 class SimpleRandomWalkStrategy(WalkStrategy):
-    def __init__(self):
-        pass
+    def __init__(self, max_step_size, max_attempts=100):
+        self.max_step_size = max_step_size
+        self.max_attempts = max_attempts
 
-    @staticmethod
-    def compute_step(p, boundary):
-        dp = np.random.uniform(-1, 1, p.shape)
-        
-        # Update position ensuring it stays inside the boundary
-        new_p = p + dp 
-        if not boundary.is_inside(new_p):
-            new_p = p 
-        
-        return new_p 
+    def compute_step(self, p, boundary: Boundary):
+        """Compute step with resampling if stuck on boundary"""
+        for attempt in range(self.max_attempts):
+            dp = np.random.uniform(-1, 1, p.shape) * self.max_step_size
+            new_p = p + dp
+            result = boundary.handle_boundary_crossing(p, new_p)
+            if result is not None:
+                return result
+            
+        raise RuntimeError(f"Can't find a valid step after {self.max_attempts} attempts")
+
 
 class LevyFlightStrategy(WalkStrategy):
-    def __init__(self, dim=2, alpha=1.5, momentum=0.9, momentum_bias=0, bias_direction=None):
+    def __init__(self, dim=2, alpha=1, step_size=1, step_size_bias=0, momentum=0.9, 
+                 momentum_bias=0, bias_direction=None, max_attempts=100):
         self.dim = dim
         self.alpha = alpha
+        self.step_size = step_size
+        self.step_size_bias = step_size_bias
         self.momentum = momentum
-        self.momentum_bias = momentum_bias  # Scalar magnitude
+        self.momentum_bias = momentum_bias
+        self.max_attempts = max_attempts
         
-        # Set bias direction vector (unit vector)
         if bias_direction is None:
-            # Default: no directional bias
             self.bias_direction = np.zeros(dim)
         else:
-            # Normalize the direction vector
             direction = np.array(bias_direction)
             norm = np.linalg.norm(direction)
             if norm > 0:
@@ -117,39 +155,43 @@ class LevyFlightStrategy(WalkStrategy):
             else:
                 self.bias_direction = np.zeros(dim)
         
-        # Create the bias vector (like a gravity/force vector)
         self.bias_vector = self.momentum_bias * self.bias_direction
-        
-        # Initialize previous velocities with zeros
         self.v_prev = np.zeros(dim)
     
-    def compute_step(self, p, boundary):
-        # Generate step length from a power-law distribution (random impulse)
-        dp = np.random.pareto(self.alpha, self.dim) * np.random.choice([-1, 1], size=p.shape)
+    def compute_step(self, p, boundary: Boundary):
+        """Compute step with resampling if stuck on boundary"""
+        for attempt in range(self.max_attempts):
+            # Generate step length from power-law distribution
+            dp = (self.step_size * np.random.pareto(self.alpha, self.dim) + self.step_size_bias) * \
+                 np.random.choice([-1, 1], size=p.shape)
+            
+            # Apply momentum only if not stuck (first attempt uses previous velocity)
+            if attempt == 0:
+                dp = self.momentum * self.v_prev + (1 - self.momentum) * dp + self.bias_vector
+            else:
+                # On resamples, don't use old momentum (we're stuck)
+                dp = dp + self.bias_vector
+            
+            new_p = p + dp
+            result = boundary.handle_boundary_crossing(p, new_p)
+            
+            if result is not None:
+                self.v_prev = result - p
+                return result
         
-        # Apply momentum: preserve previous velocity, add random impulse, and add constant bias
-        dp = self.momentum * self.v_prev + (1 - self.momentum) * dp + self.bias_vector
-        
-        # Update previous velocities
-        self.v_prev = dp
-        
-        # Update position ensuring it stays inside the boundary
-        new_p = p + dp
-        if not boundary.is_inside(new_p):
-            new_p = p
-            # reset momentum when hitting boundary
-            self.v_prev = np.zeros(self.dim)
-        
-        return new_p
+        # If we couldn't find a valid move, stay in place and reset velocity
+        self.v_prev = np.zeros(self.dim)
+        return p
 
-# Function to simulate the random walk with a strategy
-def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary):
-    agent_p = np.zeros(dim) 
+def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary, origin=None):
+    agent_p = np.zeros(dim) if origin is None else origin
+    if not boundary.is_inside(agent_p):
+        raise RuntimeError(f'Illegal start position according to {boundary}: {agent_p}')
     positions = []
     # positions.append((agent_p))
     for _ in range(steps):
         agent_p = strategy.compute_step(agent_p, boundary)
-        positions.append((agent_p))
+        positions.append(agent_p.copy())
         
     return np.array(positions)
 
@@ -157,8 +199,7 @@ def positions_to_p_v_pairs(positions: np.array):
     velocities = np.diff(positions, axis=0, prepend=np.zeros((1, positions.shape[1])))
     return positions, velocities 
 
-
-def generate_polygon_points(n, radius, rotation=0, center=None):
+def generate_polygon_points(n, radius, rotation=0, center=None, decimals=10):
     """
     Generate points representing a regular polygon shape with n sides, the given radius, and rotation.
     The polygon will be centered around the specified center point.
@@ -166,7 +207,7 @@ def generate_polygon_points(n, radius, rotation=0, center=None):
     :param radius: Radius of the polygon
     :param rotation: Rotation of the polygon in radians
     :param center: Center point of the polygon, defaults to (0, 0)
-    :return: List of points (tuples) representing the vertices of the polygon
+    :return: Numpy array of points representing the vertices of the polygon
     """
     if center is None: center = (0, 0)
     points = []
@@ -180,7 +221,7 @@ def generate_polygon_points(n, radius, rotation=0, center=None):
         y = radius * math.sin(angle) + center[1]
         
         points.append((x, y))
-    return points
+    return np.round(points, decimals)
 
 def stretch_polygon(polygon_boundary: PolygonBoundary, stretch_x: float, stretch_y: float):
     """
@@ -193,19 +234,20 @@ def stretch_polygon(polygon_boundary: PolygonBoundary, stretch_x: float, stretch
 
 
 if __name__ == '__main__':
-    dim = 1
-    # -------------------------------------------------------------
-    # boundary = NoBoundary()
-    boundary = IntervalBoundary([-.1, .1]) 
-    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
+
+    # dim = 1
+    # # -------------------------------------------------------------
+    # # boundary = NoBoundary()
+    # boundary = IntervalBoundary([-.5, .5]) 
+    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
 
     dim = 2
     # -------------------------------------------------------------
     # boundary = NoBoundary()
-    square = generate_polygon_points(4, .1, rotation=np.pi/4) 
+    square = generate_polygon_points(4, 1, rotation=np.pi/4) 
     boundary = PolygonBoundary(points=square)
-    strategy = SimpleRandomWalkStrategy()
-    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9, bias=0)
+    # strategy = SimpleRandomWalkStrategy(1)
+    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
 
     # Simulate the walk
     steps = 5

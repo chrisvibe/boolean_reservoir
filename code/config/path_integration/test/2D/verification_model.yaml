@@ -29,8 +29,9 @@ dataset:
   strategy_config:
     type: LevyFlightStrategy
     params:
-      alpha: 1.5 
+      alpha: 1 
       momentum: 0.3
+      step_size: .1
   boundary_config:
     type: PolygonBoundary
     params:

@@ -14,6 +14,7 @@ def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', s
     
     if dimensions == 1:
         ax = fig.add_subplot(111)
+        ax.set_aspect('equal', adjustable='box')
         x = positions[:, 0]
         ax.plot(x, time, label='1D Walk')
         ax.set_xlabel('Position')
@@ -28,12 +29,12 @@ def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', s
     
     elif dimensions == 2:
         ax = fig.add_subplot(111)
+        ax.set_aspect('equal', adjustable='box')
         x, y = positions[:, 0], positions[:, 1]
         ax.plot(x, y, label='2D Walk')
         ax.set_xlabel('X Position')
         ax.set_ylabel('Y Position')
         
-        # Use unified get_points() method for 2D
         boundary_points = boundary.get_points()
         if boundary_points:
             polygon = patches.Polygon(boundary_points, linestyle='--', linewidth=2, edgecolor='r', facecolor='none')
@@ -41,6 +42,7 @@ def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', s
     
     elif dimensions == 3:
         ax = fig.add_subplot(111, projection='3d')
+        ax.set_aspect('equal', adjustable='box')
         x, y, z = positions[:, 0], positions[:, 1], positions[:, 2]
         ax.plot(x, y, z, label='3D Walk')
         ax.set_xlabel('X Position')

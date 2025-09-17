@@ -9,9 +9,9 @@ from benchmarks.path_integration.constrained_foraging_path import LevyFlightStra
 # Strategy-specific parameter classes
 class LevyFlightStrategyParams(BaseModel):
     """Parameters specific to Levy Flight Strategy"""
-    alpha: Union[float, List[float]] = Field(1.5, description="Alpha parameter for Levy flight")
+    alpha: Union[float, List[float]] = Field(1.5, description="Alpha parameter for pareto distribtion (Levy flight)")
     momentum: Union[float, List[float]] = Field(0.0, description="Momentum parameter")
-
+    step_size: Union[float, List[float]] = Field(1.0, description="Scaling of stepsize from distribution")
 
 class SimpleRandomWalkStrategyParams(BaseModel):
     """Parameters specific to Simple Random Walk Strategy"""
@@ -165,6 +165,7 @@ class PathIntegrationDatasetParams(DatasetParameters):
                 dim=self.dimensions,
                 alpha=self.strategy_config.params.alpha,
                 momentum=self.strategy_config.params.momentum,
+                step_size=self.strategy_config.params.step_size,
             ),
             "SimpleRandomWalkStrategy": lambda: SimpleRandomWalkStrategy(
                 step_size=self.strategy_config.params.step_size
