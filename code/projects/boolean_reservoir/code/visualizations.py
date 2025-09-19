@@ -350,7 +350,7 @@ def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_pha
         time_positions = {idx: pos for pos, idx in enumerate(expanded_meta.index)}
         
         for idx in input_indices:
-            b += I.bits_per_feature
+            b += I.chunk_size
             w_in_i = w_in[a:b]
             selected_input_indices = w_in_i.sum(axis=0).nonzero(as_tuple=True)[0]
             a = b

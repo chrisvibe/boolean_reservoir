@@ -153,7 +153,7 @@ if __name__ == '__main__':
     print((p * (2**bits - 1)).numpy())
 
     print("Boolean representation:")
-    I = InputParams(bits_per_feature=bits, encoding='base2', features=p.shape[-1])
+    I = InputParams(chunk_size=bits, encoding='base2', features=p.shape[-1])
     boolean_representation = float_array_to_boolean(p, I)
     print(boolean_representation.to(torch.int).numpy())
 

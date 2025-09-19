@@ -23,7 +23,7 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
         # Per-dimension scaling (diagonal only - no cross effects)
         self.scale_weight = nn.Parameter(torch.ones(self.I.features))
         self.scale_bias = nn.Parameter(torch.zeros(self.I.features))
-        self.test_encoding_precision(self.I.bits_per_feature)
+        self.test_encoding_precision(self.I.chunk_size)
 
     def forward(self, x):
         m, s, d, b = x.shape
@@ -65,7 +65,7 @@ class PathIntegrationVerificationModel(nn.Module):
         self.P = params
         self.I = self.P.M.I
         # Shared decoder for all dimensions (learns the encoding)
-        self.decoder = nn.Linear(self.I.bits_per_feature, 1)
+        self.decoder = nn.Linear(self.I.chunk_size, 1)
         # Per-dimension scaling (diagonal only - no cross effects)
         self.scale_weight = nn.Parameter(torch.ones(self.I.features))
         self.scale_bias = nn.Parameter(torch.zeros(self.I.features))

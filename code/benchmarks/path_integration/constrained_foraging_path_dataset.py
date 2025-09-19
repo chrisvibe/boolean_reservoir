@@ -69,18 +69,24 @@ if __name__ == '__main__':
     """
     config = yaml.safe_load(yaml_content)
     D = PathIntegrationDatasetParams(**config)
-    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='demo_path')
-
+    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='demo_path')
 
     from projects.boolean_reservoir.code.parameters import load_yaml_config 
-    P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
-    D = P.D
-    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
+
+    # P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
+    # D = P.D
+    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
     
-    from projects.boolean_reservoir.code.parameters import load_yaml_config 
-    P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
+    # P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
+    # D = P.D
+    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
+
+    from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+    P = load_yaml_config('config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml')
+    P = generate_param_combinations(P)[0]
     D = P.D
     positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
+    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend=P.L.out_path.name)

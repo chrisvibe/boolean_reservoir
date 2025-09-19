@@ -10,24 +10,32 @@ if __name__ == '__main__':
     # #####################################
     # p, model, dataset, history = train_single_model('config/path_integration/1D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
-    p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
-    plot_many_things(model, dataset, history)
+    # p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_many_things(model, dataset, history)
 
-    # # # Grid search stuff 
-    # # #####################################
-    # configs = [
-    #     # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
-    #     'config/path_integration/2D/grid_search/initial_sweep.yaml',
-    #     # 'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
-    # ]
-    # for c in configs:
-    #     boolean_reservoir_grid_search(
-    #         c,
-    #         dataset_init=d().dataset_init,
-    #         accuracy=a().accuracy,
-    #         gpu_memory_per_job_gb = 1/2,
-    #         cpu_memory_per_job_gb = 1/2,
-    #         cpu_cores_per_job = 1,
-    #     )
+    # # Grid search stuff 
+    # #####################################
+    configs = [
+        # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
+        # 'config/path_integration/2D/grid_search/initial_sweep.yaml',
+        'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
+    ]
+    for c in configs:
+
+        boolean_reservoir_grid_search(
+            c,
+            dataset_init=d().dataset_init,
+            accuracy=a().accuracy,
+            gpu_memory_per_job_gb = 1/2,
+            cpu_memory_per_job_gb = 1/2,
+            cpu_cores_per_job = 1,
+        )
+
+        # from projects.boolean_reservoir.code.parameters import load_yaml_config 
+        # from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+        # P = load_yaml_config(c)
+        # P = generate_param_combinations(P)[0]
+        # p, model, dataset, history = train_single_model(parameter_override=P, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        # plot_many_things(model, dataset, history)
 
 

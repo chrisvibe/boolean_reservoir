@@ -316,19 +316,19 @@ class BooleanReservoir(nn.Module):
         '''
         input is reshaped to fit number of input bits in w_in
         ie.
-        assume x.shape == mxsxdxb
+        assume x.shape == mxsxcxb
         m: samples
         s: steps
-        f: features
-        b: bits_per_feature
+        c: chunks
+        b: chunk size
 
-        how they perturb the reservoir if self.I.features == 2:
+        how they perturb the reservoir if self.I.chunks == 2:
         1. m paralell samples 
         2. s sequential step sets of inputs re-using w_in. Ie. if s>1, then w_in is re-used s times.
-        3. f sequential input sets as per w_in[a_i:b_i, :] (w_in is partitioned per input so two parts in the example)
+        3. c sequential input sets as per w_in[a_i:b_i, :] (w_in is partitioned per input so two parts in the example)
         4. b simultaneous bits as per w_in[a_i:b_i, :] (if input is the bit string abcd then we perturb with ab first, then cd)
         
-        note that x only controls m and s (assume f and b dimensions match self.I.features and self.I.bits_per_feature)
+        sxcxb should match data after encoding mxsxf (f are floats to be turned into bits)
         thus one can change pertubations behaviour via input shape or model configuration
         w_in can arbitratily map bits to input_nodes, so there is no requirement for a 1:1 mapping
         '''
@@ -354,23 +354,23 @@ class BooleanReservoir(nn.Module):
 
         # INPUT LAYER
         # ----------------------------------------------------
-        x = x.view(m, -1, self.I.features, self.I.bits_per_feature) # if input has more input bits than model expects: loop through these re-using w_in for each pertubation (samples kept in parallel)
+        x = x.view(m, -1, self.I.chunks, self.I.chunk_size) # if input has more input bits than model expects: loop through these re-using w_in for each pertubation (samples kept in parallel)
         s = x.shape[1]
-        f = self.I.features
+        c = self.I.chunks
         for si in range(s):
             a = b = 0
-            for fi in range(f):
+            for ci in range(c):
 
                 # # Perturb reservoir nodes with partial input depending on f dimension
-                x_i = x[:m, si, fi]
-                b += self.I.bits_per_feature
+                x_i = x[:m, si, ci]
+                b += self.I.chunk_size
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
                 perturbations_i = (x_i.to(torch.float16) @ w_in_i.to(torch.float16)) > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation, TODO gpu doesnt like uint8...
                 self.states_parallel[:m, selected_input_indices] = self.input_pertubation(self.states_parallel[:m, selected_input_indices], perturbations_i[:, selected_input_indices]).to(torch.uint8)
 
-                self.batch_record(m, phase='input_layer', s=si+1, f=fi+1)
+                self.batch_record(m, phase='input_layer', s=si+1, f=ci+1)
 
                 # RESERVOIR LAYER
                 # ----------------------------------------------------
@@ -388,9 +388,9 @@ class BooleanReservoir(nn.Module):
                 states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
                 self.states_parallel[:m] = states_parallel
 
-                if not ((si == s - 1) and (fi == f - 1)): # skip last recording, as this is output_layer
-                    self.batch_record(m, phase='reservoir_layer', s=si+1, f=fi+1)
-        self.batch_record(m, phase='output_layer', s=s, f=f)
+                if not ((si == s - 1) and (ci == c - 1)): # skip last recording, as this is output_layer
+                    self.batch_record(m, phase='reservoir_layer', s=si+1, f=ci+1)
+        self.batch_record(m, phase='output_layer', s=s, f=c)
 
         # READOUT LAYER
         # ----------------------------------------------------
@@ -409,7 +409,7 @@ if __name__ == '__main__':
         pertubation='override', 
         encoding='base2', 
         features=2,
-        bits_per_feature=4,
+        chunk_size=4,
         redundancy=2, # no effect here since we are not using encoding (mapping floats to binary)
         n_nodes=8,
         )
@@ -434,7 +434,7 @@ if __name__ == '__main__':
 
     # test forward pass w. fake data. s steps per sample
     s = 2
-    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.bits_per_feature,), dtype=torch.uint8)
+    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.chunk_size,), dtype=torch.uint8)
     model(x)
     print(model(x).detach().numpy())
     model.flush_history()

@@ -28,7 +28,7 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
     else:
         return operator(a, b)
 
-class InputParams(BaseModel):
+class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input layer (I→R)
     seed: int = Field(0, description="Random seed, None disables seed")
     distribution: Union[str, List[str]] = Field(
         'identity',
@@ -58,30 +58,63 @@ class InputParams(BaseModel):
     w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by an adjacency matrix B->I. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
-    features: Union[int, List[int]] = Field(1, description="Dimension of input data before binary encoding")
-    bits_per_feature: Union[int, List[int]] = Field(8, description="Dimension per input data after binary encoding, overriden by redundancy & resolution parameters")
-    redundancy: Union[int, List[int]] = Field(1, description="Encoded input can be duplicated to introduce redundancy input. 3 bits can represent 8 states, if redundancy=2 you represent 8 states with 3*2=6 bits.")
-    n_nodes: Union[int, List[int]] = Field(None, description="Number of input nodes. This can be different from number of bits, as w_in maps bits to input_nodes (I) arbitrarily")
-    resolution: Optional[Union[int, List[int]]] = Field(None, description="bits_per_feature / redundancy, overrides bits_per_feature")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf -> adb, ecf | n=2: abcd, efgh -> ab, ef, cd, gh -> abef, cdgh")
+    n_nodes: Optional[Union[int, List[int]]] = Field(None, description="Number of input nodes; I")
+    features: Union[int, List[int]] = Field(None, description="Dimension of input data before binary encoding")
+    bits: Optional[Union[int, List[int]]] = Field(None, description="Total bits after encoding")
+    resolution: Optional[Union[int, List[int]]] = Field(None, description="Bits per dimension before redundancy")
+    redundancy: Union[int, List[int]] = Field(2, description="Redundancy factor of resolution")
+    chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
+    chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
 
-    @model_validator(mode='after') # TODO consider this as a property?
-    def override_bits_per_feature_by_resolution_and_redundancy(self):
-        if self.resolution is not None:
-            self.bits_per_feature = calculate_w_broadcasting(lambda x, y: x * y, self.resolution, self.redundancy)
-        else:
-            self.resolution = calculate_w_broadcasting(lambda x, y: x // y, self.bits_per_feature, self.redundancy)
+    @model_validator(mode='after')
+    def calculate_bits(self):
+        """Calculate bits from other parameters if not set"""
+        # Calculate from resolution and features
+        if (self.bits is None and
+            not isinstance(self.features, list) and
+            not isinstance(self.resolution, list) and
+            not isinstance(self.redundancy, list)):
+            
+            if self.resolution is not None and self.features is not None:
+                self.bits = self.features * self.resolution * self.redundancy
+        
+        # Also handle the reverse: if bits is set, calculate resolution
+        elif (self.bits is not None and 
+            self.resolution is None and
+            not isinstance(self.bits, list) and
+            not isinstance(self.features, list) and
+            not isinstance(self.redundancy, list)):
+            
+            if self.features is not None:
+                self.resolution = self.bits // (self.features * self.redundancy)
+        
         return self
 
+    # Both set - calculate bits if not set
+    @model_validator(mode='after')
+    def handle_chunking(self):
+        """Handle chunks and chunk_size bidirectionally"""
+        if (not isinstance(self.chunks, list) and
+            not isinstance(self.chunk_size, list)):
+            
+            if self.chunks is not None and self.chunk_size is not None:
+                if self.bits is None:
+                    self.bits = self.chunks * self.chunk_size
+            elif self.bits is not None and not isinstance(self.bits, list):
+                if self.chunks is not None:
+                    self.chunk_size = self.bits // self.chunks
+                elif self.chunk_size is not None:
+                    self.chunks = self.bits // self.chunk_size
+        
+        return self
+    
     @model_validator(mode='after')
     def default_n_nodes(self):
         if self.n_nodes is None:
-            self.n_nodes = calculate_w_broadcasting(lambda x, y: y, self.features, self.features)
+            self.n_nodes = calculate_w_broadcasting(lambda x, y: x, self.bits, None)
         return self
-
-    @property
-    def bits(self):
-        return self.features * self.bits_per_feature
+    
 
 class ReservoirParams(BaseModel):
     seed: int = Field(0, description="Random seed, None disables seed")
