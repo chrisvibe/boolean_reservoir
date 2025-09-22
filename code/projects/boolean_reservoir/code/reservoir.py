@@ -224,7 +224,11 @@ class BooleanReservoir(nn.Module):
             parameters = None
         w = None
         if strategy == 'identity':
-            w = np.eye(a, b)
+            def repeating_eye(a, b):
+                w = np.zeros((a, b))
+                w[np.arange(a), np.arange(a) % b] = 1
+                return w
+            w = repeating_eye(a, b)
         elif strategy == 'stub':
             # idea: make a determinisitic bipartite graph + a probabilitic mapping
             # constrain in and out degree simultaneously
@@ -305,7 +309,7 @@ class BooleanReservoir(nn.Module):
         if self.history:
             self.history.flush()
     
-    def bin2int(self, x): # TODO consider bit packig?
+    def bin2int(self, x): # TODO consider bit packig? (int is after all represented by binary units)
         vals = (x * self.powers_of_2).sum(dim=-1)
         return vals
 

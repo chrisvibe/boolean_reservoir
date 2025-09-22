@@ -17,6 +17,8 @@ def float_array_to_boolean(values, I:InputParams):
     1. assume input is normalized [0, 1] as float vals
     2. rescaling based on bit representation
     3. convert to bits
+    4. optionally: add redundancy
+    5. optionally: perform interleaving
     '''
     bin_values = None
     assert torch.is_floating_point(values)
@@ -33,6 +35,7 @@ def float_array_to_boolean(values, I:InputParams):
         bin_values = encoder.encode(values)
     else:
         raise ValueError(f"encoding {I.encoding} is not an option!")
+
     if I.interleaving:
         bin_values = interleave_features(bin_values, group_size=I.interleaving) # Note: no effect at 1D with grouping=1
     return bin_values.to(torch.uint8)
@@ -65,14 +68,35 @@ def bin2dec(x, bits, small_endian=False):
     vals = torch.sum(mask * x, -1).long()
     return vals / (2**bits - 1)
 
-def interleave_features(x, group_size=1):
-    # interleave between dimension d (dim 2) mxsxdxb
-    # group_size is grouping when interleaving f.ex N=2 → [012, 345] → [(01)(3,4)(25)]
+def interleave_features_old(x, group_size=1): # cant handle uneven b/group
+    # for testing x = torch.arange(0, 10).reshape(2, -1).unsqueeze(0).unsqueeze(0)
+    # interleave between dimension d mxsxdxb
+    # group_size is grouping when interleaving f.ex N=1 → [[0, 1, 2], [3, 4, 5]] → [[0, 3, 1], [4, 2, 5)]
+    # group_size is grouping when interleaving f.ex N=2 → [[0, 1, 2], [3, 4, 5]] → [[0, 1, 3], [4, 2, 5)]
     shape = x.shape
     x = x.reshape(x.shape[0], x.shape[1], x.shape[2], -1, group_size)
     x = torch.transpose(x, 2, 3).reshape(shape)
     return x
 
+def interleave_features(x, group_size=1): # can handle uneven b/group
+    # for testing x = torch.arange(0, 10).reshape(2, -1).unsqueeze(0).unsqueeze(0)
+    shape = x.shape
+    n, m, d, b = shape
+    gs = group_size
+    num_full = b // gs
+    rem = b % gs
+    parts = []
+    for i in range(num_full):
+        for j in range(d):
+            part = x[:, :, j:j+1, i*gs : (i+1)*gs]
+            parts.append(part)
+    if rem > 0:
+        for j in range(d):
+            part = x[:, :, j:j+1, -rem:]
+            parts.append(part)
+    interleaved = torch.cat(parts, dim=-1)
+    interleaved = interleaved.reshape(shape)
+    return interleaved 
 
 def min_max_normalization(data):
     data = data.to(torch.float)
@@ -105,7 +129,7 @@ class BinaryEmbedding:
         """Encode float data using the Binary Embedding method with the pre-generated random key vectors.
         
         Args:
-            data: A normalized [0, 1] float tensor of shape (batch_size, sequence_length, features, bit_resolution).
+            data: A normalized [0, 1] float tensor of shape (batch_size, sequence_length, features).
                 
         Returns:
             A binary encoded tensor with self-similar properties of shape (batch_size, sequence_length, features, n*bit_resolution).
@@ -126,12 +150,12 @@ class BinaryEmbedding:
 
         return encoded_tensors
 
-    def set_random_boolean_keys(self, new_n=None, new_b=None):
+    def set_random_boolean_keys(self, new_b=None, new_n=None):
         """Set a new set of random vectors. If new_n or new_b is None, current values are used.
         
         Args:
-            new_n (int, optional): New expansion factor. Defaults to None.
             new_b (int, optional): New bit resolution. Defaults to None.
+            new_n (int, optional): New expansion factor. Defaults to None.
         """
         self.n = new_n if new_n is not None else self.n
         self.b = new_b if new_b is not None else self.b

@@ -20,7 +20,7 @@ class ConstrainedForagingPathDataset(BaseDataset):
         if D.path.exists() and not D.generate_data:
             self.load_data()
         else:
-            self.data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy, D.boundary)
+            self.data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy_obj, D.boundary_obj)
             self.save_data()
 
     @staticmethod
@@ -47,19 +47,17 @@ if __name__ == '__main__':
     yaml_content = """
     dimensions: 2
     steps: 500
-    strategy_config:
+    strategy:
         type: LevyFlightStrategy
-        params:
-            alpha: 3
-            momentum: 0.9
+        alpha: 3
+        momentum: 0.9
     boundary_config:
         type: PolygonBoundary
-        params:
-            n_sides: 4
-            radius: 1
-            rotation: pi/4 
-            stretch_x: 2 
-            stretch_y: 1/2
+        n_sides: 4
+        radius: 1
+        rotation: pi/4 
+        stretch_x: 2 
+        stretch_y: 1/2
         split:
             train: 0.4
             dev: 0.3
@@ -69,24 +67,45 @@ if __name__ == '__main__':
     """
     config = yaml.safe_load(yaml_content)
     D = PathIntegrationDatasetParams(**config)
-    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
     # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='demo_path')
 
     from projects.boolean_reservoir.code.parameters import load_yaml_config 
 
     # P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
     # D = P.D
-    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    # plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend='test_verification_model')
     
     # P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
     # D = P.D
-    # positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    # plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend='test_verification_model')
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    # plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend='test_verification_model')
+
+    # from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+    # P = load_yaml_config('config/path_integration/1D/grid_search/heterogeneous_deterministic.yaml')
+    # P = generate_param_combinations(P)[0]
+    # D = P.D
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    # plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend=P.L.out_path.name)
+
+    # from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+    # P = load_yaml_config('config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml')
+    # P = generate_param_combinations(P)[0]
+    # D = P.D
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    # plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend=P.L.out_path.name)
 
     from projects.boolean_reservoir.code.parameters import generate_param_combinations 
-    P = load_yaml_config('config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml')
+    P = load_yaml_config('config/path_integration/test/1D/test_model.yaml')
     P = generate_param_combinations(P)[0]
     D = P.D
-    positions = random_walk(D.dimensions, D.steps, D.strategy, D.boundary)
-    plot_random_walk('/out', positions, D.strategy, D.boundary, file_prepend=P.L.out_path.name)
+    positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend=P.L.out_path.name)
+
+    # from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+    # P = load_yaml_config('config/path_integration/test/2D/test_model.yaml')
+    # P = generate_param_combinations(P)[0]
+    # D = P.D
+    # positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
+    # plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend=P.L.out_path.name)

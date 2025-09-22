@@ -1,5 +1,5 @@
 logging:
-  out_path: 'out/path_integration/grid_search/2D/heterogeneous-deterministic'
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/single_run'
   grid_search:
     seed: 0
     n_samples: 25
@@ -7,23 +7,24 @@ logging:
 model:
   input_layer:
     distribution: identity
-    connection: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
-    pertubation: [override, xor]
+    connection: [out-3:3:1] # I→R mapping: deterministic out-degree
     encoding: base2
+    interleaving: 0
+    bits: 10
     features: 2
-    resolution: 8
-    redundancy: 6
-    chunk_size: 96 
-    interleaving: 1
+    chunk_size: 1 
+    pertubation: [override]
+    redundancy: 1
+    w_in: null
   output_layer:
     n_outputs: 2
   reservoir_layer:
-    init: [zeros, random]
-    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    init: [zeros]
+    k_avg: [4.0]
     k_min: 0
     k_max: 25
-    mode: heterogeneous
-    n_nodes: 3000
+    mode: homogeneous
+    n_nodes: 500
     p: 0.5
     reset: true
     self_loops: null
@@ -37,19 +38,21 @@ model:
 dataset:
   dimensions: 2
   steps: 5
-  strategy:
+  strategy_config:
     type: LevyFlightStrategy
-    alpha: 1
-    momentum: 0.0
-    step_size: 0.05
-  boundary:
+    params:
+      alpha: 1
+      momentum: 0.0
+      step_size: 0.05
+  boundary_config:
     type: PolygonBoundary
-    n_sides: 12
-    radius: 1.0
-    rotation: pi/4
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4 
   split:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 20000
+  samples: 10000
   seed: 0

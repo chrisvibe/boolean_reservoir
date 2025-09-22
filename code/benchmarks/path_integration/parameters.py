@@ -1,8 +1,10 @@
 from benchmarks.utils.parameters import DatasetParameters
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, Literal
 from pydantic import BaseModel, Field, model_validator, PrivateAttr, field_validator
 from pathlib import Path
 import math
+import hashlib
+import json
 from benchmarks.path_integration.constrained_foraging_path import (
     LevyFlightStrategy, SimpleRandomWalkStrategy, 
     PolygonBoundary, IntervalBoundary, NoBoundary, 
@@ -15,28 +17,29 @@ These are designed to be lazy and private to avoid dumping them.
 All lists as usual are expanded for many instances with the values in the list.
 '''
 
-
-# Strategy-specific parameter classes
+# Strategy parameter classes
 class LevyFlightStrategyParams(BaseModel):
     """Parameters specific to Levy Flight Strategy"""
+    type: Literal["LevyFlightStrategy"] = "LevyFlightStrategy"
     alpha: Union[float, List[float]] = Field(1.5, description="Alpha parameter for pareto distribtion (Levy flight)")
     momentum: Union[float, List[float]] = Field(0.0, description="Momentum parameter")
     step_size: Union[float, List[float]] = Field(1.0, description="Scaling of stepsize from distribution")
 
 class SimpleRandomWalkStrategyParams(BaseModel):
     """Parameters specific to Simple Random Walk Strategy"""
+    type: Literal["SimpleRandomWalkStrategy"] = "SimpleRandomWalkStrategy"
     step_size: Union[float, List[float]] = Field(1.0, description="Step size for random walk")
 
-
-# Boundary-specific parameter classes
+# Boundary parameter classes
 class PolygonBoundaryParams(BaseModel):
     """Parameters specific to Polygon Boundary"""
+    type: Literal["PolygonBoundary"] = "PolygonBoundary"
     n_sides: Union[int, List[int]] = Field(4, description="Number of polygon sides")
-    radius: Union[float, List[float]] = Field(1, description="Boundary radius")
+    radius: Union[float, List[float]] = Field(1.0, description="Boundary radius")
     center: Optional[Union[List[float], List[List[float]]]] = Field(None, description="Boundary center(s)")
     rotation: Union[float, List[float]] = Field(math.pi/4, description="Rotation angle radians")
-    stretch_x: Union[float, List[float]] = Field(1, description="Scale in x axis")
-    stretch_y: Union[float, List[float]] = Field(1, description="Scale in y axis")
+    stretch_x: Union[float, List[float]] = Field(1.0, description="Scale in x axis")
+    stretch_y: Union[float, List[float]] = Field(1.0, description="Scale in y axis")
     
     @classmethod
     def parse_math_expression(cls, expr):
@@ -64,87 +67,41 @@ class PolygonBoundaryParams(BaseModel):
             return v
         return cls.parse_math_field(v)
 
-
 class IntervalBoundaryParams(BaseModel):
     """Parameters specific to Interval Boundary"""
-    radius: Union[float, List[float]] = Field(1, description="Boundary radius")
-    center: Optional[Union[float, List[float]]] = Field(0, description="Boundary center")
-
+    type: Literal["IntervalBoundary"] = "IntervalBoundary"
+    radius: Union[float, List[float]] = Field(1.0, description="Boundary radius")
+    center: Optional[Union[float, List[float]]] = Field(0.0, description="Boundary center")
 
 class NoBoundaryParams(BaseModel):
-    """Parameters for no boundary (empty params)"""
-    pass
+    """Parameters for no boundary"""
+    type: Literal["NoBoundary"] = "NoBoundary"
 
-
-class ParamsDict(BaseModel):
-    """Generic parameters container that allows any fields"""
-    model_config = {
-        "extra": "allow"  # Allow any fields to be added dynamically
-    }
-
-
-class StrategyParams(BaseModel):
-    """Strategy configuration with type and parameters"""
-    type: Union[str, List[str]] = Field("LevyFlightStrategy", description="Strategy type(s)")
-    params: ParamsDict = Field(default_factory=ParamsDict, description="Strategy parameters")
-    
-    _typed_params: Optional[BaseModel] = PrivateAttr(default=None)
-    
-    @property
-    def typed_params(self):
-        """Lazy property that returns the typed params object"""
-        if self._typed_params is None:
-            strategy_type = self.type
-            params_map = {
-                'LevyFlightStrategy': LevyFlightStrategyParams,
-                'SimpleRandomWalkStrategy': SimpleRandomWalkStrategyParams,
-            }
-            params_class = params_map.get(strategy_type, LevyFlightStrategyParams)
-            self._typed_params = params_class(**self.params.__dict__)
-        return self._typed_params
-    
-
-class BoundaryParams(BaseModel):
-    """Boundary configuration with type and parameters"""
-    type: Union[str, List[str]] = Field("PolygonBoundary", description="Boundary type(s)")
-    params: ParamsDict = Field(default_factory=ParamsDict, description="Boundary parameters")
-    
-    _typed_params: Optional[BaseModel] = PrivateAttr(default=None)
-    
-    @property
-    def typed_params(self):
-        """Lazy property that returns the typed params object"""
-        if self._typed_params is None:
-            boundary_type = self.type
-            params_map = {
-                'PolygonBoundary': PolygonBoundaryParams,
-                'IntervalBoundary': IntervalBoundaryParams,
-                'NoBoundary': NoBoundaryParams,
-            }
-            params_class = params_map.get(boundary_type, PolygonBoundaryParams)
-            self._typed_params = params_class(**self.params.__dict__)
-        return self._typed_params
-    
+# Union types for strategy and boundary parameters
+StrategyParams = Union[LevyFlightStrategyParams, SimpleRandomWalkStrategyParams]
+BoundaryParams = Union[PolygonBoundaryParams, IntervalBoundaryParams, NoBoundaryParams]
 
 class PathIntegrationDatasetParams(DatasetParameters):
     # Basic parameters
     dimensions: Union[int, List[int]] = Field(2, description="Number of dimensions")
     steps: Union[int, List[int]] = Field(10, description="Number of steps")
     
-    # Strategy and boundary configurations (field names match YAML keys)
-    strategy_config: StrategyParams = Field(
-        default_factory=StrategyParams,
-        description="Strategy configuration"
+    # Strategy and boundary parameters (flattened)
+    strategy: StrategyParams = Field(
+        default_factory=LevyFlightStrategyParams,
+        description="Strategy parameters",
+        discriminator='type'
     )
     
-    boundary_config: BoundaryParams = Field(
-        default_factory=BoundaryParams,
-        description="Boundary configuration"
+    boundary: BoundaryParams = Field(
+        default_factory=PolygonBoundaryParams,
+        description="Boundary parameters",
+        discriminator='type'
     )
     
     # Private attributes for caching lazy-loaded objects
-    _strategy: Optional[Any] = PrivateAttr(default=None)
-    _boundary: Optional[Any] = PrivateAttr(default=None)
+    _strategy_obj: Optional[Any] = PrivateAttr(default=None)
+    _boundary_obj: Optional[Any] = PrivateAttr(default=None)
     
     model_config = {
         "arbitrary_types_allowed": True
@@ -156,92 +113,101 @@ class PathIntegrationDatasetParams(DatasetParameters):
         # Skip if any parameter is a list (will be expanded combinatorially)
         if (isinstance(self.dimensions, list) or 
             isinstance(self.steps, list) or
-            isinstance(self.strategy_config.type, list) or
-            isinstance(self.boundary_config.type, list)):
+            self._has_list_in_strategy() or
+            self._has_list_in_boundary()):
             return self
         
         self.path = self._generate_path()
         return self
     
-    @property
-    def strategy(self):
-        """Lazy property that creates and caches the strategy object"""
-        if self._strategy is None:
-            strategy_map = {
-                "LevyFlightStrategy": lambda: LevyFlightStrategy(
-                    dim=self.dimensions,
-                    alpha=self.strategy_config.typed_params.alpha,
-                    momentum=self.strategy_config.typed_params.momentum,
-                    step_size=self.strategy_config.typed_params.step_size,
-                ),
-                "SimpleRandomWalkStrategy": lambda: SimpleRandomWalkStrategy(
-                    step_size=self.strategy_config.typed_params.step_size
-                ),
-            }
-            
-            strategy_type = self.strategy_config.type
-            if strategy_type not in strategy_map:
-                raise ValueError(f"Unknown strategy type: {strategy_type}")
-            
-            self._strategy = strategy_map[strategy_type]()
-        
-        return self._strategy
+    def _has_list_in_strategy(self) -> bool:
+        """Check if strategy has any list parameters"""
+        for field_name, field_value in self.strategy.__dict__.items():
+            if isinstance(field_value, list):
+                return True
+        return False
+    
+    def _has_list_in_boundary(self) -> bool:
+        """Check if boundary has any list parameters"""
+        for field_name, field_value in self.boundary.__dict__.items():
+            if isinstance(field_value, list):
+                return True
+        return False
     
     @property
-    def boundary(self):
+    def strategy_obj(self):
+        """Lazy property that creates and caches the strategy object"""
+        if self._strategy_obj is None:
+            if self.strategy.type == "LevyFlightStrategy":
+                self._strategy_obj = LevyFlightStrategy(
+                    dim=self.dimensions,
+                    alpha=self.strategy.alpha,
+                    momentum=self.strategy.momentum,
+                    step_size=self.strategy.step_size,
+                )
+            elif self.strategy.type == "SimpleRandomWalkStrategy":
+                self._strategy_obj = SimpleRandomWalkStrategy(
+                    step_size=self.strategy.step_size
+                )
+            else:
+                raise ValueError(f"Unknown strategy type: {self.strategy.type}")
+        
+        return self._strategy_obj
+    
+    @property
+    def boundary_obj(self):
         """Lazy property that creates and caches the boundary object"""
-        if self._boundary is None:
-            boundary_type = self.boundary_config.type
-            
-            if boundary_type == "PolygonBoundary":
-                typed_params = self.boundary_config.typed_params
+        if self._boundary_obj is None:
+            if self.boundary.type == "PolygonBoundary":
                 points = generate_polygon_points(
-                    typed_params.n_sides,
-                    typed_params.radius,
-                    rotation=typed_params.rotation,
-                    center=typed_params.center,
+                    self.boundary.n_sides,
+                    self.boundary.radius,
+                    rotation=self.boundary.rotation,
+                    center=self.boundary.center,
                 )
                 points = PolygonBoundary(points=points)
-                self._boundary = stretch_polygon(
+                self._boundary_obj = stretch_polygon(
                     points, 
-                    typed_params.stretch_x, 
-                    typed_params.stretch_y
+                    self.boundary.stretch_x, 
+                    self.boundary.stretch_y
                 )
             
-            elif boundary_type == "IntervalBoundary":
-                typed_params = self.boundary_config.typed_params
-                self._boundary = IntervalBoundary(
-                    (-typed_params.radius / 2, typed_params.radius / 2),
-                    typed_params.center,
+            elif self.boundary.type == "IntervalBoundary":
+                self._boundary_obj = IntervalBoundary(
+                    (-self.boundary.radius / 2, self.boundary.radius / 2),
+                    self.boundary.center,
                 )
             
-            elif boundary_type == "NoBoundary":
-                self._boundary = NoBoundary()
+            elif self.boundary.type == "NoBoundary":
+                self._boundary_obj = NoBoundary()
             
             else:
-                raise ValueError(f"Unknown boundary type: {boundary_type}")
+                raise ValueError(f"Unknown boundary type: {self.boundary.type}")
         
-        return self._boundary
+        return self._boundary_obj
     
+    @staticmethod
+    def _hash_basemodel(base_model, n_chars=5):
+        model_dict = base_model.model_dump()
+        json_str = json.dumps(model_dict, sort_keys=True)
+        hash = hashlib.sha256(json_str.encode('utf-8')).hexdigest()
+        return hash[:n_chars]
+        
     def _generate_path(self) -> Path:
         """Generate path based on parameters"""
-        # Create shorter hash for strategy and boundary
-        strategy_type = self.strategy_config.type
-        if isinstance(strategy_type, list):
-            strategy_type = strategy_type[0]
-        boundary_type = self.boundary_config.type
-        if isinstance(boundary_type, list):
-            boundary_type = boundary_type[0]
-            
-        strategy_str = ''.join(filter(str.isupper, strategy_type))
-        boundary_str = ''.join(filter(str.isupper, boundary_type))
+        strategy_str = ''.join(filter(str.isupper, self.strategy.type))
+        strategy_hash = self._hash_basemodel(self.strategy) 
+        boundary_str = ''.join(filter(str.isupper, self.boundary.type))
+        boundary_hash = self._hash_basemodel(self.boundary)
         
         return Path(
             f'data/path_integration/'
             f'd-{self.dimensions}/'
             f's-{self.steps}/'
             f'{strategy_str}/'
+            f'{strategy_hash}/'
             f'{boundary_str}/'
+            f'{boundary_hash}/'
             f'm-{self.samples}/'
             f'r-{self.seed}/'
             f'dataset.pt'
@@ -253,12 +219,8 @@ class PathIntegrationDatasetParams(DatasetParameters):
     
     def clear_cache(self):
         """Clear cached lazy properties (useful after deserialization)"""
-        self._strategy = None
-        self._boundary = None
-        if hasattr(self.strategy_config, '_typed_params'):
-            self.strategy_config._typed_params = None
-        if hasattr(self.boundary_config, '_typed_params'):
-            self.boundary_config._typed_params = None
+        self._strategy_obj = None
+        self._boundary_obj = None
 
 
 if __name__ == '__main__':
@@ -268,20 +230,21 @@ if __name__ == '__main__':
     yaml_content = """
     dimensions: [2, 3]
     steps: 10
-    strategy_config:
+    strategy:
       type: LevyFlightStrategy
-      params:
-        alpha: 3.0
-        momentum: [0.8, 0.9]
-    boundary_config:
+      alpha: 3.0
+      momentum: [0.8, 0.9]
+    boundary:
       type: PolygonBoundary
-      params:
-        n_sides: [4, 6]
-        radius: 0.2
-        rotation: 1.57
+      n_sides: [4, 6]
+      radius: 0.2
+      rotation: 1.57
     """
     config = yaml.safe_load(yaml_content)
     p = PathIntegrationDatasetParams(**config)
+    
+    print(f"Strategy: {p.strategy}")
+    print(f"Boundary: {p.boundary}")
     
     # Test serialization - no warnings!
     import pickle
@@ -298,7 +261,7 @@ if __name__ == '__main__':
     print(f"Number of parameter combinations: {len(p_list)}")
     for i, p in enumerate(p_list[:2]):  # Show first 2
         print(f"\n--- Combination {i+1} ---")
-        print(f"Strategy config: {p.strategy_config.params}")
-        print(f"Boundary config: {p.boundary_config.params}")
-        print(f"Strategy object: {p.strategy}")  # Will be created lazily
-        print(f"Boundary object: {p.boundary}")  # Will be created lazily
+        print(f"Strategy: {p.strategy}")
+        print(f"Boundary: {p.boundary}")
+        print(f"Strategy object: {p.strategy_obj}")  # Will be created lazily
+        print(f"Boundary object: {p.boundary_obj}")  # Will be created lazily

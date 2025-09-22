@@ -212,7 +212,8 @@ def plot_dynamics_history(path):
     history_normalized = np.nan_to_num(history_normalized) # columns with all 0's or 1's will divide by zero as variance = 0
     n_components = 2
 
-    pca = PCA(n_components=n_components) # TODO transpose for space and time pca and break up into smaller parts
+    # TODO transpose for space and time pca and break up into smaller parts
+    pca = PCA(n_components=n_components)
     embedding = pca.fit_transform(history_normalized)
     df = pd.DataFrame(embedding, columns=[f'PC{i+1}' for i in range(n_components)], index=expanded_meta.index)
     df = pd.concat([df, expanded_meta], axis=1)
@@ -242,7 +243,7 @@ def plot_dynamics_history(path):
 
 def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_phase.svg", 
                                     highlight_input_nodes=True, data_filter=lambda df: df, 
-                                    aggregation_handle=lambda df: df[df['sample_id'] == 0], figsize=(5,5), cell_aspect_ratio=1):
+                                    aggregation_handle=lambda df: df[df['sample_id'] == 0], figsize=(15,15), cell_aspect_ratio=1, ir_subtitle=True):
     """
     Plot activity trace with phase band underneath - using constrained_layout.
     """
@@ -286,8 +287,8 @@ def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_pha
         g = load_dict['graph']
         ir_edges = [(u, v) for u, v, data in g.edges(data=True) if data.get('quadrant') == 'IR']
         ir_map = {u: v for u, v in ir_edges}
-        subtitle = 'I→R: ' + str(ir_map)
-        ax.text(0.5, 1.02, subtitle, transform=ax.transAxes, fontsize=10, ha='center', va='bottom')
+        ir_subtitle = 'I→R: ' + str(ir_map) if ir_subtitle else ''
+        ax.text(0.5, 1.02, ir_subtitle, transform=ax.transAxes, fontsize=10, ha='center', va='bottom')
     
     # Plot node data
     node_data = combined_data[1:, :]
@@ -353,6 +354,7 @@ def plot_activity_trace(path, save_path=None, file_name="activity_trace_with_pha
             b += I.chunk_size
             w_in_i = w_in[a:b]
             selected_input_indices = w_in_i.sum(axis=0).nonzero(as_tuple=True)[0]
+            b %= I.n_nodes # steps re-use w_in so we reset 
             a = b
             
             time_pos = time_positions[idx]

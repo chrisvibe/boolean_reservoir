@@ -1,5 +1,5 @@
 logging:
-  out_path: 'out/path_integration/grid_search/2D/heterogeneous-deterministic'
+  out_path: 'out/path_integration/grid_search/2D/heterogeneous-stochastic'
   grid_search:
     seed: 0
     n_samples: 25
@@ -7,7 +7,7 @@ logging:
 model:
   input_layer:
     distribution: identity
-    connection: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
+    connection: [out-0:b:1/b, out-1:b:1/b] # I→R mapping: stochastic out-degree
     pertubation: [override, xor]
     encoding: base2
     features: 2

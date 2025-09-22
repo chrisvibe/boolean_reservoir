@@ -19,7 +19,7 @@ class DatasetParameters(BaseModel):
     split: Split = Field(Split(), description="fraction for train, dev, test")
     generate_data: bool = Field(False, description="Ignores loading even if dataset exists at path")
     samples: int = Field(64, description="Number of samples to generate in the dataset")
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

@@ -1,5 +1,5 @@
 logging:
-  out_path: 'out/path_integration/grid_search/2D/heterogeneous-deterministic'
+  out_path: 'out/path_integration/grid_search/1D/heterogeneous-deterministic'
   grid_search:
     seed: 0
     n_samples: 25
@@ -10,20 +10,19 @@ model:
     connection: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
     pertubation: [override, xor]
     encoding: base2
-    features: 2
+    features: 1
     resolution: 8
-    redundancy: 6
-    chunk_size: 96 
-    interleaving: 1
+    redundancy: 3
+    chunk_size: 24 
   output_layer:
-    n_outputs: 2
+    n_outputs: 1
   reservoir_layer:
     init: [zeros, random]
     k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     k_min: 0
     k_max: 25
     mode: heterogeneous
-    n_nodes: 3000
+    n_nodes: 1000
     p: 0.5
     reset: true
     self_loops: null
@@ -35,7 +34,7 @@ model:
     evaluation: dev
     learning_rate: 0.001
 dataset:
-  dimensions: 2
+  dimensions: 1
   steps: 5
   strategy:
     type: LevyFlightStrategy
@@ -43,10 +42,8 @@ dataset:
     momentum: 0.0
     step_size: 0.05
   boundary:
-    type: PolygonBoundary
-    n_sides: 12
+    type: IntervalBoundary
     radius: 1.0
-    rotation: pi/4
   split:
     train: 0.5
     dev: 0.3

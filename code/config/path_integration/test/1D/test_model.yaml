@@ -1,22 +1,25 @@
 model:
   input_layer:
-    pertubation: 'xor'
+    pertubation: 'override'
+    # pertubation: 'xor'
     resolution: 8
     encoding: binary_embedding
-    interleaving: 0
-    features: 2
+    features: 1
     redundancy: 6
     chunk_size: 48 
     seed: 0
   output_layer:
-    n_outputs: 2
+    n_outputs: 1
+    seed: 0
   reservoir_layer:
-    init: random_lut_state
-    k_avg: 4
-    k_max: 10
-    n_nodes: 3000
+    init: zeros
+    k_avg: 2
+    k_max: 20
+    n_nodes: 1000
     p: 0.5
-    # self_loops: 0.3
+    # self_loops: 0.0
+    self_loops: 0.5
+    seed: 0 
   training:
     batch_size: 100
     epochs: 100
@@ -25,9 +28,9 @@ model:
     evaluation: 'test' 
     seed: 0
 logging:
-  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/single_run'
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/1D/single_run'
 dataset:
-  dimensions: 2
+  dimensions: 1
   steps: 5
   strategy_config:
     type: LevyFlightStrategy
@@ -36,14 +39,12 @@ dataset:
       momentum: 0.0
       step_size: 0.05
   boundary_config:
-    type: PolygonBoundary
+    type: IntervalBoundary
     params:
-      n_sides: 12
       radius: 1.0
-      rotation: pi/4 
   split:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 10000
+  samples: 20000
   seed: 0

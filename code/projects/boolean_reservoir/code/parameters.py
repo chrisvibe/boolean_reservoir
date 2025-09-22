@@ -29,7 +29,7 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
         return operator(a, b)
 
 class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input layer (I→R)
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     distribution: Union[str, List[str]] = Field(
         'identity',
         description=(
@@ -54,7 +54,7 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
             "Note: 'w_in' overrides this field with a manual adjacency matrix. Both aim to map bits to input nodes (bits→I)."
         )
     )
-    connection: Union[str, List[str]] = Field('out-1:b:1/b', description="See distribution property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
+    connection: Union[str, List[str]] = Field('out-1:1:1', description="See distribution property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
     w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by an adjacency matrix B->I. Parameter is a path to a stored tensor. Overrides distribution parameter")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
@@ -117,7 +117,7 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     
 
 class ReservoirParams(BaseModel):
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     n_nodes: Optional[Union[int, List[int]]] = Field(None, description="Number of reservoir nodes (R) excluding input nodes (I)")
     k_min: Union[int, List[int]] = Field(0, description="Min degree of incoming nodes")
     k_avg: Union[float, List[float]] = Field(2, description="Average degree of incoming nodes")
@@ -138,12 +138,12 @@ class ReservoirParams(BaseModel):
         return self
 
 class OutputParams(BaseModel): # TODO add w_out and distribution like in input_layer. atm we assume full readout of R
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     n_outputs: Union[int, List[int]] = Field(1, description="Dimension of output data")
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
 
 class TrainingParams(BaseModel):
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     batch_size: Union[int, List[int]] = Field(32, description="Number of samples per forward pass")
     criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE")
     epochs: Union[int, List[int]] = Field(100, description="Number of epochs")
@@ -180,7 +180,7 @@ class ModelParams(BaseModel):
         return self.R.n_nodes + self.I.n_nodes 
 
 class GridSearchParams(BaseModel):
-    seed: int = Field(0, description="Random seed, None disables seed")
+    seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     n_samples: Optional[int] = Field(1, ge=1, description="Number of samples per configuration in grid search")
 
 class HistoryParams(BaseModel):

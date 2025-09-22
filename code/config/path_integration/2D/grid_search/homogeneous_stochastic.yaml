@@ -1,37 +1,39 @@
+logging:
+  out_path: 'out/path_integration/grid_search/2D/homogeneous-stochastic'
+  grid_search:
+    seed: 0
+    n_samples: 25
+  save_keys: [parameters]
 model:
   input_layer:
-    pertubation: 'override'
-    encoding: binary_embedding
+    distribution: identity
+    connection: [out-0:b:1/b, out-1:b:1/b] # I→R mapping: stochastic out-degree
+    pertubation: [override, xor]
+    encoding: base2
     features: 2
     resolution: 8
     redundancy: 6
     chunk_size: 96 
     interleaving: 1
-    seed: 6
   output_layer:
     n_outputs: 2
-    seed: 6
   reservoir_layer:
-    mode: heterogeneous
-    init: zeros
-    k_avg: 2.2
+    init: [zeros, random]
+    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    k_min: 0
     k_max: 25
+    mode: homogeneous
     n_nodes: 3000
     p: 0.5
-    self_loops: 0.0 # note that this seems critical? why?
-    seed: 6 
+    reset: true
+    self_loops: null
   training:
-    batch_size: 100
-    epochs: 100
-    learning_rate: 0.001
     accuracy_threshold: 0.05
-    evaluation: 'test' 
-    seed: 0
-logging:
-  out_path: 'out/path_integration/single_run/2D/good_model'
-  # history:
-  #   record_history: true
-  #   buffer_size: 64
+    batch_size: 100
+    criterion: MSE
+    epochs: 40
+    evaluation: dev
+    learning_rate: 0.001
 dataset:
   dimensions: 2
   steps: 5

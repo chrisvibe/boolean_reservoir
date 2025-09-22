@@ -83,7 +83,7 @@ class BatchedTensorHistoryWriter:
     def flush(self):
         self._write_buffer()
 
-    def reload_history(self, history_path=None, checkpoint_path=None, include={''}, exclude={}):
+    def reload_history(self, history_path=None, checkpoint_path=None, include={}, exclude={}):
         history_path = Path(history_path) if history_path else self.save_path
         all_data = []
         all_meta_data = []

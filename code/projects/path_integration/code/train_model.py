@@ -1,9 +1,20 @@
 from projects.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
-from projects.boolean_reservoir.code.visualizations import plot_train_history, plot_dynamics_history 
+from projects.boolean_reservoir.code.visualizations import plot_train_history, plot_dynamics_history, plot_activity_trace
 from projects.boolean_reservoir.code.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 from projects.path_integration.code.visualizations import plot_many_things
 from projects.boolean_reservoir.code.boolean_reservoir_parallel import boolean_reservoir_grid_search 
+
+from os import environ
+import logging
+import sys
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(process)d - %(filename)s - %(message)s',
+    stream=sys.stdout,
+    force=True
+)
+logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
     # # Simple run
@@ -13,15 +24,59 @@ if __name__ == '__main__':
     # p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
 
-    # # Grid search stuff 
-    # #####################################
-    configs = [
-        # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
-        # 'config/path_integration/2D/grid_search/initial_sweep.yaml',
-        'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
-    ]
-    for c in configs:
+    # # # playground 
+    # # #####################################
+    # configs = [
+    #     # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
+    #     # 'config/path_integration/2D/grid_search/initial_sweep.yaml',
+    #     # 'config/path_integration/1D/single_run/good_model.yaml',
+    #     'config/path_integration/2D/single_run/good_model.yaml',
+    # ]
+    # for c in configs:
+    #     from projects.boolean_reservoir.code.parameters import load_yaml_config 
+    #     from projects.boolean_reservoir.code.parameters import generate_param_combinations 
+    #     P = load_yaml_config(c)
+    #     P = generate_param_combinations(P)[0]
+    #     p, model, dataset, history = train_single_model(parameter_override=P, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    #     plot_many_things(model, dataset, history)
+    #     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0], ir_subtitle=False)
 
+    # Grid search stuff 
+    #####################################
+    configs = [
+        'config/path_integration/1D/grid_search/heterogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/heterogeneous_stochastic.yaml',
+        'config/path_integration/1D/grid_search/homogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/homogeneous_stochastic.yaml',
+
+        'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/heterogeneous_stochastic.yaml',
+        'config/path_integration/2D/grid_search/homogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/homogeneous_stochastic.yaml',
+    ]
+
+    node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
+    if "hpc" in node:
+        logger.info(f"This is hpc node: {node}")
+    else:
+        logger.warning(f"Unknown node detected: {node}")
+
+    node_job_assigments = {
+        1: [0, 7],
+        2: [1, 6],
+        3: [2, 5],
+        5: [3, 4],
+        10: [],
+        11: [],
+        'unknown': [-1],
+    }
+    if node != 'unknown':
+        id = int(node[3:])
+        configs = [configs[idx] for idx in node_job_assigments[id]]
+    else:
+        configs = [configs[idx] for idx in node_job_assigments['unknown']]
+
+    for c in configs:
         boolean_reservoir_grid_search(
             c,
             dataset_init=d().dataset_init,
@@ -30,12 +85,4 @@ if __name__ == '__main__':
             cpu_memory_per_job_gb = 1/2,
             cpu_cores_per_job = 1,
         )
-
-        # from projects.boolean_reservoir.code.parameters import load_yaml_config 
-        # from projects.boolean_reservoir.code.parameters import generate_param_combinations 
-        # P = load_yaml_config(c)
-        # P = generate_param_combinations(P)[0]
-        # p, model, dataset, history = train_single_model(parameter_override=P, dataset_init=d().dataset_init, accuracy=a().accuracy)
-        # plot_many_things(model, dataset, history)
-
 

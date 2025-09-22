@@ -1,35 +1,50 @@
 model:
   input_layer:
-    seed: 0
-    pertubation: 'xor'
+    pertubation: 'override'
     encoding: binary_embedding
     features: 1
-    bits_per_feature: 48
-    redundancy: 6
-    interleaving: 0
+    resolution: 8
+    redundancy: 3
+    chunk_size: 24 
+    seed: 5
   output_layer:
     n_outputs: 1
-    seed: 132
+    seed: 5
   reservoir_layer:
+    mode: heterogeneous
     init: zeros
-    k_avg: 2.0
-    k_max: 6
+    k_avg: 2.2
+    k_max: 25
     n_nodes: 1000
     p: 0.5
-    seed: 132
-    self_loops: 0.0
+    self_loops: 0.0 # note that this seems critical? why?
+    seed: 5 
   training:
     batch_size: 100
-    criterion: 'MSE'
     epochs: 100
     learning_rate: 0.001
     accuracy_threshold: 0.05
     evaluation: 'test' 
-    seed: 132
+    seed: 0
 logging:
   out_path: 'out/path_integration/single_run/1D/good_model'
-  history:
-    record_history: true
-    buffer_size: 64
+  # history:
+  #   record_history: true
+  #   buffer_size: 64
 dataset:
-  path: 'data/path_integration/d-1/s-LevyFlightStrategy/b-IntervalBoundary/n-5/m-10000/r-0/dataset.pt'
+  dimensions: 1
+  steps: 5
+  strategy:
+    type: LevyFlightStrategy
+    alpha: 1
+    momentum: 0.0
+    step_size: 0.05
+  boundary:
+    type: IntervalBoundary
+    radius: 1.0
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 20000
+  seed: 0
