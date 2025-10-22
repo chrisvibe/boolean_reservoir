@@ -2,7 +2,7 @@ model:
   input_layer:
     encoding: 'base2'
     features: 1
-    bits_per_feature: 8
+    resolution: 8
     redundancy: 1
   reservoir_layer:
     n_nodes: 100

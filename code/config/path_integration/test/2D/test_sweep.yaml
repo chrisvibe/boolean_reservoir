@@ -3,7 +3,7 @@ model:
     pertubation: 'xor'
     encoding: 'binary_embedding'
     features: 2
-    bits_per_feature: 48
+    resolution: 48
     redundancy: 6
     interleaving: [0]
   reservoir_layer:

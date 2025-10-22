@@ -64,9 +64,7 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
     T = model.P.model.training
     set_seed(T.seed)
-    optimizer = torch.optim.Adam(model.parameters(), lr=T.learning_rate)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=T.learning_rate, eps=1e-4, weight_decay=1e-3) # TODO consider upgrade of optimizer + options for stability liks epislon and weight_decay. optimizer for boolean readout?
-    optimizer = torch.optim.AdamW(model.parameters(), lr=T.learning_rate, weight_decay=1e-1, eps=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=T.learning_rate)
     criterion = criterion_strategy(T.criterion)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=T.shuffle, drop_last=T.drop_last)
     m = len(data_loader) * T.batch_size if T.drop_last else len(dataset)

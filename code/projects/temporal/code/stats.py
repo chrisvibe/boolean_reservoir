@@ -147,7 +147,7 @@ def aggregate_and_merge_data(df1, df2, factors):
     df['combo'] = df.apply(lambda row: tuple(row[feature] for feature in factors), axis=1)
     return df
 
-def graph_accuracy_vs_k_avg(out_path: Path, df, success_thresh):
+def graph_accuracy_vs_k_avg(out_path: Path, df: pd.DataFrame, success_thresh):
     df['R_k_avg_w_jitter'] = df['R_k_avg'] + np.random.uniform(-0.5, 0.5, size=len(df))
     df['design'] = df['combo_no_k_avg_str']
     
@@ -156,7 +156,7 @@ def graph_accuracy_vs_k_avg(out_path: Path, df, success_thresh):
         x='R_k_avg_w_jitter', 
         y='accuracy',
         color='design',
-        opacity=0.3,
+        opacity=0.7,
         labels={
             'R_k_avg_w_jitter': 'R_k_avg',
             'accuracy': 'Accuracy'
@@ -897,30 +897,29 @@ def mixed_effects_by_level(df, response, success_thresh, categorical_factors, nu
 
 if __name__ == '__main__':
     out_path = Path('/out/temporal/stats/design_evaluation')
-    success_thresh = 0.9
     response = 'accuracy'
 
     # statistical evauluation
     ####################################
-    # for i in [1, 3, 5]:
-    #     for j in [1, 3, 5]:
-    for i in [3]:
-        for j in [3]:
+    for i in [1, 3, 5]:
+        for j in [1, 3, 5]:
 
+            success_thresh = 0.9
             path = out_path / 'density' / f'delay-{i}_window-{j}'
             print(path)
             print('#'*60)
             df, factors, groups_dict = load_custom_data(response, '0110', i, j)
             polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            # graph_accuracy_vs_k_avg(path, df, success_thresh)
+            graph_accuracy_vs_k_avg(path, df, success_thresh)
             # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
             # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
 
+            success_thresh = 0.6
             path = out_path / 'parity' / f'delay-{i}_window-{j}'
             print(path)
             print('#'*60)
             df, factors, groups_dict = load_custom_data(response, '0101', i, j)
             polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            # graph_accuracy_vs_k_avg(path, df, success_thresh)
+            graph_accuracy_vs_k_avg(path, df, success_thresh)
             # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
             # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')

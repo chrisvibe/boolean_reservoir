@@ -6,15 +6,12 @@ logging:
   save_keys: [parameters]
 model:
   input_layer:
-    bits_per_feature: 1
     distribution: identity
     connection: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
-    encoding: base2
-    interleaving: 0
-    features: 10
     pertubation: [override, xor]
-    redundancy: 1
-    w_in: null
+    encoding: base2
+    features: 10
+    resolution: 1
   output_layer:
     activation: sigmoid
     n_outputs: 1

@@ -3,10 +3,10 @@
 # df[(df['accuracy'] < 0.85) & (df['accuracy'] > .8)]['params'].apply(lambda p: p.model)
 # out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/checkpoints/2025_05_09_014405_021874
 dataset:
-  bit_stream_length: 5
+  bit_stream_length: 10
   generate_data: false
   samples: 1000
-  seed: 4
+  seed: 30
   split:
     dev: 0.3
     test: 0.3
@@ -28,11 +28,11 @@ logging:
     loss: 0.3657870590686798
 model:
   input_layer:
-    bits_per_feature: 1
     connection: out-1:1:1
     distribution: identity
     encoding: base2
-    features: 5
+    features: 10
+    chunk_size: 1
     interleaving: 0
     n_nodes: 5
     pertubation: override
@@ -46,14 +46,14 @@ model:
     seed: 1541552926
   reservoir_layer:
     init: zeros
-    k_avg: 4.0
+    k_avg: 10.0
     k_max: 4
     k_min: 4
     mode: homogeneous
     n_nodes: 10
     p: 0.5
     reset: true
-    seed: 1541552926
+    seed: 0
     self_loops: null
   training:
     accuracy_threshold: 0.5

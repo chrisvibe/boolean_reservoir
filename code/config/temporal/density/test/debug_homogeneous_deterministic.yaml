@@ -5,7 +5,7 @@ logging:
     n_samples: 25
 model:
   input_layer:
-    bits_per_feature: 1
+    resolution: 1
     distribution: identity
     connection: [out-3:3:1] # I→R mapping: deterministic out-degree
     encoding: base2

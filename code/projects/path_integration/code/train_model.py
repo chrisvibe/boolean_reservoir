@@ -53,6 +53,27 @@ if __name__ == '__main__':
         'config/path_integration/2D/grid_search/heterogeneous_stochastic.yaml',
         'config/path_integration/2D/grid_search/homogeneous_deterministic.yaml',
         'config/path_integration/2D/grid_search/homogeneous_stochastic.yaml',
+
+        'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
+        'config/path_integration/1D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
+
+        'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
+        'config/path_integration/2D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
+
+        'config/path_integration/1D/grid_search/3_steps/heterogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/3_steps/heterogeneous_stochastic.yaml',
+        'config/path_integration/1D/grid_search/3_steps/homogeneous_deterministic.yaml',
+        'config/path_integration/1D/grid_search/3_steps/homogeneous_stochastic.yaml',
+
+        'config/path_integration/2D/grid_search/3_steps/heterogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/3_steps/heterogeneous_stochastic.yaml',
+        'config/path_integration/2D/grid_search/3_steps/homogeneous_deterministic.yaml',
+        'config/path_integration/2D/grid_search/3_steps/homogeneous_stochastic.yaml',
+ 
     ]
 
     node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
@@ -62,10 +83,18 @@ if __name__ == '__main__':
         logger.warning(f"Unknown node detected: {node}")
 
     node_job_assigments = {
-        1: [0, 7],
-        2: [1, 6],
-        3: [2, 5],
-        5: [3, 4],
+        1: [16, 23], # no self-loops
+        3: [17, 22],
+        4: [18, 21],
+        5: [19, 20],
+        # 1: [8, 15], # no self-loops
+        # 3: [9, 14],
+        # 4: [10, 13],
+        # 5: [11, 12],
+        # 1: [0, 7], normal
+        # 3: [1, 6],
+        # 4: [2, 5],
+        # 5: [3, 4],
         10: [],
         11: [],
         'unknown': [-1],

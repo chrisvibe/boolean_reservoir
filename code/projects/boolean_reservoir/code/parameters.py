@@ -63,7 +63,7 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     features: Union[int, List[int]] = Field(None, description="Dimension of input data before binary encoding")
     bits: Optional[Union[int, List[int]]] = Field(None, description="Total bits after encoding")
     resolution: Optional[Union[int, List[int]]] = Field(None, description="Bits per dimension before redundancy")
-    redundancy: Union[int, List[int]] = Field(2, description="Redundancy factor of resolution")
+    redundancy: Union[int, List[int]] = Field(1, description="Redundancy factor of resolution")
     chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
     chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
 
@@ -106,7 +106,10 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
                     self.chunk_size = self.bits // self.chunks
                 elif self.chunk_size is not None:
                     self.chunks = self.bits // self.chunk_size
-        
+                elif self.features is not None and not isinstance(self.features, list):
+                    self.chunks = self.features
+                    if self.resolution is not None and not isinstance(self.resolution, list):
+                        self.chunk_size = self.resolution * self.redundancy
         return self
     
     @model_validator(mode='after')

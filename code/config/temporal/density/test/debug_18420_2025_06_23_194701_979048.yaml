@@ -30,7 +30,6 @@ logging:
     loss: 0.6935309767723083
 model:
   input_layer:
-    bits_per_feature: 1
     connection: out-3:3:1
     distribution: identity
     encoding: base2

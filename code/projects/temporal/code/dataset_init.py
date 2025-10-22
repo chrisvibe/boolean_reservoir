@@ -1,5 +1,6 @@
 from benchmarks.temporal.temporal_density_parity_datasets import TemporalDensityDataset, TemporalParityDataset
 from benchmarks.temporal.parameters import TemporalDatasetParams
+# from projects.boolean_reservoir.code.encoding import BooleanEncoder 
 from projects.boolean_reservoir.code.parameters import Params, InputParams
 from projects.boolean_reservoir.code.train_model import DatasetInit
 from projects.boolean_reservoir.code.utils import set_seed, balance_dataset, l2_distance
@@ -15,6 +16,9 @@ class TemporalDatasetInit(DatasetInit): # Note dont use I.seed here dataset init
         elif D.task == 'parity':
             dataset = TemporalParityDataset(D)
         dataset = balance_dataset(dataset, distance_fn=l2_distance, num_bins=2, labels_are_classes=True, target_mode='minimum_bin')
+        # encoder = BooleanEncoder(I) # TODO not necesarry (already binary) but gives options - cant handle at the moment as the data is already in binary
+        # dataset.set_encoder_x(encoder) # not necesarry (already binary) but gives options
+        # dataset.encode_x() # not necesarry (already binary) but gives options
         dataset.split_dataset()
         return dataset
 

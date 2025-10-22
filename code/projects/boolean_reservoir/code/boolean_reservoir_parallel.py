@@ -108,7 +108,7 @@ def boolean_reservoir_grid_search(
     def process_results(history, best_params, output_path):
         if history:
             history_df = pd.DataFrame(history)
-            file_path = output_path / 'log.h5'
+            file_path = output_path / 'log.h5' # TODO bad better to save atomic units over complex classes for compatibility?
             history_df.to_hdf(file_path, key='df', mode='w')
             plot_grid_search(file_path)
             logger.info(f"Saved {len(history)} results to {file_path}")

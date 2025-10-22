@@ -3,10 +3,9 @@ logging:
     buffer_size: 64
     record_history: True
   out_path: out/temporal/kq_and_gr/grid_search/homogeneous-stochastic-vary_tao
-  save_keys: [parameters]
+  save_keys: null
 model:
   input_layer:
-    bits_per_feature: 1
     distribution: identity
     connection: out-1:b:1/b
     encoding: base2
@@ -14,6 +13,7 @@ model:
     features: 10
     pertubation: override
     redundancy: 1
+    resolution: 1
     w_in: null
   output_layer:
     activation: sigmoid

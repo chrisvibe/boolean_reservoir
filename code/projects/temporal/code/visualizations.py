@@ -12,6 +12,8 @@ from scipy.interpolate import UnivariateSpline, interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from copy import deepcopy
 from matplotlib.colors import ListedColormap
+from matplotlib.ticker import MultipleLocator
+from pathlib import Path
             
 
 def plot_many_things(model, dataset, history):
@@ -42,8 +44,7 @@ def group_df_data_by_parameters(df):
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str):
-    samples_per_config = df['sample'].max() + 1
-    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {samples_per_config}, Configs: {len(df['group_params_str'].unique())}"
+    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {df['sample'].nunique()}, Configs: {df['group_params_str'].nunique()}"
     
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
@@ -180,8 +181,8 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
             # xy = lowess(y_sorted, x_sorted, frac=2./3., it=3, delta=0.0, is_sorted=True, missing='none', return_sorted=True)
             # x_fine, y_smooth = xy[:, 0], xy[:, 1]
             
-            # Plot the lines
-            ax.plot(x_fine, y_smooth, linestyle='--', linewidth=2, color=color, label=f'{color_idx}-{metric}')
+            # # Plot the lines
+            # ax.plot(x_fine, y_smooth, linestyle='--', linewidth=2, color=color, label=f'{color_idx}-{metric}')
 
             # trend = sns.regplot(
             #     x='k_avg',
@@ -197,11 +198,12 @@ def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
 
             xvals.append(color_idx * val_range / g + ((i + 1) / n_metrics) - 1 + shift)
         color_idx += 1
-
+    
     lines = plt.gca().get_lines()
     labelLines(lines, align=False, xvals=xvals, fontsize=10)
     ax.set_ylabel('Rank')
     ax.set_xlabel('Average K')
+    ax.xaxis.set_major_locator(MultipleLocator(1))
     
     # Adjust subplot parameters to give specified padding
     plt.subplots_adjust(right=0.8)  # This leaves room for legends
