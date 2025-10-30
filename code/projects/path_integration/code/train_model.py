@@ -41,77 +41,106 @@ if __name__ == '__main__':
     #     plot_many_things(model, dataset, history)
     #     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0], ir_subtitle=False)
 
-    # Grid search stuff 
-    #####################################
-    configs = [
-        'config/path_integration/1D/grid_search/heterogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/heterogeneous_stochastic.yaml',
-        'config/path_integration/1D/grid_search/homogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/homogeneous_stochastic.yaml',
+    # # debug 
+    # #####################################
+    from projects.boolean_reservoir.code.reservoir import BooleanReservoir
+    from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix
+    import torch
+    from projects.boolean_reservoir.code.parameters import generate_param_combinations, load_yaml_config
+    p = load_yaml_config('config/path_integration/1D/grid_search/homogeneous_deterministic.yaml')
+    p.M.I.pertubation = 'override'
+    # p.M.I.pertubation = 'xor'
+    p.M.I.connection = 'out-3:3:1'
+    p.M.I.seed = p.M.R.seed = p.M.O.seed = 1
+    p.M.I.n_nodes = 10
+    p.M.R.n_nodes = 30
+    p.M.R.init = 'zeros'
+    # p.M.R.init = 'random'
+    p.M.R.k_avg = 4
+    p.L.out_path = f'/out/debug/{p.M.R.init}/{p.M.I.pertubation}'
+    p.L.history.record_history = True
+    p.L.save_keys = {'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'} 
+    configs = generate_param_combinations(p)
+    model = BooleanReservoir(configs[0])
+    x = torch.tensor([[[[int(bit)]] for bit in '1001001010']], dtype=torch.uint8)
+    # model(x)
+    # model.save()
+    # model.flush_history()
+    p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
+    pass
 
-        'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/heterogeneous_stochastic.yaml',
-        'config/path_integration/2D/grid_search/homogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/homogeneous_stochastic.yaml',
+    # # Grid search stuff 
+    # #####################################
+    # configs = [
+    #     'config/path_integration/1D/grid_search/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/1D/grid_search/homogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/homogeneous_stochastic.yaml',
 
-        'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
-        'config/path_integration/1D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
+    #     'config/path_integration/2D/grid_search/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/2D/grid_search/homogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/homogeneous_stochastic.yaml',
 
-        'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
-        'config/path_integration/2D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
+    #     'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/1D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
 
-        'config/path_integration/1D/grid_search/3_steps/heterogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/3_steps/heterogeneous_stochastic.yaml',
-        'config/path_integration/1D/grid_search/3_steps/homogeneous_deterministic.yaml',
-        'config/path_integration/1D/grid_search/3_steps/homogeneous_stochastic.yaml',
+    #     'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/no_self_loops/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/2D/grid_search/no_self_loops/homogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/no_self_loops/homogeneous_stochastic.yaml',
 
-        'config/path_integration/2D/grid_search/3_steps/heterogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/3_steps/heterogeneous_stochastic.yaml',
-        'config/path_integration/2D/grid_search/3_steps/homogeneous_deterministic.yaml',
-        'config/path_integration/2D/grid_search/3_steps/homogeneous_stochastic.yaml',
+    #     'config/path_integration/1D/grid_search/3_steps/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/3_steps/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/1D/grid_search/3_steps/homogeneous_deterministic.yaml',
+    #     'config/path_integration/1D/grid_search/3_steps/homogeneous_stochastic.yaml',
+
+    #     'config/path_integration/2D/grid_search/3_steps/heterogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/3_steps/heterogeneous_stochastic.yaml',
+    #     'config/path_integration/2D/grid_search/3_steps/homogeneous_deterministic.yaml',
+    #     'config/path_integration/2D/grid_search/3_steps/homogeneous_stochastic.yaml',
  
-    ]
+    # ]
 
-    node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    if "hpc" in node:
-        logger.info(f"This is hpc node: {node}")
-    else:
-        logger.warning(f"Unknown node detected: {node}")
+    # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
+    # if "hpc" in node:
+    #     logger.info(f"This is hpc node: {node}")
+    # else:
+    #     logger.warning(f"Unknown node detected: {node}")
 
-    node_job_assigments = {
-        1: [16, 23], # no self-loops
-        3: [17, 22],
-        4: [18, 21],
-        5: [19, 20],
-        # 1: [8, 15], # no self-loops
-        # 3: [9, 14],
-        # 4: [10, 13],
-        # 5: [11, 12],
-        # 1: [0, 7], normal
-        # 3: [1, 6],
-        # 4: [2, 5],
-        # 5: [3, 4],
-        10: [],
-        11: [],
-        'unknown': [-1],
-    }
-    if node != 'unknown':
-        id = int(node[3:])
-        configs = [configs[idx] for idx in node_job_assigments[id]]
-    else:
-        configs = [configs[idx] for idx in node_job_assigments['unknown']]
+    # node_job_assigments = {
+    #     1: [16, 23], # no self-loops
+    #     3: [17, 22],
+    #     4: [18, 21],
+    #     5: [19, 20],
+    #     # 1: [8, 15], # no self-loops
+    #     # 3: [9, 14],
+    #     # 4: [10, 13],
+    #     # 5: [11, 12],
+    #     # 1: [0, 7], normal
+    #     # 3: [1, 6],
+    #     # 4: [2, 5],
+    #     # 5: [3, 4],
+    #     10: [],
+    #     11: [],
+    #     'unknown': [-1],
+    # }
+    # if node != 'unknown':
+    #     id = int(node[3:])
+    #     configs = [configs[idx] for idx in node_job_assigments[id]]
+    # else:
+    #     configs = [configs[idx] for idx in node_job_assigments['unknown']]
 
-    for c in configs:
-        boolean_reservoir_grid_search(
-            c,
-            dataset_init=d().dataset_init,
-            accuracy=a().accuracy,
-            gpu_memory_per_job_gb = 1/2,
-            cpu_memory_per_job_gb = 1/2,
-            cpu_cores_per_job = 1,
-        )
+    # for c in configs:
+    #     boolean_reservoir_grid_search(
+    #         c,
+    #         dataset_init=d().dataset_init,
+    #         accuracy=a().accuracy,
+    #         gpu_memory_per_job_gb = 1/2,
+    #         cpu_memory_per_job_gb = 1/2,
+    #         cpu_cores_per_job = 1,
+    #     )
 

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 import yaml
 from itertools import product
-from typing import List, Union, Optional, Callable, Dict, Any, Type
+from typing import List, Union, Optional, Callable, Dict, Any, Type, Generic, TypeVar
+T = TypeVar('T', bound=BaseModel)
 from pathlib import Path, PosixPath, WindowsPath
 import pandas as pd
 from benchmarks.path_integration.parameters import PathIntegrationDatasetParams
@@ -144,18 +145,35 @@ class OutputParams(BaseModel): # TODO add w_out and distribution like in input_l
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     n_outputs: Union[int, List[int]] = Field(1, description="Dimension of output data")
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
+    readout_mode: Optional[Union[str, List[str]]] = Field("binary", description="Encoding of reservoir states for readout: 'binary'={0,1}, 'bipolar'={-1,1}")
+
+class OptimizerParams(BaseModel):
+    name: str = Field('adam', description="Optimizer type: 'sgd', 'adam', 'adamw', etc.")
+    params: dict = Field(
+        default_factory=dict,
+        description="Optimizer hyperparameters (e.g., lr, momentum, weight_decay)"
+    )
+    
+    @model_validator(mode='after')
+    def normalize_name(self):
+        """Convert optimizer name to lowercase for consistency."""
+        self.name = self.name.lower()
+        return self
 
 class TrainingParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     batch_size: Union[int, List[int]] = Field(32, description="Number of samples per forward pass")
-    criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE")
+    criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE, BCE")
     epochs: Union[int, List[int]] = Field(100, description="Number of epochs")
     accuracy_threshold: Union[float, List[float]] = Field(0.5, description="Threshold for generic accuracy metric")
-    learning_rate: Union[float, List[float]] = Field(0.01, description="Learning rate")
     evaluation: Optional[str] = Field('test', description="test, dev, train etc")
     shuffle: bool = Field(True, description="Shuffle dataset")
     drop_last: bool = Field(True, description="Drop last")
-
+    optim: Union[OptimizerParams, List[OptimizerParams]] = Field(
+        default=OptimizerParams(name='adamw', params={'lr': 0.001}),
+        description="Optimizer configuration (single or list for grid search)"
+    )
+    
 class ModelParams(BaseModel):
     input_layer: InputParams
     reservoir_layer: ReservoirParams

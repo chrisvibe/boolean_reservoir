@@ -19,17 +19,36 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     pass 
 
-    # # debug 
-    # #####################################
-
-    # from projects.boolean_reservoir.code.reservoir import BooleanReservoiear
+    # # # debug 
+    # # #####################################
+    # from projects.boolean_reservoir.code.reservoir import BooleanReservoir
     # from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix
     # import torch
-    # x = torch.tensor([[[[int(bit)]] for bit in '0001001010']], dtype=torch.uint8)
-    # model = BooleanReservoir(load_path='/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125038_810586/checkpoints/last_checkpoint')
-    # model(x)
+    # from projects.boolean_reservoir.code.parameters import generate_param_combinations, load_yaml_config
+    # p = load_yaml_config('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
+    # p.L.out_path = '/out/debug'
+    # p.L.history.record_history = True
+    # p.L.save_keys = {'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'} 
+    # p.M.I.connection = 'out-3:3:1'
+    # p.M.I.n_nodes = 10
+    # p.M.I.seed = p.M.R.seed = p.M.O.seed = 1
+    # p.M.I.pertubation = 'override'
+    # # p.M.I.pertubation = 'xor'
+    # p.M.R.init = 'zeros'
+    # p.M.R.n_nodes = 30
+    # p.M.R.k_avg = 4
+    # configs = generate_param_combinations(p)
+    # model = BooleanReservoir(configs[0])
+    # # model = BooleanReservoir(load_path='/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125038_810586/checkpoints/last_checkpoint')
+    # x = torch.tensor([[[[int(bit)]] for bit in '1001001010']], dtype=torch.uint8)
+    # # model(x)
+    # # model.save()
+    # # model.flush_history()
+    # p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
     # pass
-    
+
+
     # # these just add to the grid search below a 50% model and a 100% model
     # p, model, dataset, history = train_single_model('/out/test/temporal/density/grid_search/homogeneous-deterministic/runs/2025_06_25_125038_810586/checkpoints/last_checkpoint/parameters.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
@@ -45,8 +64,8 @@ if __name__ == '__main__':
     #     cpu_cores_per_job = 1,
     # )
 
-    # # Simple run
-    # #####################################
+    # # # Simple run
+    # # #####################################
 
     # p, model, dataset, history = train_single_model('config/temporal/density/single_run/ok_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
@@ -71,6 +90,8 @@ if __name__ == '__main__':
 
         # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
         # 'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+
+        'config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml',
     ]
 
     node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
@@ -81,11 +102,12 @@ if __name__ == '__main__':
 
     node_job_assigments = {
         1: [0, 7],
-        4: [1, 6],
-        6: [2, 5],
-        7: [3, 4],
-        10: [],
-        11: [],
+        5: [1, 6],
+        # 7: [2, 5],
+        7: [-1],
+        8: [3, 4],
+        10: [-1],
+        11: [-1],
         'unknown': [-1],
     }
     if node != 'unknown':

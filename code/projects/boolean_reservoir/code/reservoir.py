@@ -398,7 +398,10 @@ class BooleanReservoir(nn.Module):
 
         # READOUT LAYER
         # ----------------------------------------------------
-        o = self.states_parallel[:m, self.output_nodes_mask] * 2 - 1 # convert to {-1, 1}
+        if self.O.readout_mode == 'bipolar':
+            o = self.states_parallel[:m, self.output_nodes_mask] * 2 - 1 # convert to {-1, 1}
+        else:
+            o = self.states_parallel[:m, self.output_nodes_mask]
         outputs = self.readout(o.float())
         if self.output_activation:
             outputs = self.output_activation(outputs)

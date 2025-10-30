@@ -35,26 +35,26 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     if one_hot_selector[0] == '1':
         kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
         kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_stochastic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
 
     if one_hot_selector[1] == '1':
         kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
         kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_stochastic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
 
     if one_hot_selector[2] == '1':
         training_paths.append('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
         training_paths.append('config/temporal/density/grid_search/homogeneous_stochastic.yaml')
-        training_paths.append('config/temporal/density/grid_search/heterogeneous_deterministic.yaml')
-        training_paths.append('config/temporal/density/grid_search/heterogeneous_stochastic.yaml')
+        # training_paths.append('config/temporal/density/grid_search/heterogeneous_deterministic.yaml')
+        # training_paths.append('config/temporal/density/grid_search/heterogeneous_stochastic.yaml')
 
     if one_hot_selector[3] == '1':
         training_paths.append('config/temporal/parity/grid_search/homogeneous_deterministic.yaml')
         training_paths.append('config/temporal/parity/grid_search/homogeneous_stochastic.yaml')
-        training_paths.append('config/temporal/parity/grid_search/heterogeneous_deterministic.yaml')
-        training_paths.append('config/temporal/parity/grid_search/heterogeneous_stochastic.yaml')
+        # training_paths.append('config/temporal/parity/grid_search/heterogeneous_deterministic.yaml')
+        # training_paths.append('config/temporal/parity/grid_search/heterogeneous_stochastic.yaml')
 
     d_set = {}
     d_set = {'task', 'tao', 'window_size'}
@@ -87,8 +87,42 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     groups_dict = {k: v[variable].values for k, v in df.groupby('combo')}
     return df, factors, groups_dict
 
+def load_train_data_only(variable):
+    training_paths = list()
+
+    # training_paths.append('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
+    training_paths.append('/code/config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml')
+
+    d_set = {}
+    d_set = {'task', 'tao', 'window_size'}
+    i_set = {'connection', 'pertubation'}
+    r_set = {'mode', 'k_avg', 'init'}
+    t_set = {'optim', 'criterion'}
+    o_set = {'readout_mode'}
+    # t_set = {}
+    # o_set = {}
+    factors = sorted([f'D_{x}' for x in d_set] + [f'I_{x}' for x in i_set] + [f'R_{x}' for x in r_set] + [f'T_{x}' for x in t_set] + [f'O_{x}' for x in o_set])
+
+    data = list()
+    for path in training_paths: # concat data
+        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.h5')
+        df_i = process_grid_search_data(df_i, d_set, i_set, r_set, t_set, o_set)
+        data.append(df_i)
+    df_train = pd.concat(data, ignore_index=True)
+
+    # Note: make sure all factors represent main variations s.t. we get normal distributions within the groups
+    factors = list(df_train[factors].nunique()[df_train[factors].nunique() > 1].index)
+
+    df = df_train 
+    df['combo'] = df.apply(lambda row: tuple(row[feature] for feature in factors), axis=1)
+
+    df, factors = fix_combo(df, factors)
+    groups_dict = {k: v[variable].values for k, v in df.groupby('combo')}
+    return df, factors, groups_dict
+
 def fix_combo(df, factors):
     scores = [8, 2, 1, 0, 7] # manually set new order of factors to make most important factor first (put k_avg last)
+    scores = [10, 0, 5, 1] # TODO temp override
     factors = sorted(factors, key=lambda item: scores[factors.index(item)], reverse=True)
     df['combo'] = df['combo'].apply(lambda x: tuple(sorted(x, key=lambda item: scores[x.index(item)], reverse=True)))
     df['combo_str'] = df['combo'].apply(lambda t: "_".join(map(str, t)))
@@ -96,11 +130,13 @@ def fix_combo(df, factors):
     df['combo_no_k_avg_str'] = df['combo_no_k_avg'].apply(lambda t: "_".join(map(str, t)))
     return df, factors
 
-def process_grid_search_data(df, d_set, i_set, r_set):
+def process_grid_search_data(df, d_set, i_set, r_set, t_set=set(), o_set=set()):
     flatten_params = lambda x: pd.concat([
         pd.Series({f"D_{k}": v for k, v in x.D.model_dump().items() if k in d_set}),
         pd.Series({f"I_{k}": v for k, v in x.M.I.model_dump().items() if k in i_set}),
         pd.Series({f"R_{k}": v for k, v in x.M.R.model_dump().items() if k in r_set}),
+        pd.Series({f"T_{k}": str(v) for k, v in x.M.T.model_dump().items() if k in t_set}),
+        pd.Series({f"O_{k}": v for k, v in x.M.O.model_dump().items() if k in o_set}),
     ])
     df_flattened_params = df['params'].apply(lambda p: flatten_params(p))
     df = pd.concat([df, df_flattened_params], axis=1)
@@ -148,6 +184,7 @@ def aggregate_and_merge_data(df1, df2, factors):
     return df
 
 def graph_accuracy_vs_k_avg(out_path: Path, df: pd.DataFrame, success_thresh):
+    out_path.mkdir(parents=True, exist_ok=True)
     df['R_k_avg_w_jitter'] = df['R_k_avg'] + np.random.uniform(-0.5, 0.5, size=len(df))
     df['design'] = df['combo_no_k_avg_str']
     
@@ -899,27 +936,34 @@ if __name__ == '__main__':
     out_path = Path('/out/temporal/stats/design_evaluation')
     response = 'accuracy'
 
-    # statistical evauluation
-    ####################################
-    for i in [1, 3, 5]:
-        for j in [1, 3, 5]:
+    # # statistical evauluation
+    # ####################################
+    # for i in [1, 3, 5]:
+    #     for j in [1, 3, 5]:
 
-            success_thresh = 0.9
-            path = out_path / 'density' / f'delay-{i}_window-{j}'
-            print(path)
-            print('#'*60)
-            df, factors, groups_dict = load_custom_data(response, '0110', i, j)
-            polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            graph_accuracy_vs_k_avg(path, df, success_thresh)
-            # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-            # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+    #         success_thresh = 0.9
+    #         path = out_path / 'density' / f'delay-{i}_window-{j}'
+    #         print(path)
+    #         print('#'*60)
+    #         df, factors, groups_dict = load_custom_data(response, '0110', i, j)
+    #         # polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
+    #         graph_accuracy_vs_k_avg(path, df, success_thresh)
+    #         # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
+    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
 
-            success_thresh = 0.6
-            path = out_path / 'parity' / f'delay-{i}_window-{j}'
-            print(path)
-            print('#'*60)
-            df, factors, groups_dict = load_custom_data(response, '0101', i, j)
-            polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
-            graph_accuracy_vs_k_avg(path, df, success_thresh)
-            # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-            # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+    #         success_thresh = 0.6
+    #         path = out_path / 'parity' / f'delay-{i}_window-{j}'
+    #         print(path)
+    #         print('#'*60)
+    #         df, factors, groups_dict = load_custom_data(response, '0101', i, j)
+    #         # polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
+    #         graph_accuracy_vs_k_avg(path, df, success_thresh)
+    #         # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
+    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+
+    success_thresh = 0.9
+    i = 3
+    j = 5
+    path = out_path / 'density' / 'test_optimizer_and_readout_mode' / f'delay-{i}_window-{j}'
+    df, factors, groups_dict = load_train_data_only(response)
+    graph_accuracy_vs_k_avg(path, df, success_thresh)

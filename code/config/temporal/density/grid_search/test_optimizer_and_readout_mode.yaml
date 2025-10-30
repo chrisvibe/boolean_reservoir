@@ -1,0 +1,64 @@
+logging:
+  out_path: out/temporal/density/grid_search/test_optimizer_and_readout_mode
+  grid_search:
+    seed: 0
+    n_samples: 25
+  save_keys: [parameters]
+model:
+  input_layer:
+    distribution: identity
+    connection: [out-3:3:1] # I→R mapping: deterministic out-degree
+    pertubation: [override]
+    encoding: base2
+    features: 10
+    resolution: 1
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+    readout_mode: [binary, bipolar]
+  reservoir_layer:
+    init: [zeros]
+    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    k_min: 0
+    k_max: 25
+    mode: homogeneous
+    n_nodes: 500
+    p: 0.5
+    reset: true
+    self_loops: null
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 100
+    criterion: [MSE, BCE]
+    epochs: 40
+    evaluation: dev
+    optim:
+      - name: adam
+        params:
+          lr: 0.001
+      - name: adamw
+        params:
+          lr: 0.001
+      - name: sgd
+        params:
+          lr: 0.001
+      - name: adam
+        params:
+          lr: 0.0005
+      - name: adamw
+        params:
+          lr: 0.0005
+      - name: sgd
+        params:
+          lr: 0.0005
+dataset:
+  task: density
+  bit_stream_length: 10
+  window_size: [5]
+  tao: [3]
+  split:
+    train: 0.4
+    dev: 0.3
+    test: 0.3
+  samples: 10000
+  seed: 0

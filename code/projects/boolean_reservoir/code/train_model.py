@@ -40,12 +40,13 @@ class DatasetInit(ABC):
         pass
 
 def criterion_strategy(strategy):
-    if strategy == 'MSE':
-        return nn.MSELoss()
-    elif strategy == 'BCE':
-        return nn.BCELoss()
-    else:
-        raise ValueError
+    critertion_map = {
+        'MSE': nn.MSELoss,
+        'BCE': nn.BCELoss
+    }
+    if strategy not in critertion_map:
+        raise ValueError(f"Unsupported criterion type: {strategy}. Available: {list(critertion_map.keys())}")
+    return critertion_map[strategy]()
 
 def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None):
     mem = CudaMemoryManager()
@@ -61,10 +62,22 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
         model.save()
     return P, model, dataset, train_history
 
+def optimizer_strategy(model: nn.Module, p: OptimizerParams):
+    opt_map = {
+        'sgd': torch.optim.SGD,
+        'adam': torch.optim.Adam,
+        'adamw': torch.optim.AdamW
+    }
+    
+    if p.name not in opt_map:
+        raise ValueError(f"Unsupported optimizer type: {p.name}. Available: {list(opt_map.keys())}")
+    
+    return opt_map[p.name](model.parameters(), **p.params)
+
 def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
     T = model.P.model.training
     set_seed(T.seed)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=T.learning_rate)
+    optimizer = optimizer_strategy(model, T.optim)
     criterion = criterion_strategy(T.criterion)
     data_loader = DataLoader(dataset, batch_size=T.batch_size, shuffle=T.shuffle, drop_last=T.drop_last)
     m = len(data_loader) * T.batch_size if T.drop_last else len(dataset)
