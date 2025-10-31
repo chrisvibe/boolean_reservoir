@@ -1,4 +1,5 @@
 from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config
+from projects.boolean_reservoir.code.utils import load_grid_search_results
 from projects.temporal.code.visualizations import plot_kq_and_gr, group_df_data_by_parameters, plot_kq_and_gr_many_config, plot_optimal_k_avg_vs_configuration 
 from projects.temporal.code.kq_and_gr_metrics import override_samples_in_p 
 from pathlib import Path
@@ -7,8 +8,8 @@ import pandas as pd
 def load_data_from_yaml(path):
     P = load_yaml_config(path)
     P = override_samples_in_p(P)
-    data_file_path = P.L.out_path / 'df.h5'
-    df = pd.read_hdf(data_file_path, 'df')
+    data_file_path = P.L.out_path / 'log.yaml'
+    df = load_grid_search_results(data_file_path)
     df.loc[:, 'k_avg'] = df['params'].apply(lambda p: p.M.R.k_avg)
     df.loc[:, 'tao'] = df['params'].apply(lambda p: p.D.tao)
     return P, df

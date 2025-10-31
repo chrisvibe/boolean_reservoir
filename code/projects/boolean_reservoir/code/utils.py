@@ -5,7 +5,10 @@ from hashlib import sha256
 from pathlib import Path
 import networkx as nx
 import time
+import pandas as pd
 from os import getpid, replace
+from projects.boolean_reservoir.code.parameters import Params
+import yaml
 
 # Ensure reproducibility by setting seeds globally
 # Wont work across architectures and GPU vs CPU etc
@@ -222,3 +225,17 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
         print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
 
     return dataset
+
+def save_grid_search_results(df: pd.DataFrame, path: Path):
+    """Save grid search results to YAML, with Path fields handled by custom representers"""
+    df_copy = df.copy()
+    df_copy['params'] = df_copy['params'].apply(lambda p: p.model_dump())
+    records = df_copy.to_dict(orient='records')
+    yaml.dump_all(records, path.open('w'), sort_keys=False, Dumper=yaml.Dumper)
+
+def load_grid_search_results(path: Path) -> pd.DataFrame:
+    """Load grid search results from YAML and reconstruct Params"""
+    records = list(yaml.safe_load_all(path.open()))
+    df = pd.DataFrame(records)
+    df['params'] = df['params'].apply(lambda d: Params(**d))
+    return df

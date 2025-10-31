@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict, field_serializer
 import yaml
 from itertools import product
 from typing import List, Union, Optional, Callable, Dict, Any, Type, Generic, TypeVar
@@ -222,13 +222,11 @@ class LoggingParams(BaseModel):
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
     train_log: TrainLog = Field(TrainLog())
-    save_keys: Optional[set] = Field({'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'}, description="Only save these model objects")
-
-    @model_validator(mode='after')
-    def save_keys_from_list_to_set(self):
-        if self.save_keys is not None:
-            self.save_keys = set(self.save_keys)
-        return self
+    save_keys: Optional[List[str]] = Field(
+        default=['parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'],
+        description="Only save these model objects",
+        json_schema_extra={'expand': False}  # Mark as non-expandable
+    )
 
 class Params(BaseModel):
     model: ModelParams
@@ -259,22 +257,24 @@ def save_yaml_config(base_model: BaseModel, filepath):
 
 def generate_param_combinations(params: BaseModel) -> List[BaseModel]:
     def expand_params(params: Any) -> List[Dict[str, Any]]:
-        # If the params object is a BaseModel, expand its fields recursively
         if isinstance(params, BaseModel):
-            params_dict = params.__dict__
-            expanded_dict = {k: expand_params(v) for k, v in params_dict.items()}
-            
+            params_dict = params.__dict__  # Match original for consistency
+            expanded_dict = {}
+            for k, v in params_dict.items():
+                field_info = params.model_fields.get(k)
+                expand = True  # Default to expand (original behavior)
+                if field_info and field_info.json_schema_extra is not None:
+                    expand = field_info.json_schema_extra.get('expand', True)
+                if expand:
+                    expanded_dict[k] = expand_params(v)
+                else:
+                    expanded_dict[k] = [v]  # Treat as single value (keep list as-is)
             keys = expanded_dict.keys()
             values = [expanded_dict[k] for k in keys]
             combinations = product(*values)
-            
             return [dict(zip(keys, combo)) for combo in combinations]
-        
-        # If the params object is a list, treat it as multiple possible values (ENUM)
         elif isinstance(params, list):
             return params
-        
-        # Otherwise, treat it as a single potential value
         return [params]
 
     expanded_params = expand_params(params)

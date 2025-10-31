@@ -22,7 +22,6 @@ model:
   training:
     batch_size: 100
     epochs: 100
-    learning_rate: 0.001
     accuracy_threshold: 0.05
     evaluation: 'test' 
     seed: 0

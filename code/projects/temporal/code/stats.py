@@ -1,7 +1,7 @@
 from pathlib import Path
 from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config
 from projects.boolean_reservoir.code.visualizations import plot_grid_search 
-from projects.boolean_reservoir.code.utils import override_symlink 
+from projects.boolean_reservoir.code.utils import override_symlink, load_grid_search_results
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm
@@ -63,14 +63,14 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     factors = sorted([f'D_{x}' for x in d_set] + [f'I_{x}' for x in i_set] + [f'R_{x}' for x in r_set])
     data = list()
     for path in kq_and_gr_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='df.h5')
+        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
         df_i = process_grid_search_data_kq_and_gr(df_i, d_set, i_set, r_set)
         data.append(df_i)
     df_metric = pd.concat(data, ignore_index=True)
 
     data = list()
     for path in training_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.h5')
+        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
         df_i = process_grid_search_data(df_i, d_set, i_set, r_set)
         data.append(df_i)
     df_train = pd.concat(data, ignore_index=True)
@@ -105,7 +105,7 @@ def load_train_data_only(variable):
 
     data = list()
     for path in training_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.h5')
+        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
         df_i = process_grid_search_data(df_i, d_set, i_set, r_set, t_set, o_set)
         data.append(df_i)
     df_train = pd.concat(data, ignore_index=True)
@@ -158,10 +158,10 @@ def process_grid_search_data_kq_and_gr(df, d_set, i_set, r_set): # TODO come bac
     df = process_grid_search_data(df, d_set, i_set, r_set)
     return df
 
-def load_grid_search_data_from_yaml(path, data_filename='df.h5'):
+def load_grid_search_data_from_yaml(path, data_filename='log.yaml'):
     P = load_yaml_config(path)
     data_file_path = P.L.out_path / data_filename
-    df = pd.read_hdf(data_file_path, 'df')
+    df = load_grid_search_results(data_file_path)
     return P, df
 
 def aggregate_and_merge_data(df1, df2, factors):

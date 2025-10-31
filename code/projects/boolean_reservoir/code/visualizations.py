@@ -11,6 +11,7 @@ from sklearn.manifold import TSNE, MDS
 from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
+from projects.boolean_reservoir.code.utils import load_grid_search_results
 import matplotlib
 matplotlib.use('Agg')
 
@@ -45,9 +46,9 @@ def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
     out_path.mkdir(exist_ok=True, parents=True)
     print('making grid search plots:', out_path)
-    df = pd.read_hdf(data_file_path, 'df') 
+    df = load_grid_search_results(data_file_path)
     df = df[df['loss'] != float('inf')] # filter out error configs (if they are illegal)
-    df['loss'] = df['loss'].apply(lambda x: x ** .5) # MSE to RMS
+    df['loss'] = df['loss'].apply(lambda x: x ** .5) # TODO watch out MSE to RMS
     plot_histogram_of_top_percentile_vs_config_id(out_path, df, top_percentile=0.1)
     flatten_params = lambda x: pd.concat([
         pd.Series({f"I.{k}": v for k, v in x.M.I.model_dump().items()}),
@@ -446,17 +447,4 @@ def plot_predictions_and_labels(path, y_hat, y, tolerance=0.1, axis_limits=[0, 1
 
 if __name__ == '__main__':
     pass
-    # plot_grid_search(Path('out/grid_search/path_integation/1D/initial_sweep/log.h5'))
-    # plot_grid_search(Path('out/grid_search/path_integation/2D/initial_sweep/log.h5'))
-    # plot_grid_search('out/temporal/density/grid_search/initial_sweep/log.h5')
-    # plot_grid_search('out/grid_search/temporal/parity/initial_sweep/log.h5')
-
-    plot_grid_search('out/temporal/density/grid_search/homogeneous-deterministic/log.h5')
-    # plot_grid_search('out/temporal/density/grid_search/homogeneous-stochastic/log.h5')
-    # plot_grid_search('out/temporal/density/grid_search/heterogeneous-deterministic/log.h5')
-    # plot_grid_search('out/temporal/density/grid_search/heterogeneous-stochastic/log.h5')
-
-    # plot_grid_search('out/grid_search/temporal/parity/homogeneous-deterministic/log.h5')
-    # plot_grid_search('out/grid_search/temporal/parity/homogeneous-stochastic/log.h5')
-    # plot_grid_search('out/grid_search/temporal/parity/heterogeneous-deterministic/log.h5')
-    # plot_grid_search('out/grid_search/temporal/parity/heterogeneous-stochastic/log.h5')
+    # plot_grid_search('out/temporal/density/grid_search/homogeneous-deterministic/log.yaml')

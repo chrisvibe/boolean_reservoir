@@ -62,6 +62,5 @@ model:
     drop_last: true
     epochs: 4
     evaluation: test
-    learning_rate: 0.001
     seed: 1541552926
     shuffle: true

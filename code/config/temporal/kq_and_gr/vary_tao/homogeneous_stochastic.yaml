@@ -34,7 +34,6 @@ model:
     criterion: BCE
     epochs: 40
     evaluation: dev
-    learning_rate: 0.001
 dataset: # this whole section is repurposed to control the custom experiments
   task: density # not really just using the x values and ignoring y
   bit_stream_length: 10

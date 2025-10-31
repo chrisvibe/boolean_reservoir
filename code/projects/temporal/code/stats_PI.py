@@ -1,4 +1,5 @@
 from projects.boolean_reservoir.code.parameters import load_yaml_config
+from projects.boolean_reservoir.code.utils import load_grid_search_results
 from projects.temporal.code.stats import process_grid_search_data, polar_design_plot, graph_accuracy_vs_k_avg
 import pandas as pd
 from pathlib import Path
@@ -33,7 +34,7 @@ def load_custom_data(variable, dimension, selector:str):
 
     data = list()
     for path in training_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.h5')
+        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
         df_i = process_grid_search_data(df_i, d_set, i_set, r_set)
         data.append(df_i)
     df_train = pd.concat(data, ignore_index=True)
@@ -58,10 +59,10 @@ def fix_combo(df, factors):
     df['combo_no_k_avg_str'] = df['combo_no_k_avg'].apply(lambda t: "_".join(map(str, t)))
     return df, factors
 
-def load_grid_search_data_from_yaml(path, data_filename='df.h5'):
+def load_grid_search_data_from_yaml(path, data_filename='log.yaml'):
     P = load_yaml_config(path)
     data_file_path = P.L.out_path / data_filename
-    df = pd.read_hdf(data_file_path, 'df')
+    df = load_grid_search_results(data_file_path)
     return P, df
 
 def aggregate_and_merge_data(df1, df2, factors):

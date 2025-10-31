@@ -19,7 +19,6 @@ model:
     batch_size: 100
     epochs: 3
     accuracy_threshold: 0.05
-    learning_rate: 0.001
     evaluation: 'dev' 
 logging:
   out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/grid_search'

@@ -59,7 +59,7 @@ if __name__ == '__main__':
     p.M.R.k_avg = 4
     p.L.out_path = f'/out/debug/{p.M.R.init}/{p.M.I.pertubation}'
     p.L.history.record_history = True
-    p.L.save_keys = {'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'} 
+    p.L.save_keys = ['parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'] 
     configs = generate_param_combinations(p)
     model = BooleanReservoir(configs[0])
     x = torch.tensor([[[[int(bit)]] for bit in '1001001010']], dtype=torch.uint8)

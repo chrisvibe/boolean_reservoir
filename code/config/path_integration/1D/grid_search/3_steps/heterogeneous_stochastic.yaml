@@ -32,7 +32,6 @@ model:
     criterion: MSE
     epochs: 40
     evaluation: dev
-    learning_rate: 0.001
 dataset:
   dimensions: 1
   steps: 3

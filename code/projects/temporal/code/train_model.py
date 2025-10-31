@@ -28,7 +28,7 @@ if __name__ == '__main__':
     # p = load_yaml_config('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
     # p.L.out_path = '/out/debug'
     # p.L.history.record_history = True
-    # p.L.save_keys = {'parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'} 
+    # p.L.save_keys = ['parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights']
     # p.M.I.connection = 'out-3:3:1'
     # p.M.I.n_nodes = 10
     # p.M.I.seed = p.M.R.seed = p.M.O.seed = 1

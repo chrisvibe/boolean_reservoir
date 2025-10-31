@@ -5,7 +5,7 @@ from benchmarks.temporal.temporal_density_parity_datasets import TemporalDensity
 from projects.boolean_reservoir.code.parameters import load_yaml_config, generate_param_combinations, Params
 from projects.boolean_reservoir.code.graphs import calc_spectral_radius 
 import pandas as pd
-from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager
+from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager, save_grid_search_results
 from pathlib import Path
 from tqdm import tqdm
 
@@ -155,5 +155,5 @@ if __name__ == '__main__':
     for path in paths:
         print(path)
         df, P = calc_kernel_quality_and_generalization_rank(path)
-        data_file_path = P.L.out_path / 'df.h5'
-        df.to_hdf(data_file_path, key='df', mode='w')
+        data_file_path = P.L.out_path / 'log.yaml'
+        save_grid_search_results(df, data_file_path)

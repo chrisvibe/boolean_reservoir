@@ -18,7 +18,6 @@ model:
     batch_size: 100
     epochs: 100
     accuracy_threshold: 0.05
-    learning_rate: 0.01
     evaluation: 'test' 
 logging:
   out_path: 'out/path_integration/test/1D/verification_model/single_run'

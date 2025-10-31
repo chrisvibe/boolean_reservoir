@@ -1,4 +1,4 @@
-from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed
+from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed, save_grid_search_results, load_grid_search_results
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.train_model import train_and_evaluate
 from projects.boolean_reservoir.code.parameters import *
@@ -80,7 +80,6 @@ def boolean_reservoir_job_factory(P, param_combinations, dataset_init, accuracy)
         )
     return create_job
 
-
 def boolean_reservoir_grid_search(
     yaml_path: str,
     dataset_init,
@@ -108,10 +107,9 @@ def boolean_reservoir_grid_search(
     def process_results(history, best_params, output_path):
         if history:
             history_df = pd.DataFrame(history)
-            file_path = output_path / 'log.h5' # TODO bad better to save atomic units over complex classes for compatibility?
-            history_df.to_hdf(file_path, key='df', mode='w')
+            file_path = output_path / 'log.yaml'
+            save_grid_search_results(history_df, file_path)
             plot_grid_search(file_path)
-            logger.info(f"Saved {len(history)} results to {file_path}")
         
         if best_params and 'params' in best_params:
             logger.info(f"Best parameters found: {best_params['params']}")

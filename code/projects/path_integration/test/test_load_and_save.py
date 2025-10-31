@@ -62,8 +62,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
         cpu_memory_per_job_gb = 1,
         cpu_cores_per_job = 2,
     )
-    print('-'*10, '\n', p, '\n', '-'*10)
-    
+
     # Load model from checkpoint
     model = BooleanReservoir(load_path=p.L.last_checkpoint)
     
@@ -77,5 +76,14 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
 
 
 if __name__ == '__main__':
+    import logging
+    import sys
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(process)d - %(filename)s - %(message)s',
+        stream=sys.stdout,
+        force=True
+    )
+    logger = logging.getLogger(__name__)
     test_saving_and_loading_models()
     test_reproducibility_of_loaded_grid_search_checkpoint()
