@@ -67,6 +67,7 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     redundancy: Union[int, List[int]] = Field(1, description="Redundancy factor of resolution")
     chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
     chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
+    ticks: Optional[Union[str, List[str]]] = Field(None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
 
     @model_validator(mode='after')
     def calculate_bits(self):
@@ -117,6 +118,13 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     def default_n_nodes(self):
         if self.n_nodes is None:
             self.n_nodes = calculate_w_broadcasting(lambda x, y: x, self.bits, None)
+        return self
+
+    @model_validator(mode='after')
+    def calculate_ticks(self):
+        if self.ticks is None:
+            self.ticks = '1' * self.chunks
+        self.ticks = self.ticks *  (self.chunks // len(self.ticks))
         return self
     
 

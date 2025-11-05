@@ -52,6 +52,7 @@ class BooleanReservoir(nn.Module):
             self.node_indices = torch.arange(self.M.n_nodes)
             self.input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=bool)
             self.input_nodes_mask[:self.I.n_nodes] = True
+            self.ticks = torch.tensor([int(c) for c in self.I.ticks], dtype=torch.uint8)
 
             # RESERVOIR LAYER
             # Properties of reservoir nodes that dont receive input (R)
@@ -226,7 +227,7 @@ class BooleanReservoir(nn.Module):
         if strategy == 'identity':
             def repeating_eye(a, b):
                 w = np.zeros((a, b))
-                w[np.arange(a), np.arange(a) % b] = 1
+                w[np.arange(a)[:, None], np.arange(b)] = (np.arange(a)[:, None] % min(a, b) == np.arange(b) % min(a, b))
                 return w
             w = repeating_eye(a, b)
         elif strategy == 'stub':
@@ -361,13 +362,13 @@ class BooleanReservoir(nn.Module):
         x = x.view(m, -1, self.I.chunks, self.I.chunk_size) # if input has more input bits than model expects: loop through these re-using w_in for each pertubation (samples kept in parallel)
         s = x.shape[1]
         c = self.I.chunks
+        k = self.I.bits // self.I.chunks
         for si in range(s):
             a = b = 0
             for ci in range(c):
-
-                # # Perturb reservoir nodes with partial input depending on f dimension
-                x_i = x[:m, si, ci]
-                b += self.I.chunk_size
+                # Perturb reservoir nodes with partial input depending on chunks dimension
+                b += k 
+                x_i = x[:m, si, ci, a:b]
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
@@ -378,22 +379,27 @@ class BooleanReservoir(nn.Module):
 
                 # RESERVOIR LAYER
                 # ----------------------------------------------------
-                # Gather the states based on the adj_list
-                neighbour_states_paralell = self.states_parallel[:m, self.adj_list]
+                # dynamics loops to digest input
+                t = self.ticks[ci]
+                for ti in range(t):
+                    # Gather the states based on the adj_list
+                    neighbour_states_paralell = self.states_parallel[:m, self.adj_list]
 
-                # Apply mask as the adj_list has invalid connections due to homogenized tensor
-                neighbour_states_paralell &= self.adj_list_mask 
+                    # Apply mask as the adj_list has invalid connections due to homogenized tensor
+                    neighbour_states_paralell &= self.adj_list_mask 
 
-                idx = self.bin2int(neighbour_states_paralell)
+                    idx = self.bin2int(neighbour_states_paralell)
 
-                # Update the state with LUT for each node I + R
-                # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
-                states_parallel = self.lut[self.node_indices, idx]
-                states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
-                self.states_parallel[:m] = states_parallel
+                    # Update the state with LUT for each node I + R
+                    # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
+                    states_parallel = self.lut[self.node_indices, idx]
+                    states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
+                    self.states_parallel[:m] = states_parallel
 
-                if not ((si == s - 1) and (ci == c - 1)): # skip last recording, as this is output_layer
-                    self.batch_record(m, phase='reservoir_layer', s=si+1, f=ci+1)
+                    if si == s - 1 and ci == c - 1 and ti == t - 1:
+                        continue  # skip last recording, as this is output_layer
+
+                    self.batch_record(m, phase='reservoir_layer', s=si+1, f=ci+1, t=ti+1)
         self.batch_record(m, phase='output_layer', s=s, f=c)
 
         # READOUT LAYER
@@ -408,7 +414,7 @@ class BooleanReservoir(nn.Module):
         return outputs 
 
     def batch_record(self, m, **meta_data):
-        if self.record_history and meta_data:
+        if self.record_history:
             self.history.append_batch(self.states_parallel[:m], meta_data)
    
 
@@ -418,14 +424,15 @@ if __name__ == '__main__':
         encoding='base2', 
         features=2,
         chunk_size=4,
-        redundancy=2, # no effect here since we are not using encoding (mapping floats to binary)
+        bits=4, 
         n_nodes=8,
+        ticks='2',
         )
     R = ReservoirParams(
         n_nodes=10,
         k_min=0,
-        k_avg=2,
-        k_max=5,
+        k_avg=7,
+        k_max=7,
         p=0.5,
         self_loops=0.1,
         )
@@ -435,19 +442,24 @@ if __name__ == '__main__':
         accuracy_threshold=0.05,
         learning_rate=0.001)
     L = LoggingParams(out_path='/tmp/boolean_reservoir/out/test/', history=HistoryParams(record_history=True, buffer_size=10))
+    L = LoggingParams(out_path='/out/delete/', history=HistoryParams(record_history=True, buffer_size=10))
 
     model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
     params = Params(model=model_params, logging=L)
     model = BooleanReservoir(params)
 
     # test forward pass w. fake data. s steps per sample
-    s = 2
-    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.chunk_size,), dtype=torch.uint8)
+    s = 1
+    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.bits // I.features,), dtype=torch.uint8)
     model(x)
     print(model(x).detach().numpy())
     model.flush_history()
     model.save()
-    load_dict, history, meta, expanded_meta = BatchedTensorHistoryWriter(L.save_path / 'history').reload_history()
-    print(history[expanded_meta[expanded_meta['phase'] == 'init'].index].shape)
+    load_dict, history, expanded_meta, meta = BatchedTensorHistoryWriter(L.save_path / 'history').reload_history()
+    print(history[meta[meta['phase'] == 'init'].index].shape)
     print(history.shape)
     print(meta)
+
+    from projects.boolean_reservoir.code.visualizations import plot_activity_trace 
+    model.flush_history()
+    plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])

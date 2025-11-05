@@ -1,13 +1,13 @@
 model:
   input_layer:
-    pertubation: 'xor'
+    pertubation: 'override'
     encoding: 'binary_embedding'
     features: 2
-    resolution: 48
-    redundancy: 6
+    resolution: 18
+    redundancy: 3
     interleaving: [0]
   reservoir_layer:
-    n_nodes: [500, 600]
+    n_nodes: [50, 60]
     k_avg: [2, 3]
     k_max: [6]
     p: [.5]
