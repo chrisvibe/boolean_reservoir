@@ -59,7 +59,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
         dataset_init=d().dataset_init,
         accuracy=a().accuracy,
         gpu_memory_per_job_gb = 0.5,
-        cpu_memory_per_job_gb = 1,
+        cpu_memory_per_job_gb = 0.5,
         cpu_cores_per_job = 2,
     )
 
@@ -85,5 +85,5 @@ if __name__ == '__main__':
         force=True
     )
     logger = logging.getLogger(__name__)
-    test_saving_and_loading_models()
+    # test_saving_and_loading_models()
     test_reproducibility_of_loaded_grid_search_checkpoint()

@@ -3,9 +3,13 @@ import pandas as pd
 from projects.boolean_reservoir.code.parameters import * 
 import torch
 from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix, override_symlink
+from projects.boolean_reservoir.code.graphs import random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
 from datetime import datetime, timezone
 import networkx as nx
 import gzip
+import re
+import numpy as np
+
 
 class ExpressionEvaluator:
     def __init__(self, params: Params, symbols: dict=dict()):
@@ -288,3 +292,179 @@ class OutputActivationStrategy:
         if strategy not in strategies:
             raise ValueError(f"Unknown output activation strategy: {strategy}")
         return strategies[strategy]
+
+class ChainedSelector:
+    """
+    Flexible selection of a range via chainable operations.
+    
+    Examples:
+        ChainedSelector(100).eval('F i<20 -> S -5:')  # Filter then slice last 5
+        ChainedSelector(100, min_val=20).eval('S 20:80 -> F i%2 == 0')  # Slice then filter evens
+        ChainedSelector(100).eval('F i>10 -> F i<50 -> F i%3 == 0')  # Chain filters
+        ChainedSelector(100).eval('F i<50 -> R 5')  # Filter then random sample 5
+    """
+    
+    def __init__(self, max_val: int, min_val: int = 0, var: str = 'i', parameters: dict | None = None):
+        self.max_val = max_val
+        self.min_val = min_val
+        self.var = var
+        self.parameters = parameters or {}
+        if var in self.parameters:
+            raise ValueError(f"Variable '{var}' cannot be in parameters dict")
+        self.parameters['min'] = min_val
+        self.parameters['max'] = max_val
+    
+    def eval(self, chain: str) -> torch.Tensor:
+        s = pd.Series(range(self.min_val, self.max_val), name=self.var)
+        chain = chain.strip()
+        if not chain:
+            return torch.from_numpy(s.values).long()
+        
+        def substitute(expr: str) -> str:
+            for key, val in self.parameters.items():
+                expr = expr.replace(key, str(val))
+            return expr
+        
+        for link in chain.split('->'):
+            link = link.strip()
+            if not link:
+                continue
+            match = re.match(r'^([A-Za-z]+)\s+(.*)$', link)
+            if not match:
+                raise ValueError(f"Invalid step syntax: {link}")
+            tag, expr = match.groups()
+            expr = substitute(expr.strip())
+            tag = tag.upper()
+            if tag == 'F':
+                s = s[s.eval(expr)]
+            elif tag == 'S':
+                parts = [int(p) if p else None for p in expr.split(':')]
+                slc = slice(*parts)
+                s = s.iloc[slc]
+            elif tag == 'R':
+                n = int(expr) if expr else len(s)
+                s = s.sample(n=min(n, len(s)))
+            else:
+                raise ValueError(f"Unknown step tag: {tag}")
+        return torch.from_numpy(s.values).long()
+
+class BipartiteMappingStrategy:
+    """Produce w [axb] matrix → bipartite map.
+    
+    By default a maps to b, but this can be inverted by swapping a and b in the input string.
+    
+    Notation I: a and b get their names from mapping notation; number of nodes on the 
+    left and right side respectively in a bipartite map.
+    
+    Notation II: k is the edge count per node (array).
+    """
+    
+    @staticmethod
+    def get(strategy_str: str):
+        """Returns a callable that handles parameter parsing internally.
+        
+        Strategy string formats:
+        - 'identity': no parameters
+        - 'stub-a_min:a_max:b_min:b_max:p'
+        - 'in-min_degree:max_degree:p'
+        - 'out-min_degree:max_degree:p'
+        
+        Usage:
+            strategy_fn = BipartiteMappingStrategy.get('stub-1:5:2:3:0.5')
+            result = strategy_fn(p, a, b)
+        """
+        # Parse strategy name and parameters
+        if '-' in strategy_str:
+            strategy_name, parameters_str = strategy_str.split('-', 1)
+        else:
+            strategy_name = strategy_str
+            parameters_str = None
+        
+        # Map strategy name to its implementation
+        strategy_map = {
+            'identity': BipartiteMappingStrategy._identity,
+            'stub': BipartiteMappingStrategy._stub,
+            'in': BipartiteMappingStrategy._in_degree,
+            'out': BipartiteMappingStrategy._out_degree,
+        }
+        
+        if strategy_name not in strategy_map:
+            raise ValueError(f"Unknown bipartite mapping strategy: {strategy_name}")
+        
+        strategy_fn = strategy_map[strategy_name]
+        
+        # Return a wrapper that includes the parsed parameters
+        def wrapped(p: Params, a: int, b: int):
+            return strategy_fn(p, a, b, parameters_str)
+        
+        return wrapped
+
+    @staticmethod
+    def _identity(p: Params, a: int, b: int, parameters_str: str = None):
+        """Identity strategy: repeating eye matrix."""
+        def repeating_eye(a, b):
+            w = np.zeros((a, b))
+            w[np.arange(a)[:, None], np.arange(b)] = (np.arange(a)[:, None] % min(a, b) == np.arange(b) % min(a, b))
+            return w
+        return torch.tensor(repeating_eye(a, b), dtype=torch.uint8)
+
+    @staticmethod
+    def _stub(p: Params, a: int, b: int, parameters_str: str):
+        """Stub strategy: deterministic + probabilistic bipartite graph.
+        
+        Parameters format: 'a_min:a_max:b_min:b_max:p'
+        """
+        expression_evaluator = ExpressionEvaluator(p, {'a': a, 'b': b})
+        params = parameters_str.split(':')
+        
+        assert len(params) == 5, "Stub strategy must have format 'a_min:a_max:b_min:b_max:p'"
+        a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = params
+        
+        a_min = int(expression_evaluator.to_float(a_min_expr))
+        a_max = int(expression_evaluator.to_float(a_max_expr))
+        b_min = int(expression_evaluator.to_float(b_min_expr))
+        b_max = int(expression_evaluator.to_float(b_max_expr))
+        p = expression_evaluator.to_float(p_expr)
+        
+        assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
+        assert 0 <= b_min <= b_max <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {a} (a)'
+        assert 0 <= a_min <= a_max <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {b} (b)'
+        
+        w = random_constrained_stub_matching(a, b, a_min, a_max, b_min, b_max, p)
+        return torch.tensor(w, dtype=torch.uint8)
+
+    @staticmethod
+    def _constrain_degree(p: Params, a: int, b: int, parameters_str: str, in_degree: bool):
+        """Shared logic for in-degree and out-degree strategies.
+        
+        Parameters format: 'min_degree:max_degree:p'
+        """
+        expression_evaluator = ExpressionEvaluator(p, {'a': a, 'b': b})
+        params = parameters_str.split(':')
+        
+        assert len(params) == 3, "Degree strategies must have format 'min_degree:max_degree:p'"
+        min_degree_expr, max_degree_expr, p_expr = params
+        
+        min_degree = int(expression_evaluator.to_float(min_degree_expr))
+        max_degree = int(expression_evaluator.to_float(max_degree_expr))
+        p = expression_evaluator.to_float(p_expr)
+        
+        assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
+        
+        if in_degree:
+            assert 0 <= min_degree <= max_degree <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {min_degree} (min) <= {max_degree} (max) <= {a} (a)'
+        else:
+            assert 0 <= min_degree <= max_degree <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {min_degree} (min) <= {max_degree} (max) <= {b} (b)'
+        
+        w = constrain_degree_of_bipartite_mapping(a, b, min_degree, max_degree, p, in_degree=in_degree)
+        return torch.tensor(w, dtype=torch.uint8)
+
+    @staticmethod
+    def _in_degree(p: Params, a: int, b: int, parameters_str: str):
+        """In-degree strategy: constrain incoming connections per node."""
+        return BipartiteMappingStrategy._constrain_degree(p, a, b, parameters_str, in_degree=True)
+
+    @staticmethod
+    def _out_degree(p: Params, a: int, b: int, parameters_str: str):
+        """Out-degree strategy: constrain outgoing connections per node."""
+        return BipartiteMappingStrategy._constrain_degree(p, a, b, parameters_str, in_degree=False)

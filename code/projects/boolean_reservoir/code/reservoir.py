@@ -5,10 +5,9 @@ from pathlib import Path
 import networkx as nx
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
-from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming, random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
+from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming
 from projects.boolean_reservoir.code.utils import set_seed
-from projects.boolean_reservoir.code.reservoir_utils import ExpressionEvaluator, InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel
-import numpy as np
+from projects.boolean_reservoir.code.reservoir_utils import InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel, ChainedSelector, BipartiteMappingStrategy
 
 
 class BooleanReservoir(nn.Module):
@@ -41,17 +40,20 @@ class BooleanReservoir(nn.Module):
             self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
             self.w_in = SaveAndLoadModel.load_or_generate('w_in', load_dict, lambda:
                 self.load_torch_tensor(self.I.w_in) if self.I.w_in
-                  else self.bipartite_mapping_strategy(self.I.distribution, self.I.bits, self.I.n_nodes)
+                  else self.bipartite_mapping_strategy(self.P, self.I.distribution, self.I.bits, self.I.n_nodes)
             )
             # TODO optionally control each quadrant individually
             w_ii = w_ir = None
             if 'graph' not in load_dict: # generated here due to random seed
                 w_ii = torch.zeros((self.I.n_nodes, self.I.n_nodes))  # TODO no effect atm - add flexibility for connections betwen input nodes (I→I)
-                # w_ii = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.I.n_nodes)
-                w_ir = self.bipartite_mapping_strategy(self.I.connection, self.I.n_nodes, self.R.n_nodes)
+                # w_ii = self.bipartite_mapping_strategy(self.P, self.I.connection, self.I.n_nodes, self.I.n_nodes)
+                w_ir = self.bipartite_mapping_strategy(self.P, self.I.connection, self.I.n_nodes, self.R.n_nodes)
+
             self.node_indices = torch.arange(self.M.n_nodes)
+            cs = ChainedSelector(self.M.n_nodes, parameters={'I': self.M.I.n_nodes})
+            input_nodes = cs.eval(self.M.I.selector)
             self.input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=bool)
-            self.input_nodes_mask[:self.I.n_nodes] = True
+            self.input_nodes_mask[input_nodes] = True
             self.ticks = torch.tensor([int(c) for c in self.I.ticks], dtype=torch.uint8)
 
             # RESERVOIR LAYER
@@ -63,7 +65,7 @@ class BooleanReservoir(nn.Module):
             w_ri = w_rr = None
             if 'graph' not in load_dict: # generated here due to random seed
                 w_ri = torch.zeros((self.R.n_nodes, self.I.n_nodes))
-                # w_ri = self.bipartite_mapping_strategy(self.I.connection, self.R.n_nodes, self.I.n_nodes)
+                # w_ri = self.bipartite_mapping_strategy(self.P, self.I.connection, self.R.n_nodes, self.I.n_nodes)
                 w_rr = torch.tensor(generate_adjacency_matrix(self.R.n_nodes, k_min=self.R.k_min, k_avg=self.R.k_avg, k_max=self.R.k_max, self_loops=self.R.self_loops))
             self.graph = SaveAndLoadModel.load_or_generate('graph', load_dict, lambda:
                 self.build_graph_from_quadrants(w_ii, w_ir, w_ri, w_rr)
@@ -163,7 +165,6 @@ class BooleanReservoir(nn.Module):
         nx.set_edge_attributes(graph, edge_quadrants, 'quadrant')
         # to get subgraph: ir_subgraph = g.edge_subgraph([(u, v) for u, v, data in g.edges(data=True) if data.get('quadrant') == 'IR'])
 
-
     def build_graph_from_quadrants(self, w_ii, w_ir, w_ri, w_rr):
         w_i = torch.cat((w_ii, w_ir), dim=1)
         w_r = torch.cat((w_ri, w_rr), dim=1)
@@ -212,65 +213,15 @@ class BooleanReservoir(nn.Module):
             return self.lut[self.node_indices, idx]
         raise ValueError
 
-    def bipartite_mapping_strategy(self, strategy_parameters_str: str, a: int, b:int):
-        # produce w [axb] matrix → bipartite map, by default a maps to b but this can be inverted by swaping a and b in the input string
-        # notation I: a and b get their names from mapping notation; number of nodes on the left and right side respectively in a bipartite map
-        # notation II: k is the edge count per node (array)
-        expression_evaluator = ExpressionEvaluator(self.P, {'a': a, 'b': b})
-        if '-' in strategy_parameters_str:
-            strategy, parameters = strategy_parameters_str.split('-', 1)
-            parameters = parameters.split(':')
-        else:
-            strategy = strategy_parameters_str
-            parameters = None
-        w = None
-        if strategy == 'identity':
-            def repeating_eye(a, b):
-                w = np.zeros((a, b))
-                w[np.arange(a)[:, None], np.arange(b)] = (np.arange(a)[:, None] % min(a, b) == np.arange(b) % min(a, b))
-                return w
-            w = repeating_eye(a, b)
-        elif strategy == 'stub':
-            # idea: make a determinisitic bipartite graph + a probabilitic mapping
-            # constrain in and out degree simultaneously
-            # the deterministic mapping is from a_min:b_min, the probabilistic increments this to a_max, b_max by probability p
+    @staticmethod
+    def bipartite_mapping_strategy(p: Params, strategy: str, a: int, b: int):
+        strategy_fn = BipartiteMappingStrategy.get(strategy)
+        return strategy_fn(p, a, b)
 
-            # Parse a_min, a_max, b_min, b_max, p 
-            assert len(parameters) == 5, "a→b [{a}x{b}] - Strategy must have format 'stub-a_min:a_max:b_min:b_max:p'"
-            a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = parameters
-            a_min = int(expression_evaluator.to_float(a_min_expr))
-            a_max = int(expression_evaluator.to_float(a_max_expr))
-            b_min = int(expression_evaluator.to_float(b_min_expr))
-            b_max = int(expression_evaluator.to_float(b_max_expr))
-            p = expression_evaluator.to_float(p_expr)
-            assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
-            assert 0 <= b_min <= b_max <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {a} (a)'
-            assert 0 <= a_min <= a_max <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {a_min} (a_min) <= {a_max} (a_max) <= {b} (b)'
+    @staticmethod
+    def input_pertubation_strategy(p: Params):
+        return InputPerturbationStrategy.get(p.M.I.selector)
 
-            w = random_constrained_stub_matching(a, b, a_min, a_max, b_min, b_max, p)
-        elif strategy in {'in', 'out'}:
-            # idea: make a determinisitic bipartite graph + a probabilitic mapping
-            # constrain either in or out degree
-            # the deterministic mapping is to satisfy min_degree, the probabilistic increments this to max_degree by probability p
-
-            # Parse b_min, b_max, p 
-            assert len(parameters) == 3, "Strategy must have format 'in-min_degree:max_degree:p'"
-            min_degree_expr, max_degree_expr, p_expr = parameters
-            min_degree = int(expression_evaluator.to_float(min_degree_expr))
-            max_degree = int(expression_evaluator.to_float(max_degree_expr))
-            p = expression_evaluator.to_float(p_expr)
-            assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
-
-            if strategy == 'in':
-                assert 0 <= min_degree <= max_degree <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {min_degree} (b_min) <= {max_degree} (b_max) <= {a} (a)'
-            elif strategy == 'out':
-                assert 0 <= min_degree <= max_degree <= b, f'a→b [{a}x{b}] - outgoing connections per node in a: 0 <= {min_degree} (a_min) <= {max_degree} (a_max) <= {b} (b)'
-            in_degree = strategy == 'in'
-            w = constrain_degree_of_bipartite_mapping(a, b, min_degree, max_degree, p, in_degree=in_degree)
-        if w is not None:
-            return torch.tensor(w, dtype=torch.uint8)
-        raise ValueError
- 
     @staticmethod
     def input_pertubation_strategy(strategy:str):
         return InputPerturbationStrategy.get(strategy)
@@ -367,8 +318,8 @@ class BooleanReservoir(nn.Module):
             a = b = 0
             for ci in range(c):
                 # Perturb reservoir nodes with partial input depending on chunks dimension
+                x_i = x[:m, si, ci]
                 b += k 
-                x_i = x[:m, si, ci, a:b]
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]

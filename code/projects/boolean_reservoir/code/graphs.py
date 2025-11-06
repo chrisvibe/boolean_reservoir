@@ -68,12 +68,12 @@ def random_constrained_stub_matching(a, b, a_min, a_max, b_min, b_max, p):
     edge_range = min(capacity_range_a * b, capacity_range_b * a)
     edge_range = (np.random.random(edge_range) <= p).sum()
     ka_out = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, a, capacity_range_a) # probabilistic connections
-    ka_out += a_min # deterimistic connections
+    ka_out += a_min # deteriministic connections
 
     # make kb:
     edge_range = ka_out.sum() 
     kb_in = randomly_distribute_pigeons_to_holes_with_capacity_dimension_trick(edge_range, b, capacity_range_b) # probabilistic connections
-    kb_in += b_min # deterimistic connections
+    kb_in += b_min # deteriministic connections
     
     # project 1D in-degree sequence to random 2D adjacency matrix
     w = random_boolean_adjancency_matrix_from_two_degree_sets(ka_out, kb_in)
@@ -270,6 +270,7 @@ def random_boolean_adjancency_matrix_from_two_degree_sets(ka: np.ndarray, kb: np
     :param kb: A 1D integer ndarray of degree sequence for set B (length n).
     :return: A boolean ndarray representing the adjacency matrix.
     """
+    raise NotImplementedError('This is a hard problem and is not yet needed...')
     assert sum(ka) == sum(kb), "The sum of degrees in ka and kb must be equal (handshake lemma)."
     assert ka.max() <= len(kb), "No node in set A should have a degree greater than the number of nodes in set B."
     assert kb.max() <= len(ka), "No node in set B should have a degree greater than the number of nodes in set A."

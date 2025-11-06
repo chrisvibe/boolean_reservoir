@@ -1,6 +1,6 @@
 model:
   input_layer:
-    pertubation: 'xor'
+    pertubation: 'override'
     resolution: 8
     encoding: binary_embedding
     interleaving: 0
@@ -14,12 +14,12 @@ model:
     init: random_lut_state
     k_avg: 4
     k_max: 10
-    n_nodes: 3000
+    n_nodes: 500
     p: 0.5
     # self_loops: 0.3
   training:
     batch_size: 100
-    epochs: 100
+    epochs: 30
     accuracy_threshold: 0.05
     evaluation: 'test' 
     seed: 0

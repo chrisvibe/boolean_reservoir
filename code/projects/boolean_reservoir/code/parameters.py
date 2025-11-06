@@ -67,7 +67,8 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     redundancy: Union[int, List[int]] = Field(1, description="Redundancy factor of resolution")
     chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
     chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
-    ticks: Optional[Union[str, List[str]]] = Field(None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
+    ticks: Union[str, List[str]] = Field(None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
+    selector: Union[str, List[str]] = Field('S :I', description="Selection chain. Supports F (filter), S (slice), R (random). Variables: i: index variable for F operation, I: I.n_nodes. Ie. assuming I=2 F i<4 -> S -3: -> R I ([0, 1, 2, 3]->[1, 2, 3]->[1, 3]). R samples: R without samples => scramble")
 
     @model_validator(mode='after')
     def calculate_bits(self):
@@ -266,17 +267,17 @@ def save_yaml_config(base_model: BaseModel, filepath):
 def generate_param_combinations(params: BaseModel) -> List[BaseModel]:
     def expand_params(params: Any) -> List[Dict[str, Any]]:
         if isinstance(params, BaseModel):
-            params_dict = params.__dict__  # Match original for consistency
+            params_dict = params.__dict__
             expanded_dict = {}
             for k, v in params_dict.items():
                 field_info = params.model_fields.get(k)
-                expand = True  # Default to expand (original behavior)
+                expand = True
                 if field_info and field_info.json_schema_extra is not None:
                     expand = field_info.json_schema_extra.get('expand', True)
                 if expand:
                     expanded_dict[k] = expand_params(v)
                 else:
-                    expanded_dict[k] = [v]  # Treat as single value (keep list as-is)
+                    expanded_dict[k] = [v]
             keys = expanded_dict.keys()
             values = [expanded_dict[k] for k in keys]
             combinations = product(*values)
