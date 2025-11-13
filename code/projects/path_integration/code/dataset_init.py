@@ -1,6 +1,6 @@
 from projects.boolean_reservoir.code.encoding import BooleanEncoder, min_max_normalization
 from projects.boolean_reservoir.code.parameters import Params
-from projects.boolean_reservoir.code.utils import balance_dataset
+from projects.boolean_reservoir.code.utils.utils import balance_dataset
 from projects.boolean_reservoir.code.train_model import DatasetInit
 from benchmarks.path_integration.constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 

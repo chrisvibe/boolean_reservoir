@@ -1,51 +1,55 @@
 logging:
-  out_path: 'out/path_integration/grid_search/2D/homogeneous-deterministic'
-  grid_search:
-    seed: 0
-    n_samples: 25
-  save_keys: [parameters]
+  out_path: 'out/path_integration/2D/single_run/design_choices/test2'
+  history:
+    record_history: true
 model:
   input_layer:
     w_bi: identity
-    w_ir: [out-1:1:1, out-2:2:1, out-3:3:1] # I→R mapping: deterministic out-degree
-    pertubation: [override, xor]
+    w_ir: out-3:3:1 # I→R mapping: deterministic out-degree
+    pertubation: override
     encoding: base2
     features: 2
-    resolution: 8
-    redundancy: 6
-    chunk_size: 96 
+    resolution: 3
+    redundancy: 2
+    chunks: 2 
     interleaving: 1
+    seed: 0
   output_layer:
     n_outputs: 2
+    seed: 0
   reservoir_layer:
-    init: [zeros, random]
-    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    init: zeros
+    k_avg: 3.0
     k_min: 0
     k_max: 25
     mode: homogeneous
-    n_nodes: 3000
+    n_nodes: 30
     p: 0.5
     reset: true
     self_loops: null
+    seed: 0
   training:
     accuracy_threshold: 0.05
     batch_size: 100
     criterion: MSE
-    epochs: 40
+    epochs: 4
     evaluation: dev
+    seed: 0
 dataset:
   dimensions: 2
   steps: 5
   strategy:
     name: LevyFlightStrategy
-    alpha: 1
-    momentum: 0.0
-    step_size: 0.05
+    params:
+      alpha: 1
+      momentum: 0.0
+      step_size: 0.05
   boundary:
     name: PolygonBoundary
-    n_sides: 12
-    radius: 1.0
-    rotation: pi/4
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
   split:
     train: 0.5
     dev: 0.3

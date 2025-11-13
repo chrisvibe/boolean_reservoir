@@ -1,37 +1,17 @@
-from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict, field_serializer
+from pydantic import BaseModel, Field, model_validator
 import yaml
-from itertools import product
-from typing import List, Union, Optional, Callable, Dict, Any, Type, Generic, TypeVar
-T = TypeVar('T', bound=BaseModel)
-from pathlib import Path, PosixPath, WindowsPath
-import pandas as pd
+from typing import List, Union, Optional
+from pathlib import Path
 from benchmarks.path_integration.parameters import PathIntegrationDatasetParams
 from benchmarks.temporal.parameters import TemporalDatasetParams
-
-def pydantic_init():
-    def represent_pathlib_path(dumper, data):
-        return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
-
-    yaml.add_representer(Path, represent_pathlib_path)
-    yaml.add_representer(PosixPath, represent_pathlib_path)
-    yaml.add_representer(WindowsPath, represent_pathlib_path)
+from projects.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams
 
 pydantic_init()
 
-def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
-    # list-list, list-value, value-list, value-value
-    if isinstance(a, list) and isinstance(b, list):
-        return [operator(a[i], b[i]) for i in range(len(a))]
-    elif isinstance(a, list):
-        return [operator(x, b) for x in a]
-    elif isinstance(b, list):
-        return [operator(a, y) for y in b]
-    else:
-        return operator(a, b)
 
 class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input layer (I→R)
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
-    distribution: Union[str, List[str]] = Field(
+    w_bi: Union[str, List[str]] = Field(
         'identity',
         description=(
             "Select a mode for mapping input bits to input nodes. Options include:\n"
@@ -55,8 +35,9 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
             "Note: 'w_in' overrides this field with a manual adjacency matrix. Both aim to map bits to input nodes (bits→I)."
         )
     )
-    connection: Union[str, List[str]] = Field('out-1:1:1', description="See distribution property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
+    w_ir: Union[str, List[str]] = Field('out-1:1:1', description="See w_bi property. Produces a biparitite mapping from input nodes to reservoir nodes (I→R) so the following symbolic tokens are replaced accordingly; 'a': I, 'b': R")
     w_in: Optional[Union[Path, List[Path]]] = Field(None, description="Input distribution mapping explicitely set by an adjacency matrix B->I. Parameter is a path to a stored tensor. Overrides distribution parameter")
+    selector: Union[str, List[str]] = Field('S :I', description="Selection chain. Supports F (filter), S (slice), R (random). Variables: i: index variable for F operation, I: I.n_nodes. Ie. assuming I=2 F i<4 -> S -3: -> R I ([0, 1, 2, 3]->[1, 2, 3]->[1, 3]). R samples: R without samples => scramble")
     pertubation: Union[str, List[str]] = Field('xor', description="Pertubation strategy given old and new states for input nodes")
     encoding: Union[str, List[str]] = Field('base2', description="Binary encoding type")
     interleaving: Union[int, List[int]] = Field(0, description="Multidimensionsional weaving of inputs, int dictates group size. n=1: abc, def -> ad, be, cf -> adb, ecf | n=2: abcd, efgh -> ab, ef, cd, gh -> abef, cdgh")
@@ -68,7 +49,6 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
     chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
     ticks: Union[str, List[str]] = Field(None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
-    selector: Union[str, List[str]] = Field('S :I', description="Selection chain. Supports F (filter), S (slice), R (random). Variables: i: index variable for F operation, I: I.n_nodes. Ie. assuming I=2 F i<4 -> S -3: -> R I ([0, 1, 2, 3]->[1, 2, 3]->[1, 3]). R samples: R without samples => scramble")
 
     @model_validator(mode='after')
     def calculate_bits(self):
@@ -123,11 +103,17 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
 
     @model_validator(mode='after')
     def calculate_ticks(self):
+        # Initialize ticks as '1' repeated for each chunk count
         if self.ticks is None:
-            self.ticks = '1' * self.chunks
-        self.ticks = self.ticks *  (self.chunks // len(self.ticks))
+            self.ticks = calculate_w_broadcasting(lambda t, c: '1' * c, self.ticks, self.chunks)
+        
+        # Repeat or truncate ticks to match chunk length
+        self.ticks = calculate_w_broadcasting(
+            lambda t, c: t * (c // len(t)) if c >= len(t) else t[:c],
+            self.ticks,
+            self.chunks
+        )
         return self
-    
 
 class ReservoirParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
@@ -156,19 +142,6 @@ class OutputParams(BaseModel): # TODO add w_out and distribution like in input_l
     activation: Optional[Union[str, List[str]]] = Field(None, description="Activation after readout layer, fex sigmoid")
     readout_mode: Optional[Union[str, List[str]]] = Field("binary", description="Encoding of reservoir states for readout: 'binary'={0,1}, 'bipolar'={-1,1}")
 
-class OptimizerParams(BaseModel):
-    name: str = Field('adam', description="Optimizer type: 'sgd', 'adam', 'adamw', etc.")
-    params: dict = Field(
-        default_factory=dict,
-        description="Optimizer hyperparameters (e.g., lr, momentum, weight_decay)"
-    )
-    
-    @model_validator(mode='after')
-    def normalize_name(self):
-        """Convert optimizer name to lowercase for consistency."""
-        self.name = self.name.lower()
-        return self
-
 class TrainingParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
     batch_size: Union[int, List[int]] = Field(32, description="Number of samples per forward pass")
@@ -178,9 +151,9 @@ class TrainingParams(BaseModel):
     evaluation: Optional[str] = Field('test', description="test, dev, train etc")
     shuffle: bool = Field(True, description="Shuffle dataset")
     drop_last: bool = Field(True, description="Drop last")
-    optim: Union[OptimizerParams, List[OptimizerParams]] = Field(
-        default=OptimizerParams(name='adamw', params={'lr': 0.001}),
-        description="Optimizer configuration (single or list for grid search)"
+    optim: DynamicParams = Field(
+        default=DynamicParams(name='adamw', params={'lr': 0.001}),
+        description="Optimizer configuration"
     )
     
 class ModelParams(BaseModel):
@@ -263,92 +236,3 @@ def load_yaml_config(filepath):
 def save_yaml_config(base_model: BaseModel, filepath):
     with open(filepath, 'w') as file:
         yaml.dump(base_model.model_dump(), file)
-
-def generate_param_combinations(params: BaseModel) -> List[BaseModel]:
-    def expand_params(params: Any) -> List[Dict[str, Any]]:
-        if isinstance(params, BaseModel):
-            params_dict = params.__dict__
-            expanded_dict = {}
-            for k, v in params_dict.items():
-                field_info = params.model_fields.get(k)
-                expand = True
-                if field_info and field_info.json_schema_extra is not None:
-                    expand = field_info.json_schema_extra.get('expand', True)
-                if expand:
-                    expanded_dict[k] = expand_params(v)
-                else:
-                    expanded_dict[k] = [v]
-            keys = expanded_dict.keys()
-            values = [expanded_dict[k] for k in keys]
-            combinations = product(*values)
-            return [dict(zip(keys, combo)) for combo in combinations]
-        elif isinstance(params, list):
-            return params
-        return [params]
-
-    expanded_params = expand_params(params)
-    result_params_list = []
-
-    for combo_dict in expanded_params:
-        new_params_dict = {k: type(params.__dict__[k])(**combo_dict[k]) if isinstance(params.__dict__[k], BaseModel) else combo_dict[k] for k in params.__dict__.keys()}
-        result_params_list.append(type(params)(**new_params_dict))
-    
-    return result_params_list
-
-def update_params(path):
-    # update grid search hdf and yaml files to reflect changes in parameters
-    path = Path(path)
-    P = load_yaml_config(path)
-    L = P.L
-    file_path = L.out_path / 'log.h5'
-    df = pd.read_hdf(file_path, key='df', mode='r')
-
-    def update(p):
-        # if p.L.last_checkpoint is None:
-            # p.L.last_checkpoint = next(p.L.save_path.glob('**/*.yaml')).parent
-        # if hasattr(p.model.training, 'radius_threshold'):
-            # p.model.training.accuracy_threshold = p.model.training.radius_threshold
-            # del p.model.training.radius_threshold
-        paths_attrs = ['out_path', 'save_path', 'last_checkpoint']
-        for attr in paths_attrs:
-            path = getattr(p.L, attr)
-            parts = path.parts
-            if 'path_integration' in parts:
-                continue
-            elif '1D' in parts:
-                idx = parts.index('1D')
-            elif '2D' in parts:
-                idx = parts.index('2D')
-            else:
-                continue
-            new_parts = parts[:idx] + ('path_integration',) + parts[idx:]
-            new_path = Path(*new_parts)
-            setattr(P.L, attr, new_path)
-        return p
-    df['params'] = df['params'].apply(update)
-    
-    # #### UPDATE HDF ####
-    # df['params'] = df['params'].apply(lambda p_dict: Params(**p_dict))
-    df.to_hdf(file_path, key='df', mode='w')
-
-    #### UPDATE YAML ####
-    p = df.iloc[0]['params']
-    save_yaml_config(p, P.L.out_path / 'parameters.yaml')
-    for idx, row in df.iterrows():
-        p = row['params']
-        save_yaml_config(p, P.L.last_checkpoint / 'parameters.yaml')
-
-    print('remmember to update config files as these were just the logged files')
-
-if __name__ == '__main__':
-    pass
-
-    # # path integration
-    # update_params('out/path_integration/grid_search/1D/initial_sweep/parameters.yaml')
-    # update_params('out/path_integration/grid_search/2D/initial_sweep/parameters.yaml')
-    # update_params('out/path_integration/grid_search/1D/initial_sweep2/parameters.yaml')
-    # update_params('out/path_integration/grid_search/2D/initial_sweep2/parameters.yaml')
-
-    # temporal 
-    # update_params('out/temporal/density/grid_search/parameters.yaml')
-    # update_params('out/grid_search/temporal/parity/parameters.yaml')

@@ -24,16 +24,14 @@ logging:
 dataset:
   dimensions: 1
   steps: 5
-  strategy_config:
-    type: LevyFlightStrategy
+  strategy:
+    name: LevyFlightStrategy
     params:
-      alpha: 1 
-      momentum: 0.3
-      step_size: 0.1
-  boundary_config:
-    type: IntervalBoundary
-    params:
-      radius: 1.0
+      alpha: 1
+      momentum: 0.0
+      step_size: 0.05
+  boundary:
+    name: IntervalBoundary
   split:
     train: 0.8
     dev: 0.1

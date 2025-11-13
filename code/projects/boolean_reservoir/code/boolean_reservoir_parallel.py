@@ -1,7 +1,9 @@
-from projects.boolean_reservoir.code.utils import set_seed, generate_unique_seed, save_grid_search_results, load_grid_search_results
+import pandas as pd
+from projects.boolean_reservoir.code.utils.utils import set_seed, generate_unique_seed, save_grid_search_results, load_grid_search_results
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.train_model import train_and_evaluate
 from projects.boolean_reservoir.code.parameters import *
+from projects.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
 from projects.boolean_reservoir.code.visualizations import plot_grid_search
 from projects.parallel_grid_search.code.train_model_parallel import generic_parallel_grid_search
 from projects.parallel_grid_search.code.parallel_utils import JobInterface

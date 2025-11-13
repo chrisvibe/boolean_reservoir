@@ -1,7 +1,7 @@
 from pathlib import Path
 from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config
 from projects.boolean_reservoir.code.visualizations import plot_grid_search 
-from projects.boolean_reservoir.code.utils import override_symlink, load_grid_search_results
+from projects.boolean_reservoir.code.utils.utils import override_symlink, load_grid_search_results
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm

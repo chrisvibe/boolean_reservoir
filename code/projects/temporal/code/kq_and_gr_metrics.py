@@ -5,7 +5,7 @@ from benchmarks.temporal.temporal_density_parity_datasets import TemporalDensity
 from projects.boolean_reservoir.code.parameters import load_yaml_config, generate_param_combinations, Params
 from projects.boolean_reservoir.code.graphs import calc_spectral_radius 
 import pandas as pd
-from projects.boolean_reservoir.code.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager, save_grid_search_results
+from projects.boolean_reservoir.code.utils.utils import generate_unique_seed, override_symlink, print_pretty_binary_matrix, CudaMemoryManager, save_grid_search_results
 from pathlib import Path
 from tqdm import tqdm
 

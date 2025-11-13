@@ -1,6 +1,5 @@
 model:
   input_layer:
-    pertubation: 'xor'
     encoding: 'base2'
     features: 2
     resolution: 8 
@@ -26,13 +25,13 @@ dataset:
   dimensions: 2
   steps: 5
   strategy_config:
-    type: LevyFlightStrategy
+    name: LevyFlightStrategy
     params:
       alpha: 1 
       momentum: 0.3
-      step_size: .1
+      step_size: 0.1
   boundary_config:
-    type: PolygonBoundary
+    name: PolygonBoundary
     params:
       n_sides: 8 # avoid corner effects
       radius: 1.0

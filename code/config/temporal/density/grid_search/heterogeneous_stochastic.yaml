@@ -6,8 +6,8 @@ logging:
   save_keys: [parameters]
 model:
   input_layer:
-    distribution: identity
-    connection: [out-0:b:1/b, out-1:b:1/b] # I→R mapping: stochastic out-degree
+    w_bi: identity
+    w_ir: [out-0:b:1/b, out-1:b:1/b] # I→R mapping: stochastic out-degree
     pertubation: [override, xor]
     encoding: base2
     features: 10

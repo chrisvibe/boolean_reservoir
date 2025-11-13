@@ -6,8 +6,8 @@ logging:
   save_keys: [parameters]
 model:
   input_layer:
-    distribution: identity
-    connection: [out-3:3:1] # I→R mapping: deterministic out-degree
+    w_bi: identity
+    w_ir: [out-3:3:1] # I→R mapping: deterministic out-degree
     pertubation: [override]
     encoding: base2
     features: 10
@@ -33,24 +33,9 @@ model:
     epochs: 40
     evaluation: dev
     optim:
-      - name: adam
-        params:
-          lr: 0.001
-      - name: adamw
-        params:
-          lr: 0.001
-      - name: sgd
-        params:
-          lr: 0.001
-      - name: adam
-        params:
-          lr: 0.0005
-      - name: adamw
-        params:
-          lr: 0.0005
-      - name: sgd
-        params:
-          lr: 0.0005
+      name: [adam, adamw, sgd]
+      params:
+        lr: [0.001, 0.0005]
 dataset:
   task: density
   bit_stream_length: 10

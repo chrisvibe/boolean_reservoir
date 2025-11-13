@@ -1,9 +1,9 @@
 import torch
 from pathlib import Path
 import numpy as np
-from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.utils.utils import set_seed
 from benchmarks.temporal.parameters import TemporalDatasetParams
-from projects.boolean_reservoir.code.utils import set_seed
+from projects.boolean_reservoir.code.utils.utils import set_seed
 from benchmarks.utils.base_dataset import BaseDataset
 
 class TemporalDatasetBase(BaseDataset):

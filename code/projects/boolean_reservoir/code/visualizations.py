@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE, MDS
 from projects.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
-from projects.boolean_reservoir.code.utils import load_grid_search_results
+from projects.boolean_reservoir.code.utils.utils import load_grid_search_results
 import matplotlib
 matplotlib.use('Agg')
 

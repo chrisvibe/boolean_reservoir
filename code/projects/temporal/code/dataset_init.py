@@ -3,7 +3,7 @@ from benchmarks.temporal.parameters import TemporalDatasetParams
 # from projects.boolean_reservoir.code.encoding import BooleanEncoder 
 from projects.boolean_reservoir.code.parameters import Params, InputParams
 from projects.boolean_reservoir.code.train_model import DatasetInit
-from projects.boolean_reservoir.code.utils import set_seed, balance_dataset, l2_distance
+from projects.boolean_reservoir.code.utils.utils import set_seed, balance_dataset, l2_distance
 
 
 class TemporalDatasetInit(DatasetInit): # Note dont use I.seed here dataset init will use D.seed

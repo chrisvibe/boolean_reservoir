@@ -30,8 +30,8 @@ logging:
     loss: 0.6935309767723083
 model:
   input_layer:
-    connection: out-3:3:1
-    distribution: identity
+    w_ir: out-3:3:1
+    w_bi: identity
     encoding: base2
     features: 10
     interleaving: 0

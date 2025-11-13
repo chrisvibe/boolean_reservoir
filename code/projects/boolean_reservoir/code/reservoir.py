@@ -6,8 +6,8 @@ import networkx as nx
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
 from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming
-from projects.boolean_reservoir.code.utils import set_seed
-from projects.boolean_reservoir.code.reservoir_utils import InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel, ChainedSelector, BipartiteMappingStrategy
+from projects.boolean_reservoir.code.utils.utils import set_seed
+from projects.boolean_reservoir.code.utils.reservoir_utils import InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel, ChainedSelector, BipartiteMappingStrategy
 
 
 class BooleanReservoir(nn.Module):
@@ -40,14 +40,14 @@ class BooleanReservoir(nn.Module):
             self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
             self.w_in = SaveAndLoadModel.load_or_generate('w_in', load_dict, lambda:
                 self.load_torch_tensor(self.I.w_in) if self.I.w_in
-                  else self.bipartite_mapping_strategy(self.P, self.I.distribution, self.I.bits, self.I.n_nodes)
+                  else self.bipartite_mapping_strategy(self.P, self.I.w_ir, self.I.bits, self.I.n_nodes)
             )
             # TODO optionally control each quadrant individually
             w_ii = w_ir = None
             if 'graph' not in load_dict: # generated here due to random seed
                 w_ii = torch.zeros((self.I.n_nodes, self.I.n_nodes))  # TODO no effect atm - add flexibility for connections betwen input nodes (I→I)
                 # w_ii = self.bipartite_mapping_strategy(self.P, self.I.connection, self.I.n_nodes, self.I.n_nodes)
-                w_ir = self.bipartite_mapping_strategy(self.P, self.I.connection, self.I.n_nodes, self.R.n_nodes)
+                w_ir = self.bipartite_mapping_strategy(self.P, self.I.w_ir, self.I.n_nodes, self.R.n_nodes)
 
             self.node_indices = torch.arange(self.M.n_nodes)
             cs = ChainedSelector(self.M.n_nodes, parameters={'I': self.M.I.n_nodes})

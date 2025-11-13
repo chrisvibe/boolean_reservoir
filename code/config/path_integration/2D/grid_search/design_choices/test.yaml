@@ -1,0 +1,64 @@
+logging:
+  out_path: 'out/path_integration/2D/grid_search/design_choices/test'
+  grid_search:
+    seed: 0
+    n_samples: 1
+  save_keys: [parameters]
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity 
+    # pertubation: [override, xor]
+    pertubation: override
+    # encoding: [base2, binary_embedding]
+    encoding: binary_embedding
+    features: 2
+    # resolution: 5
+    resolution: [8, 7, 6]
+    # redundancy: [3, 6, 9]
+    redundancy: [18, 15, 10]
+    chunks: [1, 2] 
+    interleaving: [0, 1]
+  output_layer:
+    n_outputs: 2
+  reservoir_layer:
+    # init: [zeros, random]
+    init: zeros
+    # k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    k_avg: [4.0, 5.0, 6.0]
+    k_min: 0
+    # k_max: [10, 15, 20, 25] # interesting number of attractors
+    k_max: [25] # interesting number of attractors
+    mode: homogeneous
+    # mode: [homogeneous, heterogeneous]
+    # n_nodes: 3000 # EXPLORE WITH KQ AND GR AND TRY THIS LATER
+    n_nodes: [2000, 3000] # EXPLORE WITH KQ AND GR AND TRY THIS LATER
+    p: 0.5
+    reset: true
+    # self_loops: [0, .02, .04, .06, .08, .10] # interesting number of attractors
+    self_loops: 0 # interesting number of attractors
+  training:
+    accuracy_threshold: 0.05
+    batch_size: 100
+    criterion: MSE
+    epochs: 40
+    evaluation: dev
+dataset:
+  dimensions: 2
+  steps: 5
+  strategy:
+    name: LevyFlightStrategy
+    alpha: 1
+    momentum: 0.0
+    step_size: 0.05
+  boundary:
+    name: PolygonBoundary
+    n_sides: 12
+    radius: 1.0
+    rotation: pi/4
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 20000
+  seed: 0

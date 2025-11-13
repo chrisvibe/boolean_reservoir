@@ -1,5 +1,5 @@
 from projects.boolean_reservoir.code.parameters import load_yaml_config
-from projects.boolean_reservoir.code.utils import load_grid_search_results
+from projects.boolean_reservoir.code.utils.utils import load_grid_search_results
 from projects.temporal.code.stats import process_grid_search_data, polar_design_plot, graph_accuracy_vs_k_avg
 import pandas as pd
 from pathlib import Path

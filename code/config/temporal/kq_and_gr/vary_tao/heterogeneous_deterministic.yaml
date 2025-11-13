@@ -6,8 +6,8 @@ logging:
   save_keys: null
 model:
   input_layer:
-    distribution: identity
-    connection: out-1:1:1
+    w_bi: identity
+    w_ir: out-1:1:1
     encoding: base2
     interleaving: 0
     features: 10

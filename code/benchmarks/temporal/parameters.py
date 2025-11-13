@@ -1,6 +1,6 @@
 from benchmarks.utils.parameters import DatasetParameters
 from pydantic import Field, model_validator
-from typing import List, Union, Optional
+from typing import List, Union
 from pathlib import Path
 
 class TemporalDatasetParams(DatasetParameters):

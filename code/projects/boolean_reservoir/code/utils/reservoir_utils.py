@@ -1,54 +1,14 @@
-import sympy
 import pandas as pd
 from projects.boolean_reservoir.code.parameters import * 
 import torch
-from projects.boolean_reservoir.code.utils import print_pretty_binary_matrix, override_symlink
+from projects.boolean_reservoir.code.utils.utils import print_pretty_binary_matrix, override_symlink
+from projects.boolean_reservoir.code.utils.param_utils import ExpressionEvaluator 
 from projects.boolean_reservoir.code.graphs import random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
 from datetime import datetime, timezone
 import networkx as nx
 import gzip
 import re
 import numpy as np
-
-
-class ExpressionEvaluator:
-    def __init__(self, params: Params, symbols: dict=dict()):
-        self._setup_sympy_env()
-        self.P = params
-        self.M = self.P.M
-        self.L = self.P.L
-        self.I = self.P.M.I
-        self.R = self.P.M.R
-        self.O = self.P.M.O
-        self.T = self.P.M.T
-        self.symbols = symbols
-
-    def _setup_sympy_env(self):
-        """Set up the sympy environment with symbols and their mappings."""
-        # Define symbols
-        self.sympy_symbols = {
-            'a': sympy.Symbol('a'),
-            'b': sympy.Symbol('b')
-        }
-        
-    def _get_symbol_values(self):
-        """Get current values for the symbols based on instance state."""
-        return {self.sympy_symbols[k]: v for k, v in self.symbols.items()}
-    
-    def to_float(self, expr: str):
-        """Convert a string expression to a float using sympy."""
-        try:
-            # Parse the expression
-            parsed_expr = sympy.sympify(expr)
-            
-            # Get current values and substitute
-            symbol_values = self._get_symbol_values()
-            result = parsed_expr.subs(symbol_values)
-            
-            return float(result)
-        except Exception as e:
-            raise ValueError(f"Failed to evaluate expression '{expr}': {e}")
-
 
 class BatchedTensorHistoryWriter:
     def __init__(self, save_path='history', buffer_size=64):
@@ -414,17 +374,17 @@ class BipartiteMappingStrategy:
         
         Parameters format: 'a_min:a_max:b_min:b_max:p'
         """
-        expression_evaluator = ExpressionEvaluator(p, {'a': a, 'b': b})
+        expression_evaluator = ExpressionEvaluator({'a': a, 'b': b})
         params = parameters_str.split(':')
         
         assert len(params) == 5, "Stub strategy must have format 'a_min:a_max:b_min:b_max:p'"
         a_min_expr, a_max_expr, b_min_expr, b_max_expr, p_expr = params
         
-        a_min = int(expression_evaluator.to_float(a_min_expr))
-        a_max = int(expression_evaluator.to_float(a_max_expr))
-        b_min = int(expression_evaluator.to_float(b_min_expr))
-        b_max = int(expression_evaluator.to_float(b_max_expr))
-        p = expression_evaluator.to_float(p_expr)
+        a_min = int(expression_evaluator.eval(a_min_expr))
+        a_max = int(expression_evaluator.eval(a_max_expr))
+        b_min = int(expression_evaluator.eval(b_min_expr))
+        b_max = int(expression_evaluator.eval(b_max_expr))
+        p = expression_evaluator.eval(p_expr)
         
         assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
         assert 0 <= b_min <= b_max <= a, f'a→b [{a}x{b}] - incoming connections per node in b: 0 <= {b_min} (b_min) <= {b_max} (b_max) <= {a} (a)'
@@ -439,15 +399,15 @@ class BipartiteMappingStrategy:
         
         Parameters format: 'min_degree:max_degree:p'
         """
-        expression_evaluator = ExpressionEvaluator(p, {'a': a, 'b': b})
+        expression_evaluator = ExpressionEvaluator({'a': a, 'b': b})
         params = parameters_str.split(':')
         
         assert len(params) == 3, "Degree strategies must have format 'min_degree:max_degree:p'"
         min_degree_expr, max_degree_expr, p_expr = params
         
-        min_degree = int(expression_evaluator.to_float(min_degree_expr))
-        max_degree = int(expression_evaluator.to_float(max_degree_expr))
-        p = expression_evaluator.to_float(p_expr)
+        min_degree = int(expression_evaluator.eval(min_degree_expr))
+        max_degree = int(expression_evaluator.eval(max_degree_expr))
+        p = expression_evaluator.eval(p_expr)
         
         assert 0 <= p <= 1, f"Probability must be between 0 and 1, got {p} from expression '{p_expr}'"
         

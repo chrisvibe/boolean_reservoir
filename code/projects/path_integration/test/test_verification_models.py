@@ -106,8 +106,8 @@ def test_path_integration_verification_models(model_class, config_path):
 
 
 if __name__ == '__main__':
-    # P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
-    P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
+    P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
+    # P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
     model = PathIntegrationVerificationModelBaseTwoEncoding(P)
     # model = PathIntegrationVerificationModel(P)
     p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)

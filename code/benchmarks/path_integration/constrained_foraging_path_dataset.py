@@ -1,8 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
-from projects.boolean_reservoir.code.utils import set_seed
-from projects.boolean_reservoir.code.encoding import float_array_to_boolean, min_max_normalization
-from projects.boolean_reservoir.code.parameters import InputParams
+from projects.boolean_reservoir.code.utils.utils import set_seed
 from benchmarks.path_integration.constrained_foraging_path import random_walk, positions_to_p_v_pairs
 from benchmarks.path_integration.visualizations import plot_random_walk
 from benchmarks.path_integration.parameters import PathIntegrationDatasetParams

@@ -35,7 +35,7 @@ class NoBoundary(Boundary):
         return p_end
 
 class IntervalBoundary(Boundary):
-    def __init__(self, interval, center=None, boundary_tolerance=1e-10):
+    def __init__(self, interval=(0, 1), center=None, boundary_tolerance=1e-10):
         self.interval = interval
         self.center = 0 if center is None else center
         self.effective_interval = tuple(x + self.center for x in self.interval)
@@ -199,11 +199,11 @@ def positions_to_p_v_pairs(positions: np.array):
     velocities = np.diff(positions, axis=0, prepend=np.zeros((1, positions.shape[1])))
     return positions, velocities 
 
-def generate_polygon_points(n, radius, rotation=0, center=None, decimals=10):
+def generate_polygon_points(n_sides, radius, rotation=0, center=None, decimals=10):
     """
     Generate points representing a regular polygon shape with n sides, the given radius, and rotation.
     The polygon will be centered around the specified center point.
-    :param n: Number of sides of the polygon
+    :param n_sides: Number of sides of the polygon
     :param radius: Radius of the polygon
     :param rotation: Rotation of the polygon in radians
     :param center: Center point of the polygon, defaults to (0, 0)
@@ -211,8 +211,8 @@ def generate_polygon_points(n, radius, rotation=0, center=None, decimals=10):
     """
     if center is None: center = (0, 0)
     points = []
-    angle_step = 2 * math.pi / n
-    for i in range(n):
+    angle_step = 2 * math.pi / n_sides
+    for i in range(n_sides):
         # Calculate the base angle and apply rotation
         angle = i * angle_step + rotation
         
@@ -223,14 +223,14 @@ def generate_polygon_points(n, radius, rotation=0, center=None, decimals=10):
         points.append((x, y))
     return np.round(points, decimals)
 
-def stretch_polygon(polygon_boundary: PolygonBoundary, stretch_x: float, stretch_y: float):
+def stretch_polygon(boundary: PolygonBoundary, stretch_x: float=1, stretch_y: float=1):
     """
     Stretch the polygon points along the x and y axes.
     """
-    stretched_points = [(x * stretch_x, y * stretch_y) for x, y in polygon_boundary.get_points()]
-    polygon_boundary.points = stretched_points
-    polygon_boundary.polygon = Polygon(stretched_points)
-    return polygon_boundary
+    stretched_points = [(x * stretch_x, y * stretch_y) for x, y in boundary.get_points()]
+    boundary.points = stretched_points
+    boundary.polygon = Polygon(stretched_points)
+    return boundary
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 from projects.boolean_reservoir.code.parameters import load_yaml_config, save_yaml_config
-from projects.boolean_reservoir.code.utils import load_grid_search_results
+from projects.boolean_reservoir.code.utils.utils import load_grid_search_results
 from projects.temporal.code.visualizations import plot_kq_and_gr, group_df_data_by_parameters, plot_kq_and_gr_many_config, plot_optimal_k_avg_vs_configuration 
 from projects.temporal.code.kq_and_gr_metrics import override_samples_in_p 
 from pathlib import Path

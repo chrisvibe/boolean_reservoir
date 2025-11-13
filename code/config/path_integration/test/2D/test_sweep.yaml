@@ -29,13 +29,13 @@ dataset:
   dimensions: 2
   steps: 5
   strategy_config:
-    type: LevyFlightStrategy
+    name: LevyFlightStrategy
     params:
       alpha: 3
       momentum: 0.9
       bias: 0
   boundary_config:
-    type: PolygonBoundary
+    name: PolygonBoundary
     params:
       n_sides: 4
       radius: 0.5
