@@ -85,10 +85,10 @@ class PathIntegrationVerificationModel(nn.Module):
         pass
 
 @pytest.mark.parametrize("model_class, config_path", [
-    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/1D/grid_search/test/verification_model.yaml'),
-    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/2D/grid_search/test/verification_model.yaml'),
-    (PathIntegrationVerificationModel, 'config/path_integration/1D/grid_search/test/verification_model.yaml'),
-    (PathIntegrationVerificationModel, 'config/path_integration/2D/grid_search/test/verification_model.yaml'),
+    (PathIntegrationVerificationModelBaseTwoEncoding, 'projects/path_integration/test/config/1D/grid_search/verification_model.yaml'),
+    (PathIntegrationVerificationModelBaseTwoEncoding, 'projects/path_integration/test/config/2D/grid_search/verification_model.yaml'),
+    (PathIntegrationVerificationModel, 'projects/path_integration/test/config/1D/grid_search/verification_model.yaml'),
+    (PathIntegrationVerificationModel, 'projects/path_integration/test/config/2D/grid_search/verification_model.yaml'),
 ])
 def test_path_integration_verification_models(model_class, config_path):
     logging.debug(f"Testing model {model_class} with config {config_path}")
