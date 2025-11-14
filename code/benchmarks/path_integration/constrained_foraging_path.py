@@ -123,7 +123,11 @@ class SimpleRandomWalkStrategy(WalkStrategy):
 
 
 class LevyFlightStrategy(WalkStrategy):
-    def __init__(self, dim=2, alpha=1, step_size=1, step_size_bias=0, momentum=0.9, 
+    '''Note:
+    alpha ≈ 1.5-2.0: Most animal foraging studies (albatrosses, deer, etc.)
+    set step_size relative to boundary (just scales the distribution)
+    '''
+    def __init__(self, dim=2, alpha=1.5, step_size=.1, step_size_bias=0, momentum=0.9, 
                  momentum_bias=0, bias_direction=None, max_attempts=100):
         self.dim = dim
         self.alpha = alpha
@@ -231,7 +235,7 @@ if __name__ == '__main__':
     # # -------------------------------------------------------------
     # boundary = NoBoundary()
     boundary = IntervalBoundary() 
-    strategy = LevyFlightStrategy(dim=dim, alpha=1, momentum=0, step_size=.05)
+    strategy = LevyFlightStrategy(dim=dim, alpha=4.0, momentum=0, step_size=0.1)
 
     # dim = 2
     # # -------------------------------------------------------------
@@ -242,6 +246,6 @@ if __name__ == '__main__':
     # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
 
     # Simulate the walk
-    steps = 25
+    steps = 100
     positions = random_walk(dim, steps, strategy, boundary)
     plot_random_walk('/out/', positions, strategy, boundary)
