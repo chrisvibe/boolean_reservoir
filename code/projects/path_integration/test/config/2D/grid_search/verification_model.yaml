@@ -20,7 +20,7 @@ model:
     accuracy_threshold: 0.05
     evaluation: 'test' 
 logging:
-  out_path: 'out/path_integration/test/2D/verification_model/single_run'
+  out_path: 'out/path_integration/test/2D/verification_model/single_run/verification_model'
 dataset:
   dimensions: 2
   steps: 5

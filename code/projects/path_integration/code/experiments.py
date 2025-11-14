@@ -8,7 +8,7 @@ from projects.path_integration.code.dataset_init import PathIntegrationDatasetIn
 def profile_training_function():
     pr = cProfile.Profile()
     pr.enable()
-    p, model, dataset = train_single_model('config/path_integration/2D/test_model.yaml', dataset_init=dataset_init, accuracy=accuracy)
+    p, model, dataset = train_single_model('projects/path_integration/test/config/2D/test_model.yaml', dataset_init=dataset_init, accuracy=accuracy)
     pr.disable()
 
     # Create IO stream for profiler results

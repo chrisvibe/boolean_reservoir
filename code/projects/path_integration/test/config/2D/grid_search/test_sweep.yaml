@@ -21,7 +21,7 @@ model:
     accuracy_threshold: 0.05
     evaluation: 'dev' 
 logging:
-  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/grid_search'
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/grid_search/test_sweep'
   grid_search:
     seed: 0
     n_samples: 2

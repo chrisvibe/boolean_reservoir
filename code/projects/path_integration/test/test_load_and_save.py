@@ -37,7 +37,7 @@ def test_saving_and_loading_models():
         rmtree(path)
     
     # Train a model and save it
-    p, model, dataset, train_history = train_single_model('config/path_integration/2D/single_run/test/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    p, model, dataset, train_history = train_single_model('projects/path_integration/test/config/2D/single_run/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     model.save()
     
     # Load the model from the saved path
@@ -55,7 +55,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     
     # Run grid search and get the best parameters
     _, p = boolean_reservoir_grid_search(
-        'config/path_integration/2D/grid_search/test/test_sweep.yaml',
+        'projects/path_integration/test/config/2D/grid_search/test_sweep.yaml',
         dataset_init=d().dataset_init,
         accuracy=a().accuracy,
         gpu_memory_per_job_gb = 0.5,
