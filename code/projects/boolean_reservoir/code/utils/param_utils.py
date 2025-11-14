@@ -94,6 +94,7 @@ class ExpressionEvaluator:
 class DynamicParams(BaseModel):
     name: str
     params: dict = Field(default_factory=dict)
+
     def call(self, func, evaluator=None, **overrides):
         """
         Call a function using parameters from this DynamicParams instance, optionally

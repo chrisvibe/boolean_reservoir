@@ -2,6 +2,7 @@ import pytest
 import torch
 import torch.nn as nn
 from projects.boolean_reservoir.code.parameters import * 
+from projects.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
 from projects.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
 from projects.boolean_reservoir.code.encoding import bin2dec, dec2bin
 from projects.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
@@ -84,31 +85,32 @@ class PathIntegrationVerificationModel(nn.Module):
         pass
 
 @pytest.mark.parametrize("model_class, config_path", [
-    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/test/1D/verification_model.yaml'),
-    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/test/2D/verification_model.yaml'),
-    (PathIntegrationVerificationModel, 'config/path_integration/test/1D/verification_model.yaml'),
-    (PathIntegrationVerificationModel, 'config/path_integration/test/2D/verification_model.yaml'),
+    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/1D/grid_search/test/verification_model.yaml'),
+    (PathIntegrationVerificationModelBaseTwoEncoding, 'config/path_integration/2D/grid_search/test/verification_model.yaml'),
+    (PathIntegrationVerificationModel, 'config/path_integration/1D/grid_search/test/verification_model.yaml'),
+    (PathIntegrationVerificationModel, 'config/path_integration/2D/grid_search/test/verification_model.yaml'),
 ])
 def test_path_integration_verification_models(model_class, config_path):
-    # Note that the model is not saved
     logging.debug(f"Testing model {model_class} with config {config_path}")
     P = load_yaml_config(config_path)
-    
-    model_instance = model_class(P)
-    logging.debug(f"Model instance created: {model_instance}")
-    
-    p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    logging.debug(f"Training completedpytest /code/projects/path_integration/test/test_load_and_save.py with accuracy {trained_model.P.L.train_log.accuracy}")
-    
-    assert trained_model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
+    for pi in generate_param_combinations(P):
+        model_instance = model_class(pi)
+        logging.debug(f"Model instance created: {model_instance}")
+        
+        p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        logging.debug(f"Training completed with accuracy {trained_model.P.L.train_log.accuracy}")
+        
+        assert trained_model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
 
 
 
 
 if __name__ == '__main__':
-    P = load_yaml_config('config/path_integration/test/1D/verification_model.yaml')
-    # P = load_yaml_config('config/path_integration/test/2D/verification_model.yaml')
-    model = PathIntegrationVerificationModelBaseTwoEncoding(P)
-    # model = PathIntegrationVerificationModel(P)
-    p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    assert model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
+    P = load_yaml_config('config/path_integration/1D/grid_search/test/verification_model.yaml')
+    # P = load_yaml_config('config/path_integration/2D/grid_search/test/verification_model.yaml')
+    for pi in generate_param_combinations(P):
+        pi.M.I.seed = pi.D.seed = 0 # TODO remove (debug)
+        model = PathIntegrationVerificationModelBaseTwoEncoding(pi)
+        # model = PathIntegrationVerificationModel(pi)
+        p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        assert model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"

@@ -10,10 +10,21 @@ class TemporalDatasetParams(DatasetParameters):
     tao: Union[int, List[int]] = Field(0, description="Tao parameter")
 
     @model_validator(mode='after')
-    def handle_path_is_none(cls, values):
-        values.path = Path(f'data/temporal/{values.task}/u-{values.bit_stream_length}/w-{values.window_size}/t-{values.tao}/m-{values.samples}/r-{values.seed}/dataset.pt')
-        return values
-    
-    def update_path(self):
-        self.path = None
-        self.handle_path_is_none(self)
+    def update_path_after_init(self):
+        self.path = self._generate_path()
+        return self
+
+    def _generate_path(self):
+        if self.has_list_in_a_field(): # not yet expanded (doesnt check recursively)
+            return
+
+        return (Path('data/temporal')
+            / self.task
+            / f'u-{self.bit_stream_length}'
+            / f'w-{self.window_size}'
+            / f't-{self.tao}'
+            / f'm-{self.samples}'
+            / f'r-{self.seed}'
+            / 'dataset.pt'
+        )
+

@@ -35,13 +35,13 @@ class NoBoundary(Boundary):
         return p_end
 
 class IntervalBoundary(Boundary):
-    def __init__(self, interval=(0, 1), center=None, boundary_tolerance=1e-10):
-        self.interval = interval
+    '''Always 1D context'''
+    def __init__(self, radius=0.5, center=None, boundary_tolerance=1e-10):
+        self.radius = abs(0.5 if radius is None else radius)
         self.center = 0 if center is None else center
-        self.effective_interval = tuple(x + self.center for x in self.interval)
-        self.min = min(self.effective_interval)
-        self.max = max(self.effective_interval)
-        self.points = (self.min, self.max)
+        self.points = (self.center - self.radius, self.center + self.radius)
+        self.min = min(self.points)
+        self.max = max(self.points)
         self.boundary_tolerance = boundary_tolerance
     
     def is_inside(self, p):
@@ -238,8 +238,8 @@ if __name__ == '__main__':
     # dim = 1
     # # -------------------------------------------------------------
     # # boundary = NoBoundary()
-    # boundary = IntervalBoundary([-.5, .5]) 
-    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
+    # boundary = IntervalBoundary() 
+    # strategy = LevyFlightStrategy(dim=dim, alpha=1, momentum=0, step_size=.05)
 
     dim = 2
     # -------------------------------------------------------------

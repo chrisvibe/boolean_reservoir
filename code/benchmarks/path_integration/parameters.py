@@ -21,7 +21,11 @@ def strategy_factory(p: DynamicParams, dimensions: int):
     
     if p.name not in strategy_map:
         raise ValueError(f"Unsupported strategy type: {p.name}. Available: {list(strategy_map.keys())}")
-    return p.call(strategy_map[p.name], dim=dimensions)
+
+    if p.name == 'SimpleRandomWalkStrategy':
+        return p.call(strategy_map[p.name])
+    else:
+        return p.call(strategy_map[p.name], dim=dimensions)
     
 def boundary_factory(p: DynamicParams):
     """Factory function to create boundary objects"""
@@ -43,20 +47,18 @@ def boundary_factory(p: DynamicParams):
 
 
 class PathIntegrationDatasetParams(DatasetParameters):
-    # Basic parameters
     dimensions: Union[int, List[int]] = Field(2, description="Number of dimensions")
     steps: Union[int, List[int]] = Field(10, description="Number of steps")
-    
-    # Strategy and boundary parameters (using DynamicParams)
-    strategy: DynamicParams = Field(
+
+    strategy: Union[DynamicParams, List[DynamicParams]] = Field(
         default=DynamicParams(
             name='LevyFlightStrategy',
             params={'alpha': 1.5, 'momentum': 0.0, 'step_size': 1.0}
         ),
         description="Strategy configuration"
     )
-    
-    boundary: DynamicParams = Field(
+
+    boundary: Union[DynamicParams, List[DynamicParams]] = Field(
         default=DynamicParams(
             name='PolygonBoundary',
             params={'n_sides': 4, 'radius': 1.0, 'rotation': math.pi/4, 'stretch_x': 1.0, 'stretch_y': 1.0}
@@ -88,25 +90,28 @@ class PathIntegrationDatasetParams(DatasetParameters):
         
     def _generate_path(self) -> Path:
         """Generate path based on parameters"""
+        if self.has_list_in_a_field(): # not yet expanded (doesnt check recursively)
+            return
+
         strategy_str = self.strategy.name[:3].upper()  # First 3 chars of name
         strategy_hash = self._hash_dict(self.strategy.params)
         
         boundary_str = self.boundary.name[:3].upper()  # First 3 chars of name
         boundary_hash = self._hash_dict(self.boundary.params)
         
-        return Path(
-            f'data/path_integration/'
-            f'd-{self.dimensions}/'
-            f's-{self.steps}/'
-            f'{strategy_str}/'
-            f'{strategy_hash}/'
-            f'{boundary_str}/'
-            f'{boundary_hash}/'
-            f'm-{self.samples}/'
-            f'r-{self.seed}/'
-            f'dataset.pt'
+        return (
+            Path('data/path_integration')
+            / f'd-{self.dimensions}'
+            / f's-{self.steps}'
+            / strategy_str
+            / strategy_hash
+            / boundary_str
+            / boundary_hash
+            / f'm-{self.samples}'
+            / f'r-{self.seed}'
+            / 'dataset.pt'
         )
-    
+
     def update_path(self):
         """Update the path based on current parameters"""
         self.path = self._generate_path()

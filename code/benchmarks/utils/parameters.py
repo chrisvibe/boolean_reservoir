@@ -26,3 +26,6 @@ class DatasetParameters(BaseModel):
         arbitrary_types_allowed=True,
         extra='allow'
     )
+
+    def has_list_in_a_field(self):
+        return any(isinstance(value, list) for value in self.model_dump().values())

@@ -79,7 +79,7 @@ def simulate_state_transisions_and_calculate_rank(p: Params, device: torch.devic
         process_batch(model, x_gr, 'gr', data, config, i)
 
 def get_kernel_quality_dataset(p: Params):
-    p.D.update_path()
+    p.D._generate_path()
     return TemporalDensityDataset(p.D)
 
 def get_generalization_rank_dataset(p: Params):
@@ -111,7 +111,7 @@ def calc_kernel_quality_and_generalization_rank(yaml_path):
 
 def override_samples_in_p(p: Params):
     p.D.samples = p.M.R.n_nodes * p.D.samples # P.D.samples is the number of samples per configuration up until here where it actually becomes the number of samples (overidden)
-    p.D.update_path()
+    p.D._generate_path()
     return p
 
 def prepare_metrics_data(param_combinations: list[Params]):
