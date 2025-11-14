@@ -45,34 +45,22 @@ class IntervalBoundary(Boundary):
         self.boundary_tolerance = boundary_tolerance
     
     def is_inside(self, p):
-        """Works with both scalar and array input"""
-        val = np.asarray(p).flat[0]
-        return self.min <= val <= self.max
+        """Works with 1D scalar or array"""
+        return self.min <= p <= self.max
     
     def is_on_boundary(self, p):
-        val = np.asarray(p).flat[0]
-        return (abs(val - self.min) < self.boundary_tolerance or 
-                abs(val - self.max) < self.boundary_tolerance)
-    
+        return (abs(p - self.min) < self.boundary_tolerance or abs(p - self.max) < self.boundary_tolerance)
+
     def handle_boundary_crossing(self, p_start, p_end):
-        """Preserves input shape/type"""
-        # Work with arrays consistently
-        p_end = np.asarray(p_end)
-        
+        """Returns 1D array for consistency"""
         if self.is_inside(p_end):
             return p_end
         
-        # Clamp to boundary, preserving shape
-        end_val = p_end.flat[0]
-        if end_val < self.min:
-            clamped = self.min
+        # Clamp to boundary, return as array
+        if p_end < self.min:
+            return np.array([self.min])
         else:
-            clamped = self.max
-        
-        # Return with same shape as p_end
-        result = p_end.copy()
-        result.flat[0] = clamped
-        return result
+            return np.array([self.max])
     
 class PolygonBoundary(Boundary):
     def __init__(self, points, boundary_tolerance=1e-10):
@@ -196,8 +184,12 @@ def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary
     return np.array(positions)
 
 def positions_to_p_v_pairs(positions: np.array):
+    # Ensure 2D for processing
+    if positions.ndim == 1:
+        positions = positions[:, np.newaxis]
+    
     velocities = np.diff(positions, axis=0, prepend=np.zeros((1, positions.shape[1])))
-    return positions, velocities 
+    return positions, velocities
 
 def generate_polygon_points(n_sides, radius, rotation=0, center=None, decimals=10):
     """
@@ -235,21 +227,21 @@ def stretch_polygon(boundary: PolygonBoundary, stretch_x: float=1, stretch_y: fl
 
 if __name__ == '__main__':
 
-    # dim = 1
+    dim = 1
+    # # -------------------------------------------------------------
+    # boundary = NoBoundary()
+    boundary = IntervalBoundary() 
+    strategy = LevyFlightStrategy(dim=dim, alpha=1, momentum=0, step_size=.05)
+
+    # dim = 2
     # # -------------------------------------------------------------
     # # boundary = NoBoundary()
-    # boundary = IntervalBoundary() 
-    # strategy = LevyFlightStrategy(dim=dim, alpha=1, momentum=0, step_size=.05)
-
-    dim = 2
-    # -------------------------------------------------------------
-    # boundary = NoBoundary()
-    square = generate_polygon_points(4, 1, rotation=np.pi/4) 
-    boundary = PolygonBoundary(points=square)
-    # strategy = SimpleRandomWalkStrategy(1)
-    strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
+    # square = generate_polygon_points(4, 1, rotation=np.pi/4) 
+    # boundary = PolygonBoundary(points=square)
+    # # strategy = SimpleRandomWalkStrategy(1)
+    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
 
     # Simulate the walk
-    steps = 5
+    steps = 25
     positions = random_walk(dim, steps, strategy, boundary)
     plot_random_walk('/out/', positions, strategy, boundary)

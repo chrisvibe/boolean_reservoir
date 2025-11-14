@@ -28,13 +28,13 @@ logging:
 dataset:
   dimensions: 2
   steps: 5
-  strategy_config:
+  strategy:
     name: LevyFlightStrategy
     params:
       alpha: 1
       momentum: 0.0
       step_size: 0.05
-  boundary_config:
+  boundary:
     name: PolygonBoundary
     params:
       n_sides: 12

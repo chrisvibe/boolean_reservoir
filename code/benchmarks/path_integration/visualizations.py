@@ -6,6 +6,9 @@ from pathlib import Path
 matplotlib.use('Agg')
 
 def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', sub_dir='visualizations/random_walk'):
+    # Ensure 2D shape
+    if positions.ndim == 1:
+        positions = positions[:, np.newaxis]
     zero_row = np.zeros_like((positions[0, :]))
     steps, dimensions = positions.shape
     positions = np.vstack((zero_row, positions))
@@ -14,7 +17,6 @@ def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', s
     
     if dimensions == 1:
         ax = fig.add_subplot(111)
-        ax.set_aspect('equal', adjustable='box')
         x = positions[:, 0]
         ax.plot(x, time, label='1D Walk')
         ax.set_xlabel('Position')
