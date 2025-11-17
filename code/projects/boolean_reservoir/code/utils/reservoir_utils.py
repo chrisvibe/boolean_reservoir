@@ -364,7 +364,7 @@ class BipartiteMappingStrategy:
         """Identity strategy: repeating eye matrix."""
         def repeating_eye(a, b):
             w = np.zeros((a, b))
-            w[np.arange(a)[:, None], np.arange(b)] = (np.arange(a)[:, None] % min(a, b) == np.arange(b) % min(a, b))
+            w[np.arange(a), np.arange(a) % b] = 1
             return w
         return torch.tensor(repeating_eye(a, b), dtype=torch.uint8)
 

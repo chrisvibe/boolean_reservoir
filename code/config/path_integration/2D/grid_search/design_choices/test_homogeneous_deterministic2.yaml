@@ -1,5 +1,5 @@
 logging:
-  out_path: 'out/path_integration/2D/grid_search/design_choices/test2'
+  out_path: 'out/path_integration/2D/grid_search/design_choices/test_homogeneous_deterministic2'
   grid_search:
     seed: 0
     n_samples: 1
@@ -7,26 +7,28 @@ logging:
 model:
   input_layer:
     w_bi: identity
-    w_ir: out-3:3:1 # I→R mapping: deterministic out-degree
+    # w_ir: out-3:3:1 
+    w_ir: identity
     pertubation: override
     encoding: base2
     features: 2
     resolution: 8
-    redundancy: 6
-    chunk_size: 96 
-    interleaving: 1
+    # redundancy: 6
+    redundancy: 18
+    chunks: [1, 2] 
+    interleaving: [0, 1]
   output_layer:
     n_outputs: 2
   reservoir_layer:
     init: zeros
-    k_avg: [3.0, 4.0, 5.0]
+    k_avg: [4.0, 5.0, 6.0]
     k_min: 0
-    k_max: 25
+    k_max: 25 
     mode: homogeneous
-    n_nodes: 3000
+    n_nodes: [2000, 3000] # EXPLORE WITH KQ AND GR AND TRY THIS LATER
     p: 0.5
     reset: true
-    self_loops: null
+    self_loops: 0 # interesting number of attractors
   training:
     accuracy_threshold: 0.05
     batch_size: 100
@@ -37,15 +39,15 @@ dataset:
   dimensions: 2
   steps: 5
   strategy:
-    name: LevyFlightStrategy
-    alpha: 1
-    momentum: 0.0
-    step_size: 0.05
+    name: SimpleRandomWalkStrategy
+    params:
+      max_step_size: 0.3
   boundary:
     name: PolygonBoundary
-    n_sides: 12
-    radius: 1.0
-    rotation: pi/4
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
   split:
     train: 0.5
     dev: 0.3
