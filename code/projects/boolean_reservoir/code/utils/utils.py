@@ -116,7 +116,7 @@ def override_symlink(source: Path, link: Path = None):
         # Fail silently - symlink is not critical
         pass
 
-class CudaMemoryManager: # TODO This class works but is not recommended for multi-gpu setting...
+class CudaMemoryManager: # TODO This class works but its bad and is not recommended for multi-gpu setting...
     def __init__(self, ratio_threshold=0.9, verbose=True):
         if verbose:
             self.gpu_check()

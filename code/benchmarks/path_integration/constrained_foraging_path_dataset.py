@@ -18,7 +18,8 @@ class ConstrainedForagingPathDataset(BaseDataset):
         if D.path.exists() and not D.generate_data:
             self.load_data()
         else:
-            self.data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy_obj, D.boundary_obj)
+            raw_data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy_obj, D.boundary_obj)
+            self._data.update(raw_data)
             self.save_data()
 
     @staticmethod

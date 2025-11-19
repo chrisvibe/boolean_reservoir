@@ -4,10 +4,17 @@ from torch.utils.data import Dataset
 from benchmarks.utils.parameters import DatasetParameters
 from math import floor
 
-class BaseDataset(nn.Module, Dataset):
+class BaseDataset(nn.Module, Dataset): # TODO refer to datasets by self.x instead of complicated dict workaround...
     def __init__(self, D: DatasetParameters):
         super().__init__()
         self.D = D
+        self._data = {k: None for k in ['x', 'y', 'x_dev', 'y_dev', 'x_test', 'y_test']}
+    
+    @property
+    def data(self): # since buffers are self.key the dict needs to update references
+        new_data = {key: getattr(self, key) for key in self._data.keys() if hasattr(self, key)}
+        self._data.update(new_data)
+        return self._data
 
     def split_dataset(self, split=[0.8, 0.1, 0.1]):
         split_train = split[0] if self.D.split is None else self.D.split.train
@@ -19,7 +26,7 @@ class BaseDataset(nn.Module, Dataset):
 
         train_end, dev_end = floor(split_train * x.size(0)), floor((split_train + split_dev) * x.size(0))
 
-        self.data = {
+        data = {
             'x': x[idx[:train_end]],
             'y': y[idx[:train_end]],
             'x_dev': x[idx[train_end:dev_end]],
@@ -27,7 +34,7 @@ class BaseDataset(nn.Module, Dataset):
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
-        for key, tensor in self.data.items(): # accesses with self.data['x'] is the same as self.x
+        for key, tensor in data.items(): # accesses with self.data['x'] is the same as self.x
             if hasattr(self, key):
                 delattr(self, key) 
             self.register_buffer(key, tensor)
@@ -37,7 +44,7 @@ class BaseDataset(nn.Module, Dataset):
         torch.save(self.data, self.D.path)
 
     def load_data(self):
-        self.data = torch.load(self.D.path, weights_only=True)
+        self._data.update(torch.load(self.D.path, weights_only=True, map_location='cpu'))
     
     def set_normalizer_x(self, normalizer_x):
         self.normalizer_x = normalizer_x

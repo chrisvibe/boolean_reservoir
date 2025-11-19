@@ -23,7 +23,8 @@ class TemporalDatasetBase(BaseDataset):
             if D.bit_stream_length < D.window_size + D.tao:
                 print('Warning: bit_stream_length < tao + window_size, overriding bit_stream_length...')
                 D.bit_stream_length = D.window_size + D.tao
-            self.data = self.generate_data(D.samples, D.bit_stream_length, D.tao, D.window_size)
+            raw_data = self.generate_data(D.samples, D.bit_stream_length, D.tao, D.window_size)
+            self._data.update(raw_data)
             self.save_data()
 
     def generate_data(self, samples, stream_length, tao, window_size):
