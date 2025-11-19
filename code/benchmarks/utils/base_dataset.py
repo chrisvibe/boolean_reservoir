@@ -1,10 +1,12 @@
 import torch
+from torch import nn
 from torch.utils.data import Dataset
 from benchmarks.utils.parameters import DatasetParameters
 from math import floor
 
-class BaseDataset(Dataset):
+class BaseDataset(nn.Module, Dataset):
     def __init__(self, D: DatasetParameters):
+        super().__init__()
         self.D = D
 
     def split_dataset(self, split=[0.8, 0.1, 0.1]):
@@ -25,11 +27,10 @@ class BaseDataset(Dataset):
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
-
-    def to(self, device):
-        for key in self.data.keys():
-            self.data[key] = self.data[key].to(device)
-        return self
+        for key, tensor in self.data.items(): # accesses with self.data['x'] is the same as self.x
+            if hasattr(self, key):
+                delattr(self, key) 
+            self.register_buffer(key, tensor)
     
     def save_data(self):
         self.D.path.parent.mkdir(parents=True, exist_ok=True)

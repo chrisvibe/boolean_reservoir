@@ -9,6 +9,7 @@ class TemporalDatasetBase(BaseDataset):
         # bit_stream_length i.e. 12: 101010111010
         # window size (in the bit stream) i.e. 4: 10101011[1010]
         # tao is the delay (for the window) i.e. 1: 1010101[1101]0
+        super().__init__(D)
         self.D = D
         set_seed(D.seed)
         self.task = task

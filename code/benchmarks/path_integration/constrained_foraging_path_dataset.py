@@ -8,6 +8,7 @@ import yaml
 
 class ConstrainedForagingPathDataset(BaseDataset):
     def __init__(self, D: PathIntegrationDatasetParams):
+        super().__init__(D)
         self.D = D
         set_seed(D.seed)
         self.normalizer_x = None
