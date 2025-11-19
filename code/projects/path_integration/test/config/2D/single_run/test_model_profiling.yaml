@@ -1,36 +1,29 @@
 model:
   input_layer:
     pertubation: 'override'
-    encoding: binary_embedding
-    features: 2
     resolution: 8
+    encoding: binary_embedding
+    interleaving: 0
+    features: 2
     redundancy: 6
-    chunk_size: 96 
-    interleaving: 1
-    seed: 6
+    chunk_size: 48 
+    seed: 0
   output_layer:
     n_outputs: 2
-    seed: 6
   reservoir_layer:
-    mode: heterogeneous
     init: zeros
-    k_avg: 2.2
+    k_avg: 5
     k_max: 25
     n_nodes: 3000
     p: 0.5
-    self_loops: 0.0 # note that this seems critical? why?
-    seed: 6 
   training:
     batch_size: 100
-    epochs: 10
+    epochs: 30
     accuracy_threshold: 0.05
     evaluation: 'test' 
     seed: 0
 logging:
-  out_path: 'out/path_integration/single_run/2D/good_model'
-  # history:
-  #   record_history: true
-  #   buffer_size: 64
+  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/single_run/test_model'
 dataset:
   dimensions: 2
   steps: 5
@@ -45,10 +38,10 @@ dataset:
     params:
       n_sides: 12
       radius: 1.0
-      rotation: pi/4
+      rotation: pi/4 
   split:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 20000
+  samples: 10000
   seed: 0

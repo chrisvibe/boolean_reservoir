@@ -49,7 +49,8 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     mem = CudaMemoryManager()
     mem.manage_memory()
     if model is None:
-        model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path).to(mem.device)
+        model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
+    model.to(mem.device)
     P = model.P
 
     # Init data
