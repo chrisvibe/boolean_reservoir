@@ -30,7 +30,7 @@ if __name__ == '__main__':
     # profiling
     from projects.boolean_reservoir.test.profiling2 import profile_training_function 
     config = 'projects/path_integration/test/config/2D/single_run/test_model_profiling.yaml'
-    profile_training_function(config, out_dir='/out')
+    profile_training_function(config, out_dir='out')
 
 
 #     # # # playground 

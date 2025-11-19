@@ -258,7 +258,8 @@ class BooleanReservoir(nn.Module):
     def bin2int_matrix(self, x):
         # cast x to same type as powers_of_2 for safe matmul
         powers = self.powers_of_2.to(x.dtype)
-        return torch.matmul(x, powers).to(torch.long)
+        return torch.matmul(x.float(), powers.float()).to(torch.long)
+        # return torch.matmul(x, powers).to(torch.long)
     
     @staticmethod # TODO test packed
     def bin2int_packed(x, return_dtype=torch.long):
@@ -338,7 +339,8 @@ class BooleanReservoir(nn.Module):
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
-                perturbations_i = (x_i.to(torch.float16) @ w_in_i.to(torch.float16)) > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation, TODO gpu doesnt like uint8...
+                # perturbations_i = (x_i.to(torch.float16) @ w_in_i.to(torch.float16)) > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation, TODO gpu doesnt like uint8...
+                perturbations_i = (x_i.float() @ w_in_i.float()) > 0
                 self.states_parallel[:m, selected_input_indices] = self.input_pertubation(self.states_parallel[:m, selected_input_indices], perturbations_i[:, selected_input_indices]).to(torch.uint8)
 
                 self.batch_record(m, phase='input_layer', s=si+1, f=ci+1)
