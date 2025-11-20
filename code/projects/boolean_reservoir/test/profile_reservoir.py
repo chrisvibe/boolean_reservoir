@@ -9,12 +9,12 @@ from projects.path_integration.code.dataset_init import PathIntegrationDatasetIn
 def profile_training_function(out_dir=None):
     pr = cProfile.Profile()
     pr.enable()
-    config = 'projects/path_integration/test/config/2D/single_run/test_model.yaml'
+    config = 'projects/path_integration/test/config/2D/single_run/test_model_profiling.yaml'
     p, model, dataset, history = train_single_model(config, dataset_init=d().dataset_init, accuracy=a().accuracy)
     pr.disable()
     
     # Ensure output directory exists
-    out_dir = Path(out_dir) if out_dir else model.L.out_path / 'profiler'
+    out_dir = Path(out_dir) / 'profiler' if out_dir else model.L.save_path / 'profiler'
     out_dir.mkdir(parents=True, exist_ok=True)
     
     # Create IO stream for profiler results
@@ -23,7 +23,8 @@ def profile_training_function(out_dir=None):
     ps.print_stats()
     
     # Print the profiler results
-    print(s.getvalue())
+    first_lines = "\n".join(s.getvalue().splitlines()[:20])
+    print(first_lines)
     
     # Save results to file
     with open(out_dir / 'profile_results.txt', 'w') as f:

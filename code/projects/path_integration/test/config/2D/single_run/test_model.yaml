@@ -11,7 +11,7 @@ model:
   output_layer:
     n_outputs: 2
   reservoir_layer:
-    init: random_lut_state
+    init: random
     k_avg: 4
     k_max: 10
     n_nodes: 500

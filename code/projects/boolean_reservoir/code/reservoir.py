@@ -1,13 +1,12 @@
 import torch
 import torch.nn as nn
-from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
 import networkx as nx
 from projects.boolean_reservoir.code.parameters import * 
 from projects.boolean_reservoir.code.luts import lut_random 
 from projects.boolean_reservoir.code.graphs import generate_adjacency_matrix, graph2adjacency_list_incoming
 from projects.boolean_reservoir.code.utils.utils import set_seed
-from projects.boolean_reservoir.code.utils.reservoir_utils import InputPerturbationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel, ChainedSelector, BipartiteMappingStrategy
+from projects.boolean_reservoir.code.utils.reservoir_utils import InputPerturbationStrategy, InitializationStrategy, OutputActivationStrategy, BatchedTensorHistoryWriter, SaveAndLoadModel, ChainedSelector, BipartiteMappingStrategy, homogenize_adj_list
 
 class BooleanReservoir(nn.Module):
     # load_path can be a yaml file or a checkpoint directory
@@ -37,12 +36,11 @@ class BooleanReservoir(nn.Module):
             # INPUT LAYER
             # How to perturb reservoir nodes that receive input (I) - w_in maps input bits to input_nodes 
             set_seed(self.I.seed)
-            self.input_pertubation = self.input_pertubation_strategy(self.I.pertubation)
+            self.input_pertubation = self.input_pertubation_strategy(self.P)
             w_in = SaveAndLoadModel.load_or_generate('w_in', load_dict, lambda:
                 self.load_torch_tensor(self.I.w_in) if self.I.w_in
                   else self.bipartite_mapping_strategy(self.P, self.I.w_ir, self.I.bits, self.I.n_nodes)
             )
-            self.register_buffer("w_in", w_in)
             # TODO optionally control each quadrant individually
             w_ii = w_ir = None
             if 'graph' not in load_dict: # generated here due to random seed
@@ -53,12 +51,9 @@ class BooleanReservoir(nn.Module):
             node_indices = torch.arange(self.M.n_nodes)
             cs = ChainedSelector(self.M.n_nodes, parameters={'I': self.M.I.n_nodes})
             input_nodes = cs.eval(self.M.I.selector)
-            self.register_buffer("node_indices", node_indices)
-            input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=bool)
-            self.register_buffer("input_nodes_mask", input_nodes_mask)
-            self.input_nodes_mask[input_nodes] = True
-            ticks = torch.tensor([int(c) for c in self.I.ticks], dtype=torch.uint8)
-            self.register_buffer("ticks", ticks)
+            input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=torch.bool)
+            input_nodes_mask[input_nodes] = True
+            ticks = torch.tensor([int(c) for c in self.I.ticks])
 
             # RESERVOIR LAYER
             # Properties of reservoir nodes that dont receive input (R)
@@ -78,40 +73,32 @@ class BooleanReservoir(nn.Module):
 
             # Precompute adj_list and expand it to the batch size
             adj_list = graph2adjacency_list_incoming(self.graph)
-            adj_list, adj_list_mask, no_neighbours_mask = self.homogenize_adj_list(adj_list, max_length=self.R.k_max)
-            self.register_buffer("adj_list", adj_list)
-            self.register_buffer("adj_list_mask", adj_list_mask)
+            adj_list, adj_list_mask, no_neighbours_mask = homogenize_adj_list(adj_list, max_length=self.R.k_max)
             no_neighbours_indices = no_neighbours_mask.nonzero(as_tuple=True)[0]
-            self.register_buffer("no_neighbours_indices", no_neighbours_indices)
 
             # Each node as a LUT of length 2**k where next state is looked up by index determined by neighbour state
             # LUT allows incoming edges from I + R for each node
-            self.max_connectivity = self.adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
+            self.max_connectivity = adj_list.shape[-1] # Note that k_max may be larger than max_connectivity
             lut = SaveAndLoadModel.load_or_generate('lut', load_dict, lambda:
-                lut_random(self.M.n_nodes, self.max_connectivity, p=self.R.p).to(torch.uint8)
+                lut_random(self.M.n_nodes, self.max_connectivity, p=self.R.p)
             )
-            self.register_buffer("lut", lut)
 
             # Precompute bin2int conversion mask 
-            powers_of_2 = self.make_minimal_powers_of_two(self.max_connectivity) # TODO test packed
-            self.register_buffer("powers_of_2", powers_of_2)
+            powers_of_2 = self.precompute_minimal_powers_of_2(self.max_connectivity) 
 
             # Initialize state (R + I)
             initial_states = SaveAndLoadModel.load_or_generate('init_state', load_dict, lambda:
-                self.initialization_strategy(self.R.init)
+                self.initialization_strategy(self.P)
             )
-            self.register_buffer("initial_states", initial_states)
-            states_parallel = self.initial_states.repeat(self.T.batch_size, 1)
-            self.register_buffer("states_parallel", states_parallel)
+            states_parallel = initial_states.repeat(self.T.batch_size, 1)
             
             # OUTPUT LAYER
             set_seed(self.O.seed)
             self.readout = nn.Linear(self.R.n_nodes, self.O.n_outputs) # readout of R only TODO add option to choose
             if 'weights' in load_dict:
                 self.load_state_dict(load_dict['weights'])
-            self.output_activation = self.output_activation_strategy(self.O.activation)
-            output_nodes_mask = ~self.input_nodes_mask # TODO add option to choose with w_out (bit mask or mapping)
-            self.register_buffer("output_nodes_mask", output_nodes_mask)
+            self.output_activation = self.output_activation_strategy(self.P)
+            output_nodes_mask = ~input_nodes_mask # TODO add option to choose with w_out (bit mask or mapping)
             set_seed(self.R.seed)
 
             # LOGGING
@@ -123,17 +110,29 @@ class BooleanReservoir(nn.Module):
             self.L.history.save_path = self.save_path / 'history'
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
-            self.device = None
-            self.add_graph_labels(self.graph)
 
-    # def to(self, device=None, dtype=None, non_blocking=False):
-    #     super().to(device=device, dtype=dtype, non_blocking=non_blocking)
-    #     if device is not None:
-    #         self.device = device
-    #         self.move_to_device(device)
-    #     if dtype is not None:
-    #         self.move_to_dtype(dtype)
-    #     return self
+            # TYPE OPTIMIZATION + BUFFER REGISTRATION
+            '''
+            torch.bool     # masks (logical conditions)
+            torch.uint8    # binary states (0/1 values & for boolean arithmetic)
+            torch.float32  # arithmetic (profiling atm says this is best) 
+            torch.int64    # indices for tensor indexing
+            '''
+            self.register_buffer("node_indices", node_indices.to(torch.int64)) # indices
+            self.register_buffer("input_nodes_mask", input_nodes_mask.to(torch.bool)) # mask
+            self.register_buffer("ticks", ticks.to(torch.uint8)) # pure lookup
+            self.register_buffer("w_in", w_in.to(torch.uint8)) # arithmetic with input x
+            self.register_buffer("adj_list", adj_list.to(torch.int64)) # indices
+            self.register_buffer("adj_list_mask", adj_list_mask.to(torch.bool)) # mask
+            self.register_buffer("no_neighbours_indices", no_neighbours_indices.to(torch.int64)) # indices
+            self.register_buffer("lut", lut.to(torch.uint8)) # pure lookup
+            self.register_buffer("powers_of_2", powers_of_2.to(torch.float32)) # arithmetic with states
+            self.register_buffer("initial_states", initial_states.to(torch.uint8)) # arithmetic with states
+            self.register_buffer("states_parallel", states_parallel.to(torch.uint8)) # arithmetic with states
+            self.register_buffer("output_nodes_mask", output_nodes_mask.to(torch.bool)) # mask
+
+            # OTHER
+            self.add_graph_labels(self.graph)
     
     def add_graph_labels(self, graph):
         labels_mapping = {node: node for node in graph.nodes()}
@@ -169,40 +168,6 @@ class BooleanReservoir(nn.Module):
         graph = nx.from_numpy_array(w.numpy(), create_using=nx.DiGraph)
         return graph
     
-    @staticmethod # TODO test packed
-    def make_minimal_powers_of_two(bits: int):
-        assert bits < 64, 'Too many bits! (bin2int may overflow)'
-        dtype = torch.long
-        return (2 ** torch.arange(bits, dtype=dtype).flip(0))
-
-    @staticmethod
-    def homogenize_adj_list(adj_list, max_length): # tensor may have less than max_length columns if not needed
-        adj_list_tensors = [torch.tensor(sublist, dtype=torch.long) for sublist in adj_list]
-        padded_tensor = pad_sequence(adj_list_tensors, batch_first=True, padding_value=-1)
-        padded_tensor = padded_tensor[:, :max_length]
-        valid_mask = padded_tensor != -1
-        padded_tensor[~valid_mask] = 0
-        no_neighbours_mask = ~valid_mask.any(dim=1) # if all neigbours are off its not the same as having no neighbours
-        return padded_tensor, valid_mask.to(torch.uint8), no_neighbours_mask
-    
-    def initialization_strategy(self, strategy:str):
-        if strategy == 'random':
-            return torch.randint(0, 2, (1, self.M.n_nodes), dtype=torch.uint8)
-        elif strategy == 'zeros':
-            return torch.zeros((1, self.M.n_nodes), dtype=torch.uint8)
-        elif strategy == 'ones':
-            return torch.ones((1, self.M.n_nodes), dtype=torch.uint8)
-        elif strategy == 'every_other':
-            states = self.initialization_strategy('zeros')
-            states[::2] = 1
-            return states
-        elif strategy == 'first_lut_state': # warmup reservoir with first state from LUT 
-            return self.lut[self.node_indices, 0]
-        elif strategy == 'random_lut_state': # warmup reservoir with random states from LUT
-            idx = torch.randint(low=0, high=2**self.max_connectivity, size=(self.M.n_nodes,))
-            return self.lut[self.node_indices, idx]
-        raise ValueError
-
     @staticmethod
     def bipartite_mapping_strategy(p: Params, strategy: str, a: int, b: int):
         strategy_fn = BipartiteMappingStrategy.get(strategy)
@@ -210,15 +175,15 @@ class BooleanReservoir(nn.Module):
 
     @staticmethod
     def input_pertubation_strategy(p: Params):
-        return InputPerturbationStrategy.get(p.M.I.selector)
-
-    @staticmethod
-    def input_pertubation_strategy(strategy:str):
-        return InputPerturbationStrategy.get(strategy)
+        return InputPerturbationStrategy.get(p.M.I.pertubation)
     
     @staticmethod
-    def output_activation_strategy(strategy:str):
-        return OutputActivationStrategy.get(strategy)
+    def initialization_strategy(p: Params):
+        return InitializationStrategy.get(p.M.R.init)(p.M.n_nodes)
+
+    @staticmethod
+    def output_activation_strategy(p: Params):
+        return OutputActivationStrategy.get(p.M.O.activation)
     
     @staticmethod
     def get_timestamp_utc():
@@ -250,36 +215,14 @@ class BooleanReservoir(nn.Module):
     def flush_history(self):
         if self.history:
             self.history.flush()
-    
-    def bin2int(self, x): # TODO consider bit packig? (int is after all represented by binary units)
-        vals = (x * self.powers_of_2).sum(dim=-1)
-        return vals
 
-    def bin2int_matrix(self, x):
-        # cast x to same type as powers_of_2 for safe matmul
-        powers = self.powers_of_2.to(x.dtype)
-        return torch.matmul(x.float(), powers.float()).to(torch.long)
-        # return torch.matmul(x, powers).to(torch.long)
+    @staticmethod
+    def precompute_minimal_powers_of_2(bits):
+        return (2 ** torch.arange(bits, dtype=torch.float32).flip(0))
     
-    @staticmethod # TODO test packed
-    def bin2int_packed(x, return_dtype=torch.long):
-        """
-        Fast bit packing version of bin2int.
-        Expects x to be shape (..., num_bits) with values of 0 or 1.
-        Returns packed integer indices.
-        """
-        *batch_dims, num_bits = x.shape
-        
-        # Use int32 for intermediate operations (faster than int64)
-        # Only use int64 if we need more than 32 bits
-        compute_dtype = torch.int32 if num_bits <= 31 else torch.int64
-        
-        x_typed = x.to(compute_dtype)
-        shifts = torch.arange(num_bits - 1, -1, -1, dtype=compute_dtype, device=x.device)
-        packed = (x_typed << shifts).sum(dim=-1)
-        
-        return packed.to(return_dtype)
-
+    def bin2int(self, x): # TODO consider making x float32?
+        return torch.matmul(x.to(self.powers_of_2.dtype), self.powers_of_2).to(torch.int64)
+  
     def reset_reservoir(self, samples):
         self.states_parallel.resize_(samples, self.initial_states.size(-1))
         self.states_parallel.copy_(self.initial_states.repeat(samples, 1))
@@ -339,9 +282,12 @@ class BooleanReservoir(nn.Module):
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
-                # perturbations_i = (x_i.to(torch.float16) @ w_in_i.to(torch.float16)) > 0 # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation, TODO gpu doesnt like uint8...
-                perturbations_i = (x_i.float() @ w_in_i.float()) > 0
-                self.states_parallel[:m, selected_input_indices] = self.input_pertubation(self.states_parallel[:m, selected_input_indices], perturbations_i[:, selected_input_indices]).to(torch.uint8)
+                perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8)
+                # perturbations_i = ((x_i.to(torch.float32) @ w_in_i.to(torch.float32)) > 0).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
+                self.states_parallel[:m, selected_input_indices] = self.input_pertubation(
+                    self.states_parallel[:m, selected_input_indices],
+                    perturbations_i[:, selected_input_indices]
+                )
 
                 self.batch_record(m, phase='input_layer', s=si+1, f=ci+1)
 
@@ -355,10 +301,7 @@ class BooleanReservoir(nn.Module):
 
                     # Apply mask as the adj_list has invalid connections due to homogenized tensor
                     neighbour_states_paralell &= self.adj_list_mask 
-
-                    idx = self.bin2int_matrix(neighbour_states_paralell) # TODO test packed
-                    # idx = self.bin2int_packed(neighbour_states_paralell) # TODO test packed
-                    # idx = self.bin2int(neighbour_states_paralell)
+                    idx = self.bin2int(neighbour_states_paralell)
 
                     # Update the state with LUT for each node I + R
                     # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices

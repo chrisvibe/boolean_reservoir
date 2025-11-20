@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch
-from projects.boolean_reservoir.code.utils.utils import set_seed, CudaMemoryManager
+from projects.boolean_reservoir.code.utils.utils import set_seed
 from projects.boolean_reservoir.code.reservoir import BooleanReservoir
 from projects.boolean_reservoir.code.graph_visualizations_dash import *
 from projects.boolean_reservoir.code.parameters import * 
@@ -46,15 +46,14 @@ def criterion_strategy(strategy):
     return critertion_map[strategy]()
 
 def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None):
-    mem = CudaMemoryManager()
-    mem.manage_memory()
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
-    model.to(mem.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
     P = model.P
 
     # Init data
-    dataset = dataset_init(P).to(mem.device)
+    dataset = dataset_init(P).to(device)
     _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
     if save_model:
         model.save()

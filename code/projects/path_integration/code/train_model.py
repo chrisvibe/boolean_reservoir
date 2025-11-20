@@ -28,10 +28,8 @@ if __name__ == '__main__':
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0], ir_subtitle=True)
 
     # profiling
-    from projects.boolean_reservoir.test.profiling2 import profile_training_function 
-    config = 'projects/path_integration/test/config/2D/single_run/test_model_profiling.yaml'
-    profile_training_function(config, out_dir='out')
-
+    from projects.boolean_reservoir.test.profile_bin2int import main 
+    main()
 
 #     # # # playground 
 #     # # #####################################

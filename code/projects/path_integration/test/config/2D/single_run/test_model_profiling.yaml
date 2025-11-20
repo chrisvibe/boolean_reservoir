@@ -23,7 +23,7 @@ model:
     evaluation: 'test' 
     seed: 0
 logging:
-  out_path: '/tmp/boolean_reservoir/out/test/path_integration/2D/single_run/test_model'
+  out_path: 'out/test/profiling/path_integration/2D/single_run/test_model_profiling'
 dataset:
   dimensions: 2
   steps: 5

@@ -1,6 +1,7 @@
 import pandas as pd
 from projects.boolean_reservoir.code.parameters import * 
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from projects.boolean_reservoir.code.utils.utils import print_pretty_binary_matrix, override_symlink
 from projects.boolean_reservoir.code.utils.param_utils import ExpressionEvaluator 
 from projects.boolean_reservoir.code.graphs import random_constrained_stub_matching, constrain_degree_of_bipartite_mapping
@@ -233,6 +234,36 @@ class InputPerturbationStrategy: # assumes states is only input nodes
             raise ValueError(f'Unknown perturbation strategy: {strategy}')
         return strategies[strategy] 
 
+class InitializationStrategy:
+    @staticmethod
+    def random(n_nodes):
+        return torch.randint(0, 2, (1, n_nodes), dtype=torch.uint8)
+    
+    @staticmethod
+    def zeros(n_nodes):
+        return torch.zeros((1, n_nodes), dtype=torch.uint8)
+    
+    @staticmethod
+    def ones(n_nodes):
+        return torch.ones((1, n_nodes), dtype=torch.uint8)
+    
+    @staticmethod
+    def every_other(n_nodes):
+        states = InitializationStrategy.zeros(n_nodes)
+        states[0, ::2] = 1
+        return states
+    
+    @staticmethod
+    def get(strategy: str):
+        strategies = {
+            'random': InitializationStrategy.random,
+            'zeros': InitializationStrategy.zeros,
+            'ones': InitializationStrategy.ones,
+            'every_other': InitializationStrategy.every_other
+        }
+        if strategy not in strategies:
+            raise ValueError(f'Unknown initialization strategy: {strategy}')
+        return strategies[strategy]
 
 class OutputActivationStrategy:
     @staticmethod
@@ -428,3 +459,12 @@ class BipartiteMappingStrategy:
     def _out_degree(p: Params, a: int, b: int, parameters_str: str):
         """Out-degree strategy: constrain outgoing connections per node."""
         return BipartiteMappingStrategy._constrain_degree(p, a, b, parameters_str, in_degree=False)
+
+def homogenize_adj_list(adj_list, max_length): # tensor may have less than max_length columns if not needed
+    adj_list_tensors = [torch.tensor(sublist, dtype=torch.long) for sublist in adj_list]
+    padded_tensor = pad_sequence(adj_list_tensors, batch_first=True, padding_value=-1)
+    padded_tensor = padded_tensor[:, :max_length]
+    valid_mask = padded_tensor != -1
+    padded_tensor[~valid_mask] = 0
+    no_neighbours_mask = ~valid_mask.any(dim=1) # if all neigbours are off its not the same as having no neighbours
+    return padded_tensor, valid_mask, no_neighbours_mask

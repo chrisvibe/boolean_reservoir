@@ -116,52 +116,6 @@ def override_symlink(source: Path, link: Path = None):
         # Fail silently - symlink is not critical
         pass
 
-class CudaMemoryManager: # TODO This class works but its bad and is not recommended for multi-gpu setting...
-    def __init__(self, ratio_threshold=0.9, verbose=True):
-        if verbose:
-            self.gpu_check()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Initialize memory tracking for each device
-        if torch.cuda.is_available(): 
-            self.num_gpus = torch.cuda.device_count()
-            self.mem_capacity_per_gpu = []
-            self.mem_last_reserved_per_gpu = []
-            
-            for dev_idx in range(self.num_gpus):
-                memory_capacity = torch.cuda.get_device_properties(dev_idx).total_memory
-                self.mem_capacity_per_gpu.append(memory_capacity)
-                self.mem_last_reserved_per_gpu.append(0)
-            
-            self.ratio_threshold = ratio_threshold
-            self.manage_memory = self._cuda_manage_memory
-        else:
-            self.manage_memory = self._cpu_manage_memory
-    
-    def _cuda_manage_memory(self):
-        for dev_idx in range(self.num_gpus):
-            reserved_memory = torch.cuda.memory_reserved(dev_idx)
-            mem_one_iter = reserved_memory - self.mem_last_reserved_per_gpu[dev_idx]
-            self.mem_last_reserved_per_gpu[dev_idx] = reserved_memory
-            ratio = (reserved_memory + mem_one_iter) / self.mem_capacity_per_gpu[dev_idx]
-            if ratio > self.ratio_threshold:
-                torch.cuda.empty_cache()
-                return True
-        return False
-    
-    def _cpu_manage_memory(self):
-        return False
-
-    @staticmethod
-    def gpu_check():
-        if torch.cuda.is_available():
-            print("CUDA is available. PyTorch version:", torch.__version__)
-            print("CUDA version:", torch.version.cuda)
-            print("CUDA device count:", torch.cuda.device_count())
-            print("CUDA devices:", torch.cuda.get_device_name(0))
-        else:
-            print("CUDA is not available.")
-
 def l2_distance(tensor):
     return torch.sqrt((tensor ** 2).sum(axis=1))
 

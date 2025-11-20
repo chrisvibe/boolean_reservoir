@@ -68,4 +68,4 @@ class BaseDataset(nn.Module, Dataset): # TODO refer to datasets by self.x instea
         self.data['y'] = self.normalizer_y(self.data['y'])
     
     def encode_x(self):
-        self.data['x'] = self.encoder_x(self.data['x']) 
+        self.data['x'] = self.encoder_x(self.data['x']).to(torch.uint8)
