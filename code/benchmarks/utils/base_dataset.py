@@ -15,18 +15,33 @@ class BaseDataset(nn.Module, Dataset): # TODO refer to datasets by self.x instea
         new_data = {key: getattr(self, key) for key in self._data.keys() if hasattr(self, key)}
         self._data.update(new_data)
         return self._data
+    
+    def set_data(self, data_dict):
+        """Set initial data and register as buffers"""
+        for key, tensor in data_dict.items():
+            if hasattr(self, key):
+                delattr(self, key)
+            self.register_buffer(key, tensor)
+        self._sync_buffers_to_dict()
+    
+    # accesses is equivalent with: self.data['x'], self._data['x'], self.x
+    def _sync_buffers_to_dict(self):
+        """Internal: sync registered buffers back to _data dict"""
+        for key in self._data.keys():
+            if hasattr(self, key):
+                self._data[key] = getattr(self, key)
 
     def split_dataset(self, split=[0.8, 0.1, 0.1]):
         split_train = split[0] if self.D.split is None else self.D.split.train
         split_dev = split[1] if self.D.split is None else self.D.split.dev
         split_test = split[2] if self.D.split is None else self.D.split.test
         assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
-        x, y = self.data['x'], self.data['y']
+        x, y = self._data['x'], self._data['y']
         idx = torch.randperm(x.size(0))
 
         train_end, dev_end = floor(split_train * x.size(0)), floor((split_train + split_dev) * x.size(0))
 
-        data = {
+        split_data = {
             'x': x[idx[:train_end]],
             'y': y[idx[:train_end]],
             'x_dev': x[idx[train_end:dev_end]],
@@ -34,10 +49,11 @@ class BaseDataset(nn.Module, Dataset): # TODO refer to datasets by self.x instea
             'x_test': x[idx[dev_end:]],
             'y_test': y[idx[dev_end:]],
         }
-        for key, tensor in data.items(): # accesses with self.data['x'] is the same as self.x
+        for key, tensor in split_data.items(): 
             if hasattr(self, key):
                 delattr(self, key) 
             self.register_buffer(key, tensor)
+        self._sync_buffers_to_dict()
     
     def save_data(self):
         self.D.path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,16 +72,16 @@ class BaseDataset(nn.Module, Dataset): # TODO refer to datasets by self.x instea
         self.encoder_x = encoder_x
 
     def __len__(self):
-        return self.data['x'].size(0)
+        return self._data['x'].size(0)
     
     def __getitem__(self, idx):
-        x = self.data['x'][idx]
-        y = self.data['y'][idx]
+        x = self._data['x'][idx]
+        y = self._data['y'][idx]
         return x, y
 
     def normalize(self):
-        self.data['x'] = self.normalizer_x(self.data['x'])
-        self.data['y'] = self.normalizer_y(self.data['y'])
+        self._data['x'] = self.normalizer_x(self._data['x'])
+        self._data['y'] = self.normalizer_y(self._data['y'])
     
     def encode_x(self):
-        self.data['x'] = self.encoder_x(self.data['x']).to(torch.uint8)
+        self._data['x'] = self.encoder_x(self._data['x']).to(torch.uint8)

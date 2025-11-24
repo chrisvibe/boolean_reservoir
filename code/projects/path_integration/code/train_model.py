@@ -30,23 +30,9 @@ if __name__ == '__main__':
     # profiling
     from projects.boolean_reservoir.test.profile_bin2int import main 
     main()
-
-#     # # # playground 
-#     # # #####################################
-#     # configs = [
-#     #     # 'config/path_integration/1D/grid_search/initial_sweep.yaml',
-#     #     # 'config/path_integration/2D/grid_search/initial_sweep.yaml',
-#     #     # 'config/path_integration/1D/single_run/good_model.yaml',
-#     #     'config/path_integration/2D/single_run/good_model.yaml',
-#     # ]
-#     # for c in configs:
-#     #     from projects.boolean_reservoir.code.parameters import load_yaml_config 
-#     #     from projects.boolean_reservoir.code.parameters import generate_param_combinations 
-#     #     P = load_yaml_config(c)
-#     #     P = generate_param_combinations(P)[0]
-#     #     p, model, dataset, history = train_single_model(parameter_override=P, dataset_init=d().dataset_init, accuracy=a().accuracy)
-#     #     plot_many_things(model, dataset, history)
-#     #     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0], ir_subtitle=False)
+    from projects.boolean_reservoir.test.profile_reservoir import main 
+    config = 'projects/path_integration/test/config/2D/single_run/test_model_profiling.yaml'
+    main(config)
 
     # # Grid search stuff 
     # #####################################
@@ -81,9 +67,10 @@ if __name__ == '__main__':
     #     # 'config/path_integration/2D/grid_search/3_steps/homogeneous_deterministic.yaml',
     #     # 'config/path_integration/2D/grid_search/3_steps/homogeneous_stochastic.yaml',
 
-    #     'config/path_integration/2D/grid_search/design_choices/test.yaml',
-    #     'config/path_integration/2D/grid_search/design_choices/test_homogeneous_deterministic.yaml',
-    #     'config/path_integration/2D/grid_search/design_choices/test_homogeneous_deterministic2.yaml',
+    #     'config/path_integration/2D/grid_search/design_choices_prep/all.yaml',
+    #     'config/path_integration/2D/grid_search/design_choices_prep/test_optim.yaml',
+    #     'config/path_integration/2D/grid_search/design_choices_prep/test_w_ir_redundancy_vs_bit_redundancy_reference.yaml',
+    #     'config/path_integration/2D/grid_search/design_choices_prep/test_w_ir_redundancy_vs_bit_redundancy.yaml',
     # ]
 
     # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
@@ -95,8 +82,8 @@ if __name__ == '__main__':
     # node_job_assigments = {
     #     1: [0],
     #     3: [],
-    #     7: [-2],
-    #     6: [-1],
+    #     7: [-3],
+    #     8: [-1, -2],
     #     10: [],
     #     11: [],
     #     'unknown': [-1],

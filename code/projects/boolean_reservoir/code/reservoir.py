@@ -12,7 +12,7 @@ class BooleanReservoir(nn.Module):
     # load_path can be a yaml file or a checkpoint directory
     # a yaml file doesnt load any parameters while a checkpoint does
     # params can be used to override stuff in conjunction with load_path
-    def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
+    def __init__(self, params: Params=None, load_path=None, load_dict=dict(), ignore_gpu=False):
         if load_path:
             load_path = Path(load_path)
             if load_path.suffix in ['.yaml', '.yml']:
@@ -110,6 +110,7 @@ class BooleanReservoir(nn.Module):
             self.L.history.save_path = self.save_path / 'history'
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
+            self.device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
 
             # TYPE OPTIMIZATION + BUFFER REGISTRATION
             '''
@@ -118,6 +119,9 @@ class BooleanReservoir(nn.Module):
             torch.float32  # arithmetic (profiling atm says this is best) 
             torch.int64    # indices for tensor indexing
             '''
+
+            type_arithmetic = torch.float32
+            type_states = torch.uint8
             self.register_buffer("node_indices", node_indices.to(torch.int64)) # indices
             self.register_buffer("input_nodes_mask", input_nodes_mask.to(torch.bool)) # mask
             self.register_buffer("ticks", ticks.to(torch.uint8)) # pure lookup
@@ -125,10 +129,10 @@ class BooleanReservoir(nn.Module):
             self.register_buffer("adj_list", adj_list.to(torch.int64)) # indices
             self.register_buffer("adj_list_mask", adj_list_mask.to(torch.bool)) # mask
             self.register_buffer("no_neighbours_indices", no_neighbours_indices.to(torch.int64)) # indices
-            self.register_buffer("lut", lut.to(torch.uint8)) # pure lookup
-            self.register_buffer("powers_of_2", powers_of_2.to(torch.float32)) # arithmetic with states
-            self.register_buffer("initial_states", initial_states.to(torch.uint8)) # arithmetic with states
-            self.register_buffer("states_parallel", states_parallel.to(torch.uint8)) # arithmetic with states
+            self.register_buffer("lut", lut.to(type_states)) # assigns to states
+            self.register_buffer("powers_of_2", powers_of_2.to(type_arithmetic)) # arithmetic with states
+            self.register_buffer("initial_states", initial_states.to(type_states)) # arithmetic with states
+            self.register_buffer("states_parallel", states_parallel.to(type_states)) # arithmetic with states
             self.register_buffer("output_nodes_mask", output_nodes_mask.to(torch.bool)) # mask
 
             # OTHER
@@ -220,7 +224,7 @@ class BooleanReservoir(nn.Module):
     def precompute_minimal_powers_of_2(bits):
         return (2 ** torch.arange(bits, dtype=torch.float32).flip(0))
     
-    def bin2int(self, x): # TODO consider making x float32?
+    def bin2int(self, x): # consider making x (states) float32?
         return torch.matmul(x.to(self.powers_of_2.dtype), self.powers_of_2).to(torch.int64)
   
     def reset_reservoir(self, samples):
@@ -281,7 +285,7 @@ class BooleanReservoir(nn.Module):
                 b += k 
                 w_in_i = self.w_in[a:b]
                 a = b
-                selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0]
+                selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0] # TODO can be pre-computed per chunk
                 perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8)
                 # perturbations_i = ((x_i.to(torch.float32) @ w_in_i.to(torch.float32)) > 0).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
                 self.states_parallel[:m, selected_input_indices] = self.input_pertubation(

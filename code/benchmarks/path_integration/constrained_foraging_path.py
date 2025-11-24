@@ -231,19 +231,19 @@ def stretch_polygon(boundary: PolygonBoundary, stretch_x: float=1, stretch_y: fl
 
 if __name__ == '__main__':
 
-    dim = 1
-    # # -------------------------------------------------------------
-    # boundary = NoBoundary()
-    boundary = IntervalBoundary() 
-    strategy = LevyFlightStrategy(dim=dim, alpha=4.0, momentum=0, step_size=0.1)
-
-    # dim = 2
-    # # -------------------------------------------------------------
+    # dim = 1
+    # # # -------------------------------------------------------------
     # # boundary = NoBoundary()
-    # square = generate_polygon_points(4, 1, rotation=np.pi/4) 
-    # boundary = PolygonBoundary(points=square)
-    # # strategy = SimpleRandomWalkStrategy(1)
-    # strategy = LevyFlightStrategy(dim=dim, alpha=3, momentum=0.9)
+    # boundary = IntervalBoundary() 
+    # strategy = LevyFlightStrategy(dim=dim, alpha=2.0, momentum=0, step_size=0.1)
+
+    dim = 2
+    # -------------------------------------------------------------
+    # boundary = NoBoundary()
+    octagon = generate_polygon_points(n_sides=8, radius=1, rotation=np.pi/4) 
+    boundary = PolygonBoundary(points=octagon)
+    # strategy = SimpleRandomWalkStrategy(1)
+    strategy = LevyFlightStrategy(dim=dim, alpha=2, momentum=0.0, step_size=0.2)
 
     # Simulate the walk
     steps = 100

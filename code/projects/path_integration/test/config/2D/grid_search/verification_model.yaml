@@ -15,8 +15,8 @@ model:
     n_outputs: 2
   training:
     seed: 0
-    batch_size: 100
-    epochs: 100
+    batch_size: 128
+    epochs: 200
     accuracy_threshold: 0.05
     evaluation: 'test' 
 logging:
@@ -25,13 +25,13 @@ dataset:
   dimensions: 2
   steps: 5
   strategy:
-      - name: SimpleRandomWalkStrategy
-        params:
-          max_step_size: 0.2
+      # - name: SimpleRandomWalkStrategy
+      #   params:
+      #     max_step_size: 0.2
       - name: LevyFlightStrategy
         params:
-          step_size: .1
-          alpha: 10
+          step_size: 1.0
+          alpha: 10 # alpha is high as 5 steps give small exploration and hard to learn
           momentum: 0.0
   boundary:
     name: PolygonBoundary
@@ -43,5 +43,5 @@ dataset:
     train: 0.8
     dev: 0.1
     test: 0.1
-  samples: 10000
+  samples: 20000
   seed: 0

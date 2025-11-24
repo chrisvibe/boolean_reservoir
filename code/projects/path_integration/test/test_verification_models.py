@@ -102,11 +102,8 @@ def test_path_integration_verification_models(model_class, config_path):
         
         assert trained_model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
 
-
-
-
 if __name__ == '__main__':
-    P = load_yaml_config('projects/path_integration/test/config/1D/grid_search/verification_model.yaml')
+    # P = load_yaml_config('projects/path_integration/test/config/1D/grid_search/verification_model.yaml')
     P = load_yaml_config('projects/path_integration/test/config/2D/grid_search/verification_model.yaml')
     for pi in generate_param_combinations(P):
         pi.M.I.seed = pi.D.seed = 0 # consistancy for debug

@@ -144,7 +144,7 @@ class OutputParams(BaseModel): # TODO add w_out and distribution like in input_l
 
 class TrainingParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
-    batch_size: Union[int, List[int]] = Field(32, description="Number of samples per forward pass")
+    batch_size: Union[int, List[int]] = Field(128, description="Number of samples per forward pass")
     criterion: Optional[Union[str, List[str]]] = Field('MSE', description="ML criterion, fex MSE, BCE")
     epochs: Union[int, List[int]] = Field(100, description="Number of epochs")
     accuracy_threshold: Union[float, List[float]] = Field(0.5, description="Threshold for generic accuracy metric")
@@ -152,7 +152,7 @@ class TrainingParams(BaseModel):
     shuffle: bool = Field(True, description="Shuffle dataset")
     drop_last: bool = Field(True, description="Drop last")
     optim: DynamicParams = Field(
-        default=DynamicParams(name='adamw', params={'lr': 0.001}),
+        default=DynamicParams(name='adam', params={'lr': 1e-3, 'weight_decay': 1e-3}), # standard for RC in litterature (ridge)
         description="Optimizer configuration"
     )
     

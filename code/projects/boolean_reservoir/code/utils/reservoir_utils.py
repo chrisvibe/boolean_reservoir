@@ -107,7 +107,11 @@ class SaveAndLoadModel:
             'graph': lambda path: SaveAndLoadModel.save_graph(path, config['graph']),
             'init_state': lambda path: torch.save(config['initial_states'], path),
             'lut': lambda path: torch.save(config['lut'], path),
-            'weights': lambda path: torch.save(config['state_dict'](), path),
+            'weights': lambda path: torch.save(  # TODO this can be expanded to save any state params also registered buffers 
+                {k: v for k, v in config['state_dict']().items() 
+                if k.startswith('readout.')},
+                path
+            )
         }
 
         for key in P.L.save_keys:
