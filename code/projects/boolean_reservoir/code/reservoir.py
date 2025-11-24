@@ -120,8 +120,8 @@ class BooleanReservoir(nn.Module):
             torch.int64    # indices for tensor indexing
             '''
 
-            type_arithmetic = torch.float32
-            type_states = torch.uint8
+            type_arithmetic = torch.float16 if self.device.type == 'cuda' else torch.float32 # fast according to profile
+            type_states = type_arithmetic 
             self.register_buffer("node_indices", node_indices.to(torch.int64)) # indices
             self.register_buffer("input_nodes_mask", input_nodes_mask.to(torch.bool)) # mask
             self.register_buffer("ticks", ticks.to(torch.uint8)) # pure lookup
@@ -286,12 +286,11 @@ class BooleanReservoir(nn.Module):
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0] # TODO can be pre-computed per chunk
-                perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8)
-                # perturbations_i = ((x_i.to(torch.float32) @ w_in_i.to(torch.float32)) > 0).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
-                self.states_parallel[:m, selected_input_indices] = self.input_pertubation(
-                    self.states_parallel[:m, selected_input_indices],
-                    perturbations_i[:, selected_input_indices]
-                )
+                perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
+                # perturbations_i = ((x_i @ w_in_i) > 0).to(torch.uint8)
+                input_slice = self.states_parallel[:m, selected_input_indices]
+                pert_slice = perturbations_i[:, selected_input_indices]
+                self.states_parallel[:m, selected_input_indices] = self.input_pertubation(input_slice, pert_slice).to(self.states_parallel.dtype)
 
                 self.batch_record(m, phase='input_layer', s=si+1, f=ci+1)
 
@@ -304,7 +303,8 @@ class BooleanReservoir(nn.Module):
                     neighbour_states_paralell = self.states_parallel[:m, self.adj_list]
 
                     # Apply mask as the adj_list has invalid connections due to homogenized tensor
-                    neighbour_states_paralell &= self.adj_list_mask 
+                    # neighbour_states_paralell &= self.adj_list_mask 
+                    neighbour_states_paralell *= self.adj_list_mask
                     idx = self.bin2int(neighbour_states_paralell)
 
                     # Update the state with LUT for each node I + R
