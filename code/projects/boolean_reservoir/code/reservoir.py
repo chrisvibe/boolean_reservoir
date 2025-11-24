@@ -84,6 +84,8 @@ class BooleanReservoir(nn.Module):
             )
 
             # Precompute bin2int conversion mask 
+            self.device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
+            self.type_arithmetic = torch.float16 if self.device.type == 'cuda' else torch.float32 # fast according to profile
             powers_of_2 = self.precompute_minimal_powers_of_2(self.max_connectivity) 
 
             # Initialize state (R + I)
@@ -110,7 +112,6 @@ class BooleanReservoir(nn.Module):
             self.L.history.save_path = self.save_path / 'history'
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
-            self.device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
 
             # TYPE OPTIMIZATION + BUFFER REGISTRATION
             '''
@@ -120,17 +121,16 @@ class BooleanReservoir(nn.Module):
             torch.int64    # indices for tensor indexing
             '''
 
-            type_arithmetic = torch.float16 if self.device.type == 'cuda' else torch.float32 # fast according to profile
-            type_states = type_arithmetic 
+            type_states = self.type_arithmetic 
             self.register_buffer("node_indices", node_indices.to(torch.int64)) # indices
             self.register_buffer("input_nodes_mask", input_nodes_mask.to(torch.bool)) # mask
             self.register_buffer("ticks", ticks.to(torch.uint8)) # pure lookup
-            self.register_buffer("w_in", w_in.to(torch.uint8)) # arithmetic with input x
+            self.register_buffer("w_in", w_in.to(type_states)) # arithmetic with input x
             self.register_buffer("adj_list", adj_list.to(torch.int64)) # indices
             self.register_buffer("adj_list_mask", adj_list_mask.to(torch.bool)) # mask
             self.register_buffer("no_neighbours_indices", no_neighbours_indices.to(torch.int64)) # indices
             self.register_buffer("lut", lut.to(type_states)) # assigns to states
-            self.register_buffer("powers_of_2", powers_of_2.to(type_arithmetic)) # arithmetic with states
+            self.register_buffer("powers_of_2", powers_of_2.to(self.type_arithmetic)) # arithmetic with states
             self.register_buffer("initial_states", initial_states.to(type_states)) # arithmetic with states
             self.register_buffer("states_parallel", states_parallel.to(type_states)) # arithmetic with states
             self.register_buffer("output_nodes_mask", output_nodes_mask.to(torch.bool)) # mask
@@ -220,12 +220,12 @@ class BooleanReservoir(nn.Module):
         if self.history:
             self.history.flush()
 
-    @staticmethod
-    def precompute_minimal_powers_of_2(bits):
-        return (2 ** torch.arange(bits, dtype=torch.float32).flip(0))
+    def precompute_minimal_powers_of_2(self, bits):
+        return (2 ** torch.arange(bits, dtype=self.type_arithmetic).flip(0))
     
     def bin2int(self, x): # consider making x (states) float32?
-        return torch.matmul(x.to(self.powers_of_2.dtype), self.powers_of_2).to(torch.int64)
+        result = torch.matmul(x, self.powers_of_2).to(torch.int64)
+        return result.clamp(max=self.lut.shape[1] - 1)  # Ensure we never exceed valid indices due to imprecision
   
     def reset_reservoir(self, samples):
         self.states_parallel.resize_(samples, self.initial_states.size(-1))
@@ -286,8 +286,8 @@ class BooleanReservoir(nn.Module):
                 w_in_i = self.w_in[a:b]
                 a = b
                 selected_input_indices = w_in_i.any(dim=0).nonzero(as_tuple=True)[0] # TODO can be pre-computed per chunk
-                perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
-                # perturbations_i = ((x_i @ w_in_i) > 0).to(torch.uint8)
+                # perturbations_i = (x_i.unsqueeze(-1) & w_in_i).any(dim=1).to(torch.uint8) # some inputs bits may overlap which nodes are perturbed → counts as a single perturbation
+                perturbations_i = ((x_i @ w_in_i) > 0).to(torch.uint8)
                 input_slice = self.states_parallel[:m, selected_input_indices]
                 pert_slice = perturbations_i[:, selected_input_indices]
                 self.states_parallel[:m, selected_input_indices] = self.input_pertubation(input_slice, pert_slice).to(self.states_parallel.dtype)
@@ -304,8 +304,9 @@ class BooleanReservoir(nn.Module):
 
                     # Apply mask as the adj_list has invalid connections due to homogenized tensor
                     # neighbour_states_paralell &= self.adj_list_mask 
-                    neighbour_states_paralell *= self.adj_list_mask
+                    neighbour_states_paralell *= self.adj_list_mask # TODO mask should match dtype of states
                     idx = self.bin2int(neighbour_states_paralell)
+                    #assert idx.min() >= 0 and idx.max() < self.lut.shape[1], f"idx out of range: min={idx.min()}, max={idx.max()}, lut_size={self.lut.shape[1]}, dtype={self.lut.dtype}, powers_of_2_dtype={self.powers_of_2}, x_dtype={x.dtype}"
 
                     # Update the state with LUT for each node I + R
                     # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
@@ -372,7 +373,7 @@ if __name__ == '__main__':
 
     # test forward pass w. fake data. s steps per sample
     s = 1
-    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.bits // I.features,), dtype=torch.uint8)
+    x = torch.randint(0, 2, (T.batch_size, s, I.features, I.bits // I.features,), dtype=torch.float32)
     model(x)
     print(model(x).detach().numpy())
     model.flush_history()

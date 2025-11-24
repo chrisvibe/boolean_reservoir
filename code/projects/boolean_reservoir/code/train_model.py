@@ -53,6 +53,12 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
 
     # Init data
     dataset = dataset_init(P).to(model.device)
+
+    # TODO experiment cleanup
+    type_arithmetic = torch.float16 if model.device.type == 'cuda' else torch.float32 # fast according to profile
+    data = {k: v.to(type_arithmetic) for k, v in dataset.data.items() if 'x' in k}
+    dataset.set_data(data)
+
     _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
     if save_model:
         model.save()
