@@ -34,16 +34,16 @@ model:
     epochs: 40
     evaluation: dev
     optim:
-      name: adam
-      params:
-        lr: [1e-1, 1e-2, 1e-3]
-        weight_decay: [0, 1e-1, 1e-2, 1e-3]
-      name: adamw
-      params:
-        lr: [1e-1, 1e-2, 1e-3]
-      name: sgd
-      params:
-        lr: [1e-1, 1e-2, 1e-3]
+      - name: adam
+        params:
+          lr: [1e-1, 1e-2, 1e-3]
+          weight_decay: [0, 1e-1, 1e-2, 1e-3]
+      - name: adamw
+        params:
+          lr: [1e-1, 1e-2, 1e-3]
+      - name: sgd
+        params:
+          lr: [1e-1, 1e-2, 1e-3]
 dataset:
   dimensions: 2
   steps: 5

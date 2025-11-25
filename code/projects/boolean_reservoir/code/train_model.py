@@ -48,11 +48,12 @@ def criterion_strategy(strategy):
 def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None, ignore_gpu=False):
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path, ignore_gpu=False)
-    model.to(model.device)
+    device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
+    model.to(device)
     P = model.P
 
     # Init data
-    dataset = dataset_init(P).to(model.device)
+    dataset = dataset_init(P).to(device)
     _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
     if save_model:
         model.save()
@@ -70,7 +71,7 @@ def optimizer_strategy(p: DynamicParams, model: nn.Module):
  
     return p.call(opt_map[p.name], params=model.parameters())
 
-
+# Assumption: the .to(device) call is made outside this function since the data is small
 def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
     T = model.P.model.training
     set_seed(T.seed)
@@ -87,7 +88,6 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
         epoch_correct_train_predictions = epoch_train_loss = 0
         model.train()
         for x, y in data_loader:
-            x, y = x.to(model.device), y.to(model.device) # TODO .to(device) before entering this func == less overhead?
             optimizer.zero_grad()
             y_hat = model(x)
             loss = criterion(y_hat, y)

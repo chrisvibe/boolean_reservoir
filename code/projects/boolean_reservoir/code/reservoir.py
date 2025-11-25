@@ -12,7 +12,7 @@ class BooleanReservoir(nn.Module):
     # load_path can be a yaml file or a checkpoint directory
     # a yaml file doesnt load any parameters while a checkpoint does
     # params can be used to override stuff in conjunction with load_path
-    def __init__(self, params: Params=None, load_path=None, load_dict=dict(), ignore_gpu=False):
+    def __init__(self, params: Params=None, load_path=None, load_dict=dict()):
         if load_path:
             load_path = Path(load_path)
             if load_path.suffix in ['.yaml', '.yml']:
@@ -110,7 +110,6 @@ class BooleanReservoir(nn.Module):
             self.L.history.save_path = self.save_path / 'history'
             self.record_history = self.L.history.record_history
             self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
-            self.device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
 
             # TYPE OPTIMIZATION + BUFFER REGISTRATION
             '''
@@ -120,7 +119,7 @@ class BooleanReservoir(nn.Module):
             torch.int64    # indices for tensor indexing
             '''
 
-            type_arithmetic = torch.float32
+            type_arithmetic = torch.float32 # TODO dynamic - cpu: float32, gpu: float16 (or install libs that support uint better / switch framwork to c++ etc)
             type_states = torch.uint8
             self.register_buffer("node_indices", node_indices.to(torch.int64)) # indices
             self.register_buffer("input_nodes_mask", input_nodes_mask.to(torch.bool)) # mask

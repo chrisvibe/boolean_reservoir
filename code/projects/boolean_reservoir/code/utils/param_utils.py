@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import yaml
 from itertools import product
-from typing import List, Callable, Dict, Any
+from typing import List, Callable, Dict, Any, ClassVar
 from pathlib import Path, PosixPath, WindowsPath
 import sympy
 from inspect import signature, Parameter
@@ -25,45 +25,49 @@ def calculate_w_broadcasting(operator: Callable[[float, float], float], a, b):
     else:
         return operator(a, b)
 
-def generate_param_combinations(params: BaseModel) -> List[BaseModel]:
-    def expand_params(params: Any) -> List[Dict[str, Any]]:
-        if isinstance(params, BaseModel):
-            params_dict = params.__dict__
-            expandable = {}
-            for k in params_dict.keys():
-                field_info = type(params).model_fields.get(k)
-                expand = True
-                if field_info and field_info.json_schema_extra is not None:
-                    expand = field_info.json_schema_extra.get('expand', True)
-                expandable[k] = expand
-        elif isinstance(params, dict):
-            params_dict = params
-            expandable = {k: True for k in params_dict.keys()}
-        elif isinstance(params, list):
-            return params
+def generate_param_combinations(params):
+    if not isinstance(params, list):
+        params = [params]
+
+    all_combinations = []
+    for param in params:
+        if isinstance(param, BaseModel):
+            params_dict = {}
+            for field_name, field_info in param.model_fields.items():
+                value = getattr(param, field_name)
+                if field_info.json_schema_extra and field_info.json_schema_extra.get('expand', True) is False:
+                    params_dict[field_name] = [value]
+                else:
+                    params_dict[field_name] = generate_param_combinations(value)
+            all_combinations.extend(
+                _generate_combinations_from_dict(params_dict, param.__class__)
+            )
+        elif isinstance(param, dict):
+            expanded = {k: generate_param_combinations(v) for k, v in param.items()}
+            all_combinations.extend(
+                _generate_combinations_from_dict(expanded, dict)
+            )
+        elif isinstance(param, list) and not any(isinstance(x, (BaseModel, dict)) for x in param):
+            return param
         else:
-            return [params]
-        
-        expanded_dict = {}
-        for k, v in params_dict.items():
-            if expandable[k]:
-                expanded_dict[k] = expand_params(v)
-            else:
-                expanded_dict[k] = [v]
-        
-        keys = expanded_dict.keys()
-        values = [expanded_dict[k] for k in keys]
-        combinations = product(*values)
-        return [dict(zip(keys, combo)) for combo in combinations]
+            all_combinations.append(param)
+    return all_combinations
 
-    expanded_params = expand_params(params)
-    result_params_list = []
 
-    for combo_dict in expanded_params:
-        new_params_dict = {k: type(params.__dict__[k])(**combo_dict[k]) if isinstance(params.__dict__[k], BaseModel) else combo_dict[k] for k in params.__dict__.keys()}
-        result_params_list.append(type(params)(**new_params_dict))
-    
-    return result_params_list
+def _generate_combinations_from_dict(expanded_fields, original_type):
+    import itertools
+    field_names = list(expanded_fields.keys())
+    field_values = expanded_fields.values()
+    combos = []
+    for combo in itertools.product(*field_values):
+        if original_type == list:
+            combos.append(list(combo))
+        elif original_type == dict:
+            combos.append(dict(zip(field_names, combo)))
+        else:
+            combos.append(original_type(**dict(zip(field_names, combo))))
+    return combos
+
 
 class ExpressionEvaluator:
     def __init__(self, symbols: dict = None):
@@ -127,3 +131,21 @@ class DynamicParams(BaseModel):
         # Merge defaults with valid params
         final_params = {**defaults, **valid_params}
         return func(**final_params)
+
+    _evaluator: ClassVar[ExpressionEvaluator] = ExpressionEvaluator()
+    
+    @field_validator('params')
+    @classmethod
+    def evaluate_expressions(cls, v):
+        """Evaluate any expressions in params"""
+        def evaluate_value(x):
+            if isinstance(x, str):
+                try:
+                    return cls._evaluator.eval(x)  # Now this works
+                except:
+                    return x
+            elif isinstance(x, list):
+                return [evaluate_value(item) for item in x]
+            return x
+        
+        return {key: evaluate_value(value) for key, value in v.items()}

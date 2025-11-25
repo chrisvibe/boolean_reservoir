@@ -151,7 +151,7 @@ class TrainingParams(BaseModel):
     evaluation: Optional[str] = Field('test', description="test, dev, train etc")
     shuffle: bool = Field(True, description="Shuffle dataset")
     drop_last: bool = Field(True, description="Drop last")
-    optim: DynamicParams = Field(
+    optim: Union[DynamicParams, List[DynamicParams]] = Field(
         default=DynamicParams(name='adam', params={'lr': 1e-3, 'weight_decay': 1e-3}), # standard for RC in litterature (ridge)
         description="Optimizer configuration"
     )
@@ -236,3 +236,36 @@ def load_yaml_config(filepath):
 def save_yaml_config(base_model: BaseModel, filepath):
     with open(filepath, 'w') as file:
         yaml.dump(base_model.model_dump(), file)
+
+if __name__ == '__main__':
+    class Params(BaseModel):
+        optim: Union[DynamicParams, List[DynamicParams]] = Field(
+            default=DynamicParams(name='adam', params={'lr': 1e-3, 'weight_decay': 1e-3}), # standard for RC in litterature (ridge)
+            description="Optimizer configuration"
+        )
+        save_keys: Optional[List[str]] = Field(
+            default=['parameters', 'w_in'],
+            description="Only save these model objects",
+            json_schema_extra={'expand': False}  # Mark as non-expandable
+        )
+    p = Params(
+        optim=[
+            DynamicParams(
+                name="adam",
+                params={
+                    "lr": [1e-1, 1e-2, 1e-3],
+                    "a": [1, 2],
+                },
+            ),
+            DynamicParams(
+                name="adamw",
+                params={
+                    "lr": [1e-1, 1e-2, 1e-3],
+                },
+            ),
+        ]
+    )
+    from projects.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
+    P = generate_param_combinations(p)
+    for p in P:
+        print(p)
