@@ -20,7 +20,6 @@ model:
   reservoir_layer:
     init: [zeros, random]
     k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-    k_avg: [4.0, 5.0, 6.0]
     k_min: 0
     k_max: [10, 15, 20, 25] # interesting number of attractors
     mode: [homogeneous, heterogeneous]
