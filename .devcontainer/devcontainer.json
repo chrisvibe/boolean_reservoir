@@ -1,6 +1,7 @@
 {
     "name": "boolean_reservoir",
     "image": "boolean_reservoir:1.0",
+    "remoteUser": "vscode",
     "features": {
         "ghcr.io/devcontainers/features/python:1": {}
     },
@@ -11,6 +12,7 @@
         "source=${localWorkspaceFolder}/data,target=/data,type=bind",
         "source=${localWorkspaceFolder}/out,target=/out,type=bind"
     ],
+    "postCreateCommand": "sudo chown -R vscode:vscode /code /data /out",
     "customizations": {
         "vscode": {
             "settings": {

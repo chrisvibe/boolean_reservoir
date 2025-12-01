@@ -6,7 +6,7 @@ from project.boolean_reservoir.code.parameter import *
 from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
 from project.boolean_reservoir.code.visualization import plot_grid_search
 from project.parallel_grid_search.code.train_model_parallel import generic_parallel_grid_search
-from project.parallel_grid_search.code.parallel_util import JobInterface
+from project.parallel_grid_search.code.parallel_utils import JobInterface
 from copy import deepcopy
 from typing import Callable
 from torch.utils.data import Dataset
