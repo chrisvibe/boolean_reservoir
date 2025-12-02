@@ -123,7 +123,7 @@ def boolean_reservoir_grid_search(
     # Run generic grid search
     history, best_params = generic_parallel_grid_search(
         job_factory=factory,
-        total_configs=len(param_combinations),
+        total_jobs=len(param_combinations),
         samples_per_config=P.L.grid_search.n_samples,
         output_path=P.L.out_path,
         gpu_memory_per_job_gb=gpu_memory_per_job_gb,
