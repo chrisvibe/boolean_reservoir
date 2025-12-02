@@ -2,7 +2,7 @@ logging:
   out_path: 'out/path_integration/2D/grid_search/design_choices/test'
   grid_search:
     seed: 0
-    n_samples: 1
+    n_samples: 1 # for now
   save_keys: [parameters]
 model:
   input_layer:

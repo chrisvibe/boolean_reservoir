@@ -45,15 +45,12 @@ def criterion_strategy(strategy):
         raise ValueError(f"Unsupported criterion type: {strategy}. Available: {list(critertion_map.keys())}")
     return critertion_map[strategy]()
 
+# TODO handle compiling of model in train_and_evaluate?
 def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None, ignore_gpu=False, compile_model=False, reset_dynamo=True):
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
     device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
     model.to(device)
-    if compile_model:
-        if reset_dynamo:
-            torch._dynamo.reset()
-        model = torch.compile(model)
     P = model.P
 
     # Init data
