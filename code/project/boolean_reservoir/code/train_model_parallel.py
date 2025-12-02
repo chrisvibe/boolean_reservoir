@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Callable
 from torch.utils.data import Dataset
 from torch import _dynamo, compile
+_dynamo.reset()
 
 import logging
 logger = logging.getLogger(__name__)
@@ -32,8 +33,7 @@ class BooleanReservoirJob(JobInterface):
         with self.locks['dataset_lock']:
             dataset = self.dataset_init(self.P).to(device)
         model = BooleanReservoir(self.P).to(device)
-        if device.type == 'cuda': # slow on cpu atm
-            _dynamo.reset()
+        if device.type != 'cuda': # slow on gpu atm TODO this should be an option with the rest of parallel_grid_search project
             model = compile(model)
         best_epoch, trained_model, _ = train_and_evaluate(
             model, dataset, record_stats=False, verbose=False, accuracy=self.accuracy
