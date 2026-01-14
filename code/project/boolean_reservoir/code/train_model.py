@@ -116,9 +116,9 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
                 if verbose:
                     print(f"Epoch: {stats['epoch']:0{len(str(T.epochs))}d}/{T.epochs}, Loss: {stats['loss_' + T.evaluation]:.4f}, Accuracy: {stats['accuracy_' + T.evaluation]:.4f}")
         # deterministic reservoirs only need history from the first epoch
-        if hasattr(model, 'flush_history') and model.record_history:
+        if hasattr(model, 'flush_history') and model.record:
             model.flush_history()
-            model.record_history = False
+            model.record = False
     if verbose:
         print(f'Best loss: {best_stats}')
     model.P.L.train_log.accuracy = best_stats['accuracy']

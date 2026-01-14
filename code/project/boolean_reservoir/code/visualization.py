@@ -12,6 +12,12 @@ from project.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
 from project.boolean_reservoir.code.utils.utils import load_grid_search_results
+from project.boolean_reservoir.code.utils.explore_grid_search_data import make_combo_column
+from project.boolean_reservoir.code.utils.categorical_ordering import grayish_sort 
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.io as pio
 import matplotlib
 matplotlib.use('Agg')
 
@@ -443,6 +449,127 @@ def plot_predictions_and_labels(path, y_hat, y, tolerance=0.1, axis_limits=[0, 1
     file = f"{num_dims}D_predictions_versus_labels.png"
     plt.savefig(path / file, bbox_inches='tight')
 
+def polar_design_plot(out_path: Path, df: pd.DataFrame, factors, success_thresh: float, title: str, ascending: list=None):
+    out_path.mkdir(parents=True, exist_ok=True)
+    
+    # Compute success flag
+    df['success'] = (df['accuracy'] > success_thresh).astype(int)
+
+    # Filter out R_k_avg from combo for plotting
+    df['combo_no_k_avg'], factors_subset = make_combo_column(df, factors, exclude='R_k_avg')
+
+    # Aggregation setup
+    cols = {'success': 'mean'}
+    cols.update(dict.fromkeys([f for f in factors if f != 'R_k_avg'], 'first'))
+    df_grouped = df.groupby(['combo_no_k_avg', 'R_k_avg']).agg(cols).reset_index()
+
+    # Sort by factors first
+    ascending = ascending if isinstance(ascending, list) else [ascending if ascending else True for _ in range(len(factors))]
+    df_grouped = df_grouped.sort_values(factors, ascending=ascending).reset_index(drop=True)
+
+    # Refine sort to gray-code style order using latest implementation
+    factors_in_table = [f for f in factors if f != 'R_k_avg']
+    df_grouped = grayish_sort(df_grouped, factors_in_table)
+
+    # Assign polar angles
+    codes, uniques = pd.factorize(df_grouped['combo_no_k_avg'])
+    df_grouped['n'] = codes
+    df_grouped['direction_val'] = (df_grouped['n'] * 360) / len(uniques)
+    df_grouped['direction'] = df_grouped['direction_val'].round(1).astype(str) + '°'
+
+    # Unique directions for tick labels
+    unique_directions = df_grouped[['direction_val', 'direction']].drop_duplicates('direction_val').sort_values('direction_val')
+
+    # Polar configuration helper
+    def get_polar_config(for_svg=False):
+        axis_colors = {}
+        return dict(
+            angularaxis=dict(
+                tickmode='array',
+                tickvals=unique_directions['direction_val'].tolist(),
+                ticktext=unique_directions['direction'].tolist(),
+                rotation=90,
+                direction='clockwise',
+                showticklabels=True,
+                ticks='outside',
+                tickfont=dict(size=8 if for_svg else 10),
+                **axis_colors
+            ),
+            radialaxis=dict(
+                range=[0, 1],
+                tickfont=dict(size=8 if for_svg else 10),
+                **axis_colors
+            )
+        )
+
+    # Create polar plot manually instead of using px.line_polar
+    polar_fig = go.Figure()
+
+    # Get color scale
+    colors = px.colors.sequential.Plasma_r
+    k_avg_values = sorted(df_grouped['R_k_avg'].unique())
+    color_scale = {val: colors[i % len(colors)] for i, val in enumerate(k_avg_values)}
+
+    for k_avg_value in k_avg_values:
+        df_subset = df_grouped[df_grouped['R_k_avg'] == k_avg_value]
+        polar_fig.add_trace(go.Scatterpolar(
+            r=df_subset['success'],
+            theta=df_subset['direction_val'],
+            mode='lines',
+            name=str(k_avg_value),
+            line=dict(color=color_scale[k_avg_value], width=2),
+        ))
+
+    polar_fig.update_layout(
+        polar=get_polar_config(for_svg=True),
+        template="plotly_dark",
+        showlegend=True,
+        legend=dict(title="R_k_avg", font=dict(size=10)),
+        margin=dict(l=5, r=5, t=20, b=20),
+        title=dict(text=title, x=0.85, y=0.05, xanchor='center', yanchor='top', font=dict(size=12)),
+        width=600,
+        height=500,
+    )
+
+    # Combined subplot for table + polar
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.4, 0.6],
+        horizontal_spacing=0.05,
+        specs=[[{"type": "table"}, {"type": "polar"}]]
+    )
+    for trace in polar_fig.data:
+        fig.add_trace(trace, row=1, col=2)
+    fig.update_layout(
+        title=dict(text=title, x=0.85, y=0.05, xanchor='center', yanchor='top'),
+        polar2=get_polar_config(for_svg=False),
+        template="plotly_dark",
+        margin=dict(l=5, r=5, t=20, b=20),
+        showlegend=True,
+        legend=dict(title="R_k_avg")
+    )
+
+    # --- Add mapping table ---
+    df2 = df_grouped.groupby('direction').head(1).reset_index()
+    df_expanded = df2[['direction'] + factors_in_table]
+
+    table_headers = df_expanded.columns.tolist()
+    table_values = df_expanded.values.T.tolist()
+    table = go.Table(
+        header=dict(values=table_headers, fill_color="darkblue", font=dict(color="white", size=10)),
+        cells=dict(values=table_values, fill_color="brown", font=dict(color="white", size=8)),
+    )
+    fig.add_trace(table, row=1, col=1)
+
+    # Save outputs
+    fig.write_html(out_path / 'polar_design.html')
+    pio.write_image(polar_fig, out_path / 'polar_plot.svg', format='svg')
+
+    # Save LaTeX table
+    output_tex = out_path / 'direction_table.tex'
+    df_expanded.columns = [col.replace('_', '-') for col in df_expanded.columns]
+    with open(output_tex, "w") as f:
+        f.write(df_expanded.to_latex(index=False, header=True))
 
 
 if __name__ == '__main__':

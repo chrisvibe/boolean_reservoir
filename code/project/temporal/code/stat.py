@@ -2,6 +2,7 @@ from pathlib import Path
 from project.boolean_reservoir.code.parameter import load_yaml_config, save_yaml_config
 from project.boolean_reservoir.code.visualization import plot_grid_search 
 from project.boolean_reservoir.code.utils.utils import override_symlink, load_grid_search_results
+from project.boolean_reservoir.code.utils.explore_grid_search_data import make_combo_column 
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
 import statsmodels.api as sm
@@ -633,147 +634,6 @@ def save_results(df: pd.DataFrame, fisher_results: Dict,
     print(f"  - analysis_summary.txt")
     print(f"  - combination_stats.csv")
 
-def polar_design_plot(out_path: Path, df: pd.DataFrame, factors, success_thresh: float, title: str):
-    out_path.mkdir(parents=True, exist_ok=True)
-    df['success'] = (df['accuracy'] > success_thresh).astype(int)
-    cols = {'R_k_avg': 'first', 'success': 'mean', 'combo_no_k_avg': 'first'}
-    cols.update(dict.fromkeys(factors, 'first'))
-    df_grouped = df.groupby(['combo']).agg(cols).reset_index()
-    
-    # Expand tuples and sort
-    ascending = [1, 1, 0, 1, 1] # sort within levels ascending or not
-    df_grouped = df_grouped.sort_values(factors, ascending=ascending).reset_index(drop=True)
-    
-    # refine sort to minimize difference in combo
-    from project.temporal.code.categorical_ordering import grayish_sort 
-    sorted_indices = grayish_sort(df_grouped['combo_no_k_avg'])
-    df_grouped = df_grouped.iloc[sorted_indices].reset_index(drop=True)
-    codes, uniques = pd.factorize(df_grouped['combo_no_k_avg'])
-    df_grouped['n'] = codes
-    df_grouped['direction_val'] = (df_grouped['n'] * 360) / len(uniques)
-    df_grouped['direction'] = df_grouped['direction_val'].round(1).astype(str) + '°'
-    
-    # Get unique directions for tick labels
-    unique_directions = df_grouped[['direction_val', 'direction']].drop_duplicates('direction_val').sort_values('direction_val')
-    
-    # Helper function to create polar layout configuration
-    def get_polar_config(for_svg=False):
-        axis_colors = {}
-
-        # if for_svg:
-        #     axis_colors = {
-        #         'linecolor': 'black',
-        #         'gridcolor': 'lightgray'
-        #     }
-        
-        return dict(
-            angularaxis=dict(
-                tickmode='array',
-                tickvals=unique_directions['direction_val'].tolist(),
-                ticktext=unique_directions['direction'].tolist(),
-                rotation=90,
-                direction='clockwise',
-                showticklabels=True,
-                ticks='outside',
-                tickfont=dict(size=8 if for_svg else 10),
-                **axis_colors
-            ),
-            radialaxis=dict(
-                range=[0, 1],
-                tickfont=dict(size=8 if for_svg else 10),
-                **axis_colors
-            )
-        )
-   
-    # Create the polar plot with numerical theta values
-    polar_fig = px.line_polar(
-        df_grouped, 
-        r="success", 
-        theta="direction_val",  # Use numerical values
-        color="R_k_avg", 
-        line_close=True,
-        color_discrete_sequence=px.colors.sequential.Plasma_r
-    )
-    
-    # Set up base polar figure
-    polar_fig.update_layout(
-        polar=get_polar_config(for_svg=True),
-        template="plotly_dark",
-        # template="plotly_white",
-        showlegend=True,
-        legend=dict(title="R_k_avg", font=dict(size=10)),
-        margin=dict(l=5, r=5, t=20, b=20),
-        title=dict(
-            text=title,
-            x=0.85,
-            y=0.05,
-            xanchor='center',
-            yanchor='top',
-            font=dict(size=12)
-        ),
-        width=600,
-        height=500,
-    )
-    
-    # Create combined figure for HTML
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.4, 0.6],
-        horizontal_spacing=0.05,
-        specs=[[{"type": "table"}, {"type": "polar"}]]
-    )
-    
-    # Add traces to subplot
-    for trace in polar_fig.data:
-        fig.add_trace(trace, row=1, col=2)
-    
-    # Update combined figure layout
-    fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.85,
-            y=0.05,
-            xanchor='center',
-            yanchor='top'
-        ),
-        polar2=get_polar_config(for_svg=False),  # Use polar2 for column 2
-        template="plotly_dark",
-        margin=dict(l=5, r=5, t=20, b=20),
-        showlegend=True,
-        legend=dict(title="R_k_avg")
-    )
-    
-    # Add mapping table to column 1
-    df2 = df_grouped.groupby('direction').head(1).reset_index()
-    combo_split = df2['combo_no_k_avg'].apply(pd.Series)
-    combo_split.columns = factors[:-1]
-    df_expanded = pd.concat([df2[['direction']], combo_split], axis=1)
-    table_headers = df_expanded.columns.tolist()
-    table_values = df_expanded.values.T.tolist()
-    table = go.Table(
-        header=dict(
-            values=table_headers,
-            fill_color="darkblue",
-            font=dict(color="white", size=10)
-        ),
-        cells=dict(
-            values=table_values,
-            fill_color="brown",
-            font=dict(color="white", size=8)
-        ),
-    )
-    fig.add_trace(table, row=1, col=1)
-    
-    # Save outputs
-    fig.write_html(out_path / 'polar_design.html')
-    pio.write_image(polar_fig, out_path / 'polar_plot.svg', format='svg')
-    
-    # Save LaTeX table
-    output_tex = out_path / 'direction_table.tex'
-    df_expanded.columns = [col.replace('_', '-') for col in df_expanded.columns]
-    with open(output_tex, "w") as f:
-        f.write(df_expanded.to_latex(index=False, header=True))
-
 def mixed_effects_by_level(df, response, success_thresh, categorical_factors, numerical_factor, out_path):
     """
     Run mixed effects logistic regression separately for each level of numerical factor.
@@ -950,7 +810,7 @@ if __name__ == '__main__':
     #         # polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
     #         graph_accuracy_vs_k_avg(path, df, success_thresh)
     #         # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results', ascending=[1, 1, 0, 1, 1])
 
     #         success_thresh = 0.6
     #         path = out_path / 'parity' / f'delay-{i}_window-{j}'
@@ -960,7 +820,7 @@ if __name__ == '__main__':
     #         # polar_design_plot(path, df, factors, success_thresh, f'task:{path.parent.name}, delay:{i}, window:{j}')
     #         graph_accuracy_vs_k_avg(path, df, success_thresh)
     #         # df, fisher_results, combo_results = binary_stats_analysis(path, df, response, success_thresh)
-    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results')
+    #         # results = mixed_effects_by_level(df=df, response='accuracy', success_thresh=success_thresh, out_path=path / 'mixed_effects_results', ascending=[1, 1, 0, 1, 1])
 
     success_thresh = 0.9
     i = 3

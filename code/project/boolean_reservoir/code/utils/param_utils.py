@@ -111,7 +111,6 @@ class DynamicParams(BaseModel):
         self.params = CallParams(**{key: evaluate_value(value) for key, value in params_dict.items()})
         return self 
 
-
 def generate_param_combinations(params):
     if not isinstance(params, list):
         params = [params]
@@ -119,21 +118,17 @@ def generate_param_combinations(params):
     for param in params:
         if isinstance(param, BaseModel):
             params_dict = {}
-            # Use model_dump() to get all fields including dynamic ones
             all_fields = param.model_dump()
-            
-            for field_name, value in all_fields.items():
-                # Check if field has expand=False metadata
+            for field_name in all_fields.keys():
+                value = getattr(param, field_name)
                 field_info = param.model_fields.get(field_name)
                 should_expand = True
                 if field_info and field_info.json_schema_extra:
                     should_expand = field_info.json_schema_extra.get('expand', True)
-                
                 if not should_expand:
                     params_dict[field_name] = [value]
                 else:
                     params_dict[field_name] = generate_param_combinations(value)
-            
             all_combinations.extend(
                 _generate_combinations_from_dict(params_dict, param.__class__)
             )
@@ -143,7 +138,7 @@ def generate_param_combinations(params):
                 _generate_combinations_from_dict(expanded, dict)
             )
         elif isinstance(param, list) and not any(isinstance(x, (BaseModel, dict)) for x in param):
-            return param
+            all_combinations.append(param)
         else:
             all_combinations.append(param)
     return all_combinations

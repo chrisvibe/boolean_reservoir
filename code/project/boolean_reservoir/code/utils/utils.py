@@ -185,7 +185,7 @@ def save_grid_search_results(df: pd.DataFrame, path: Path):
     df_copy = df.copy()
     df_copy['params'] = df_copy['params'].apply(lambda p: p.model_dump())
     records = df_copy.to_dict(orient='records')
-    yaml.dump_all(records, path.open('w'), sort_keys=False, Dumper=yaml.Dumper)
+    yaml.dump_all(records, path.open('a'), sort_keys=False, Dumper=yaml.Dumper)
 
 def load_grid_search_results(path: Path, convert=True) -> pd.DataFrame:
     """Load grid search results from YAML and reconstruct Params"""

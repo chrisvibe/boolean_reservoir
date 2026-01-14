@@ -4,7 +4,7 @@ from typing import List, Union, Optional
 from pathlib import Path
 from benchmark.path_integration.parameters import PathIntegrationDatasetParams
 from benchmark.temporal.parameters import TemporalDatasetParams
-from project.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams, CallParams
+from project.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams, CallParams, ExpressionEvaluator
 
 pydantic_init()
 
@@ -124,20 +124,32 @@ class ReservoirParams(BaseModel):
     n_nodes: Optional[Union[int, List[int]]] = Field(None, description="Number of reservoir nodes (R) excluding input nodes (I)")
     k_min: Union[int, List[int]] = Field(0, description="Min degree of incoming nodes")
     k_avg: Union[float, List[float]] = Field(2, description="Average degree of incoming nodes")
-    k_max: Union[int, List[int]] = Field(None, description="Maximum degree of incoming nodes")
+    k_max: Optional[Union[str, List[str], int, List[int]]] = Field( None, description="Maximum degree of incoming nodes")
     mode: Union[str, List[str]] = Field('heterogeneous', description="heterogeneous: each node can have different number of neighbours, homogeneous: each node has k neighbours set by k_avg")
     p: Union[float, List[float]] = Field(0.5, description="Probability for 1 in LUT (look up table)")
     reset: Optional[Union[bool, List[bool]]] = Field(True, description="Reset to init state after each sample")
     self_loops: Optional[Union[float, List[float]]] = Field(None, description="Probability of self-loops in graph; normalized by number of nodes")
     init: Union[str, List[str]] = Field('random', description="Initalization strategy for reservoir node states")
 
+    @field_validator('k_max', mode='before')
+    @classmethod
+    def coerce_k_max_to_str(cls, v):
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        elif isinstance(v, int):
+            return str(v)
+        return v
+
     @model_validator(mode='after')
-    def override_for_homogeneous_mode(self):
+    def resolve_and_override(self):
         if self.mode == 'homogeneous':
             if isinstance(self.k_avg, list):
                 self.k_min = self.k_max = 0
             else:
                 self.k_min = self.k_max = int(self.k_avg)
+        elif isinstance(self.k_max, str):
+            context = {'k_avg': self.k_avg, 'k_min': self.k_min}
+            self.k_max = int(ExpressionEvaluator(context).eval(self.k_max))
         return self
 
 class OutputParams(BaseModel): # TODO add w_out and distribution like in input_layer. atm we assume full readout of R
@@ -191,7 +203,7 @@ class GridSearchParams(BaseModel):
     n_samples: Optional[int] = Field(1, ge=1, description="Number of samples per configuration in grid search")
 
 class HistoryParams(BaseModel):
-    record_history: Optional[bool] = Field(False, description="Reservoir dynamics state recording")
+    record: Optional[bool] = Field(False, description="Reservoir dynamics state recording")
     buffer_size: Optional[int] = Field(64, description="Number of batched snapshots per output file")
     save_path: Optional[Path] = Field(Path('out/history'), description="Where model is saved when recording history")
 
@@ -255,7 +267,7 @@ if __name__ == '__main__':
             description="Optimizer configuration"
         )
         save_keys: Optional[List[str]] = Field(
-            default=['parameters', 'w_in'],
+            default=['parameters'],
             description="Only save these model objects",
             json_schema_extra={'expand': False}  # Mark as non-expandable
         )

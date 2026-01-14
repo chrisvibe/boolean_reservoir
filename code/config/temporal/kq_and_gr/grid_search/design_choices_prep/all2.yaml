@@ -1,41 +1,39 @@
 logging:
-  out_path: out/temporal/kq_and_gr/grid_search/test
-  save_keys: ['parameters'] 
-  # save_keys: null 
+  out_path: 'out/temporal/kq_and_gr/grid_search/design_choices/prep2'
+  save_keys: null 
   grid_search:
     seed: 0
     n_samples: 1 # each job completes many samples for this grid search since forward pass is not costly + re-use of datasets
   history:
-    buffer_size: 64
     record: True
 model:
   input_layer:
     w_bi: identity
-    w_ir: out-1:b:1/b
-    encoding: base2
-    interleaving: 0
-    features: 10
+    w_ir: identity 
     pertubation: override
-    redundancy: 1
-    resolution: 1
-    w_in: null
+    encoding: base2
+    features: 10 # PI to this means different input encoding
+    resolution: 1 # PI to this means different input encoding
+    redundancy: 1  # PI to this means different input encoding
+    chunks: 1
+    interleaving: 0
   output_layer:
-    activation: sigmoid
-    n_outputs: 1
+    n_outputs: 2
   reservoir_layer:
-    init: zeros
-    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    init: [zeros, ones, random]
+    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0]
     k_min: 0
-    k_max: 25
-    mode: homogeneous
-    n_nodes: 25
+    # k_max: 10
+    k_max: ['k_avg + 1', 'k_avg + 2', 'k_avg + 3', 'k_avg + 4', 'k_avg + 5', 10] # interesting number of attractors
+    mode: [homogeneous, heterogeneous]
+    n_nodes: [500, 1000, 2000] # EXPLORE WITH KQ AND GR AND TRY THIS LATER
     p: 0.5
     reset: true
-    self_loops: null
+    self_loops: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1] # interesting number of attractors
   training:
-    accuracy_threshold: 0.5
-    batch_size: 100
-    criterion: BCE
+    accuracy_threshold: 0.05
+    batch_size: 1024
+    criterion: MSE
     epochs: 40
     evaluation: dev
 dataset: # this whole section is repurposed to control the custom experiments

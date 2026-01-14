@@ -10,9 +10,7 @@ from project.parallel_grid_search.code.parallel_utils import JobInterface
 from copy import deepcopy
 from typing import Callable
 from torch.utils.data import Dataset
-# from torch import _dynamo, compile
-# _dynamo.reset()
-
+from torch import compile
 import logging
 logger = logging.getLogger(__name__)
 
@@ -33,8 +31,9 @@ class BooleanReservoirJob(JobInterface):
         with self.locks['dataset_lock']:
             dataset = self.dataset_init(self.P).to(device)
         model = BooleanReservoir(self.P).to(device)
-        # if device.type != 'cuda': # slow on gpu atm TODO this should be an option with the rest of parallel_grid_search project, this led to SWAP issues
+        # if device.type != 'cuda': # slow on gpu + recompile erros atm TODO this should be an option with the rest of parallel_grid_search project?
         #     model = compile(model)
+        model = compile(model) # TODO gives issues...
         best_epoch, trained_model, _ = train_and_evaluate(
             model, dataset, record_stats=False, verbose=False, accuracy=self.accuracy
         )
@@ -56,12 +55,6 @@ class BooleanReservoirJob(JobInterface):
                 **best_epoch,
                 'params': self.P
             })
-            
-        # Update best params if needed
-        with self.locks['best_params']:
-            if self.shared['best_params']['loss'] is None or best_epoch['loss'] < self.shared['best_params']['loss']:
-                self.shared['best_params']['loss'] = best_epoch['loss']
-                self.shared['best_params']['params'] = self.P
 
         return {'status': 'completed', 'stats': best_epoch, 'timestamp_utc': timestamp_utc}
 
@@ -91,8 +84,8 @@ def boolean_reservoir_grid_search(
     dataset_init,
     accuracy,
     param_combinations: list = None,
-    gpu_memory_per_job_gb: float = None,
-    cpu_memory_per_job_gb: float = None,
+    gpu_memory_per_job_gb: float = 1,
+    cpu_memory_per_job_gb: float = 1,
     cpu_cores_per_job: int = 1,
 ):
     """Boolean Reservoir specific grid search using the generic function"""
@@ -110,18 +103,18 @@ def boolean_reservoir_grid_search(
     def save_config(output_path):
         save_yaml_config(P, output_path / 'parameters.yaml')
     
-    def process_results(history, best_params, output_path):
+    def process_results(history, output_path, done):
+        file_path = output_path / 'log.yaml'
+
         if history:
             history_df = pd.DataFrame(history)
-            file_path = output_path / 'log.yaml'
             save_grid_search_results(history_df, file_path)
-            plot_grid_search(file_path)
         
-        if best_params and 'params' in best_params:
-            logger.info(f"Best parameters found: {best_params['params']}")
+        if done:
+            plot_grid_search(file_path)
     
     # Run generic grid search
-    history, best_params = generic_parallel_grid_search(
+    generic_parallel_grid_search(
         job_factory=factory,
         total_configs=len(param_combinations),
         samples_per_config=P.L.grid_search.n_samples,
@@ -132,5 +125,4 @@ def boolean_reservoir_grid_search(
         save_config=save_config,
         process_results=process_results,
     )
-    
-    return P, best_params.get('params') if best_params else None
+    return P

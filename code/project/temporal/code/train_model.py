@@ -1,10 +1,10 @@
-# Finding Optimal Random Boolean Networks for Reservoir Computing  David Snyder1, Alireza Goudarzi2, and Christof Teuscher3
 from os import environ
 from project.boolean_reservoir.code.train_model import BooleanAccuracy as a, train_single_model
 from project.temporal.code.dataset_init import TemporalDatasetInit as d
 from project.temporal.code.visualization import plot_many_things
 from project.boolean_reservoir.code.visualization import plot_activity_trace
 from project.boolean_reservoir.code.train_model_parallel import boolean_reservoir_grid_search 
+from project.boolean_reservoir.code.kq_and_gr_metric_parallel import boolean_reservoir_kq_gr_grid_search 
 
 import logging
 import sys
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # from project.boolean_reservoir.code.parameters import generate_param_combinations, load_yaml_config
     # p = load_yaml_config('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
     # p.L.out_path = '/out/debug'
-    # p.L.history.record_history = True
+    # p.L.history.record = True
     # p.L.save_keys = ['parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights']
     # p.M.I.connection = 'out-3:3:1'
     # p.M.I.n_nodes = 10
@@ -75,53 +75,58 @@ if __name__ == '__main__':
     # # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0])
 
-    # Grid search stuff 
+    # KQ/GR Grid Search 
     #####################################
     configs = [
-        'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
-        'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
-        'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
-
-        'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
-        'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
-        'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
-        'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
-
-        # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
-        # 'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
-
-        'config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml',
+        # 'config/temporal/kq_and_gr/grid_search/test.yaml',
+        'config/temporal/kq_and_gr/grid_search/design_choices_prep/all2.yaml',
     ]
+    for config in configs:
+        print(config)
+        boolean_reservoir_kq_gr_grid_search(config)
 
-    node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    if "hpc" in node:
-        logger.info(f"This is hpc node: {node}")
-    else:
-        logger.warning(f"Unknown node detected: {node}")
 
-    node_job_assigments = {
-        1: [0, 7],
-        5: [1, 6],
-        # 7: [2, 5],
-        7: [-1],
-        8: [3, 4],
-        10: [-1],
-        11: [-1],
-        'unknown': [-1],
-    }
-    if node != 'unknown':
-        id = int(node[3:])
-        configs = [configs[idx] for idx in node_job_assigments[id]]
-    else:
-        configs = [configs[idx] for idx in node_job_assigments['unknown']]
+    # # Grid search stuff 
+    # #####################################
+    # configs = [
+    #     'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+    #     'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
+    #     'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
 
-    for c in configs:
-        boolean_reservoir_grid_search(
-            c,
-            dataset_init=d().dataset_init,
-            accuracy=a().accuracy,
-            gpu_memory_per_job_gb = 1/2,
-            cpu_memory_per_job_gb = 1/2,
-            cpu_cores_per_job = 1,
-        )
+    #     'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
+    #     'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
+    #     'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
+    #     'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
+
+    #     # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
+    #     # 'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+
+    #     'config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml',
+    # ]
+
+    # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
+    # if "hpc" in node:
+    #     logger.info(f"This is hpc node: {node}")
+    # else:
+    #     logger.warning(f"Unknown node detected: {node}")
+
+    # node_job_assigments = {
+    #     1: [0, 7],
+    #     5: [1, 6],
+    #     # 7: [2, 5],
+    #     7: [-1],
+    #     8: [3, 4],
+    #     10: [-1],
+    #     11: [-1],
+    #     'unknown': [-1],
+    # }
+    # if node != 'unknown':
+    #     id = int(node[3:])
+    #     configs = [configs[idx] for idx in node_job_assigments[id]]
+    # else:
+    #     configs = [configs[idx] for idx in node_job_assigments['unknown']]
+
+    # for c in configs:
+    #     boolean_reservoir_grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # print('done!')

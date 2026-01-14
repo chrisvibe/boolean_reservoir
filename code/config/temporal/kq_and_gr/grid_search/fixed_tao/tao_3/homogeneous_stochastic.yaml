@@ -1,7 +1,7 @@
 logging:
   history:
     buffer_size: 64
-    record_history: True
+    record: True
   out_path: out/temporal/kq_and_gr/grid_search/homogeneous-stochastic-tao3
   save_keys: null
 model:

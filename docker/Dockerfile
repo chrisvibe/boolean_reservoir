@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     bzip2 \
     tree \
     neovim \
+    build-essential \
     graphviz \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 

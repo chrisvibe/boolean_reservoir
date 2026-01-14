@@ -11,15 +11,16 @@ import re
 import numpy as np
 
 class BatchedTensorHistoryWriter:
-    def __init__(self, save_path='history', buffer_size=64):
+    def __init__(self, save_path='history', buffer_size=64, persist_to_disk=True):
         self.save_path = Path(save_path)
         self.file_index = 0
         self.time = 0
         self.buffer_size = buffer_size
+        self.persist_to_disk = persist_to_disk
         self.buffer = []
         self.meta_buffer = []
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    
     def append_batch(self, batch_tensor, meta_data):
         self.buffer.append(batch_tensor.clone().cpu())
         self.meta_buffer.append(meta_data)
@@ -28,11 +29,11 @@ class BatchedTensorHistoryWriter:
         meta_data['samples'] = len(batch_tensor)
         meta_data['time'] = self.time
         self.time += 1
-        if len(self.buffer) >= self.buffer_size:
+        if self.persist_to_disk and len(self.buffer) >= self.buffer_size:
             self._write_buffer()
-
+    
     def _write_buffer(self):
-        if not self.buffer:
+        if not self.buffer or not self.persist_to_disk:
             return
         self.save_path.mkdir(parents=True, exist_ok=True)
         data = torch.cat(self.buffer, dim=0)
@@ -43,39 +44,46 @@ class BatchedTensorHistoryWriter:
         self.buffer = []
         self.meta_buffer = []
         self.file_index += 1
-
+    
     def flush(self):
-        self._write_buffer()
-
+        if self.persist_to_disk:
+            self._write_buffer()
+    
     def reload_history(self, history_path=None, checkpoint_path=None, include={}, exclude={}):
-        history_path = Path(history_path) if history_path else self.save_path
-        all_data = []
-        all_meta_data = []
-        idx = 0
-        assert any(history_path.glob('*.pt')), f"No files found at {history_path}. Try Recording the data? Maybe the path is wrong"
-        for _ in history_path.glob('*.pt'):
-            tensor_path = history_path / f'tensor_{idx}.pt'
-            tensor_data = torch.load(tensor_path, weights_only=True)
-            meta_path = history_path / f'meta_{idx}.csv'
-            meta_data = pd.read_csv(meta_path)
-            all_data.append(tensor_data)
-            all_meta_data.append(meta_data)
-            idx += 1
-        combined_data = torch.cat(all_data, dim=0).to(self.device)
-        combined_meta_data = pd.concat(all_meta_data, ignore_index=True, axis=0)
+        if self.persist_to_disk:
+            # Read from disk
+            history_path = Path(history_path) if history_path else self.save_path
+            all_data = []
+            all_meta_data = []
+            idx = 0
+            assert any(history_path.glob('*.pt')), f"No files found at {history_path}. Try Recording the data? Maybe the path is wrong"
+            for _ in history_path.glob('*.pt'):
+                tensor_path = history_path / f'tensor_{idx}.pt'
+                tensor_data = torch.load(tensor_path, weights_only=True)
+                meta_path = history_path / f'meta_{idx}.csv'
+                meta_data = pd.read_csv(meta_path)
+                all_data.append(tensor_data)
+                all_meta_data.append(meta_data)
+                idx += 1
+            combined_data = torch.cat(all_data, dim=0).to(self.device)
+            combined_meta_data = pd.concat(all_meta_data, ignore_index=True, axis=0)
+        else:
+            # Read from memory
+            combined_data = torch.cat(self.buffer, dim=0).to(self.device)
+            combined_meta_data = pd.DataFrame(self.meta_buffer)
 
+        # Shared logic
         df = combined_meta_data
         expanded_meta_data = df.loc[df.index.repeat(df['samples'])].reset_index(drop=True)
         expanded_meta_data['sample_id'] = expanded_meta_data.groupby(['phase', 's', 'f']).cumcount()
         expanded_meta_data.drop(columns=['samples'], inplace=True)
-
-        checkpoint_path = checkpoint_path if checkpoint_path else history_path / 'checkpoint'
+        
+        checkpoint_path = checkpoint_path if checkpoint_path else self.save_path / 'checkpoint'
         load_dict = dict()
-        if checkpoint_path.exists():
+        if self.persist_to_disk and checkpoint_path.exists():
             load_dict = SaveAndLoadModel.load_from_path_dict_or_checkpoint_folder(checkpoint_path=checkpoint_path, load_key_include_set=include, load_key_exclude_set=exclude)
         
         return load_dict, combined_data, expanded_meta_data, combined_meta_data
-
 
 class SaveAndLoadModel:
     @staticmethod
@@ -92,6 +100,8 @@ class SaveAndLoadModel:
     @staticmethod
     def save_model(config):
         P = config['P']
+        if P.L.save_keys is None:
+            return dict(), None
         save_path = config['save_path']
         checkpoint_path = save_path / 'checkpoints' / SaveAndLoadModel.get_timestamp_utc() 
         checkpoint_path.mkdir(parents=True, exist_ok=False)
@@ -121,11 +131,12 @@ class SaveAndLoadModel:
         override_symlink(checkpoint_path.name, checkpoint_path.parent / 'last_checkpoint')
 
         history = config.get('history')
-        if history and history.record_history:
+        if history and history.record:
             history.save_path.mkdir(parents=True, exist_ok=True)
             override_symlink(Path('../checkpoints') / checkpoint_path.name, history.save_path / 'checkpoint')
 
         return paths, checkpoint_path
+
 
     @staticmethod
     def save_graph(path, graph):

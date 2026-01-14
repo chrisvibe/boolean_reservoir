@@ -18,19 +18,18 @@ def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dat
     # Unwrap compiled models
     m1 = unwrap(model)
     m2 = unwrap(model2)
+
+    # reset dirty state
+    m1.reset_reservoir(m1.P.M.T.batch_size)
+    m2.reset_reservoir(m2.P.M.T.batch_size)
     
     # --- Compare model parameters ---
     assert m1.P.model == m2.P.model, "model parameters do not match"
-    
-    # Compare tensors safely by intersecting keys
+
+    # Compare tensors safely by intersecting keys (includes all registed buffers)
     keys = set(m1.state_dict().keys()) & set(m2.state_dict().keys())
     for k in keys:
         assert torch.all(m1.state_dict()[k] == m2.state_dict()[k]), f"{k} values do not match"
-    
-    # Compare remaining arrays
-    assert (m1.lut == m2.lut).all(), "lookup tables do not match"
-    assert (m1.initial_states == m2.initial_states).all(), "initial states do not match"
-    assert (m1.w_in == m2.w_in).all(), "w_in (input mapping) do not match"
     
     # Compare graph edges
     assert list(m1.graph.edges(data=True)) == list(m2.graph.edges(data=True)), "graph structures do not match"
@@ -46,7 +45,6 @@ def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dat
         acc2 = accuracy(y_hat_dev2, y_dev, m2.P.model.training.accuracy_threshold)
         assert acc1 == acc2, "accuracy metrics do not match"
 
-
 def test_saving_and_loading_models():
     """Test that a model can be saved and loaded correctly with all its parameters."""
     path = Path('/tmp/boolean_reservoir/out') 
@@ -56,7 +54,6 @@ def test_saving_and_loading_models():
     # Train a model and save it
     p, model, dataset, train_history = train_single_model('project/path_integration/test/config/2D/single_run/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
     model.save()
-    model.reset_reservoir(model.P.M.T.batch_size) # reset dirty state
     
     # Load the model from the saved path
     model2 = BooleanReservoir(load_path=model.P.L.last_checkpoint)
@@ -71,8 +68,8 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     if path.exists():
         rmtree(path)
     
-    # Run grid search and get the best parameters
-    _, p = boolean_reservoir_grid_search(
+    # Run grid search
+    p = boolean_reservoir_grid_search(
         'project/path_integration/test/config/2D/grid_search/test_sweep.yaml',
         dataset_init=d().dataset_init,
         accuracy=a().accuracy,
@@ -82,7 +79,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     )
 
     # Load model from checkpoint
-    model = BooleanReservoir(load_path=p.L.last_checkpoint)
+    model = BooleanReservoir(load_path=p.L.out_path / 'runs/last_run/checkpoints/last_checkpoint')
     
     # Train a new model with the same parameters
     p2 = deepcopy(model.P)

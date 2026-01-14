@@ -28,12 +28,13 @@ class ConstrainedForagingPathDataset(BaseDataset):
         data_y = []
         
         # Generate the data
-        # Note velocity is zero if the next step would be outside the boundary, as the position is unchanged
         for _ in range(samples):
             p = random_walk(dimensions, n_steps, strategy, boundary)
             p, v = positions_to_p_v_pairs(p)
             data_x.append(torch.tensor(v, dtype=torch.float))
             data_y.append(torch.tensor(p[-1], dtype=torch.float))
+        
+        # TODO optionally convert raw cartesian to polar? hybrid (test multiplication)?
 
         return {
             'x': torch.stack(data_x),

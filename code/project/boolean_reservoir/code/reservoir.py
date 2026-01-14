@@ -25,8 +25,8 @@ class BooleanReservoir(nn.Module):
         else:
             super(BooleanReservoir, self).__init__()
 
-            self.P = params if params else load_dict['parameters']
-            self.M = self.P.M
+            self.P: Params = params if params else load_dict['parameters']
+            self.M = self.P.M # TODO try remove these and just access through self.P
             self.L = self.P.L
             self.I = self.P.M.I
             self.R = self.P.M.R
@@ -84,7 +84,7 @@ class BooleanReservoir(nn.Module):
             )
 
             # Precompute bin2int conversion mask 
-            powers_of_2 = self.precompute_minimal_powers_of_2(self.max_connectivity) 
+            powers_of_2 = self.precompute_powers_of_2(self.max_connectivity) 
 
             # Initialize state (R + I)
             initial_states = SaveAndLoadModel.load_or_generate('init_state', load_dict, lambda:
@@ -108,8 +108,8 @@ class BooleanReservoir(nn.Module):
             self.L.save_path = self.save_path
             self.L.timestamp_utc = self.timestamp_utc
             self.L.history.save_path = self.save_path / 'history'
-            self.record_history = self.L.history.record_history
-            self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record_history else None
+            self.record = self.L.history.record
+            self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record else None
 
             # TYPE OPTIMIZATION + BUFFER REGISTRATION
             '''
@@ -196,7 +196,7 @@ class BooleanReservoir(nn.Module):
         if save_path is None:
             save_path = self.save_path
 
-        paths, checkpoint_path = SaveAndLoadModel.save_model({
+        paths, self.L.last_checkpoint = SaveAndLoadModel.save_model({
             'P': self.P,
             'w_in': self.w_in,
             'graph': self.graph,
@@ -206,8 +206,6 @@ class BooleanReservoir(nn.Module):
             'save_path': save_path,
             'history': self.L.history,
         })
-
-        self.L.last_checkpoint = checkpoint_path
         return paths
 
     def load(self, checkpoint_path:Path=None, paths:dict=None, parameter_override:Params=None):
@@ -220,12 +218,13 @@ class BooleanReservoir(nn.Module):
             self.history.flush()
 
     @staticmethod
-    def precompute_minimal_powers_of_2(bits):
+    def precompute_powers_of_2(bits):
         return (2 ** torch.arange(bits, dtype=torch.float32).flip(0))
     
+    @torch.compiler.disable # makes errors about last compiled version not matching...
     def bin2int(self, x): # consider making x (states) float32?
         return torch.matmul(x.to(self.powers_of_2.dtype), self.powers_of_2).to(torch.int64)
-    
+
     def reset_reservoir(self, samples):
         self.states_parallel[:samples].copy_(self.initial_states.expand(samples, -1))
    
@@ -329,7 +328,7 @@ class BooleanReservoir(nn.Module):
         return outputs 
 
     def batch_record(self, m, **meta_data):
-        if self.record_history:
+        if self.record:
             self.history.append_batch(self.states_parallel[:m], meta_data)
    
 
@@ -361,8 +360,8 @@ if __name__ == '__main__':
         learning_rate=0.001, 
         seed=0,
         )
-    L = LoggingParams(out_path='/tmp/boolean_reservoir/out/test/', history=HistoryParams(record_history=True, buffer_size=10))
-    L = LoggingParams(out_path='/out/delete/', history=HistoryParams(record_history=True, buffer_size=10))
+    L = LoggingParams(out_path='/tmp/boolean_reservoir/out/test/', history=HistoryParams(record=True, buffer_size=10))
+    L = LoggingParams(out_path='/out/delete/', history=HistoryParams(record=True, buffer_size=10))
 
     model_params = ModelParams(input_layer=I, reservoir_layer=R, output_layer=O, training=T)
     params = Params(model=model_params, logging=L)

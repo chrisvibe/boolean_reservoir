@@ -27,4 +27,7 @@ class TemporalDatasetParams(DatasetParameters):
             / f'r-{self.seed}'
             / 'dataset.pt'
         )
+    
+    def update_path(self):
+        self.path = self._generate_path()
 

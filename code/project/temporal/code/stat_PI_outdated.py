@@ -100,7 +100,7 @@ if __name__ == '__main__':
     #     print(path)
     #     print('#'*60)
     #     df, factors, groups_dict = load_custom_data(response, i, '5_steps')
-    #     polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration')
+    #     polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration', ascending=[1, 1, 0, 1, 1])
     #     graph_accuracy_vs_k_avg(path, df, success_thresh)
 
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     #     print(path)
     #     print('#'*60)
     #     df, factors, groups_dict = load_custom_data(response, i, 'no_self_loops')
-    #     polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration')
+    #     polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration', ascending=[1, 1, 0, 1, 1])
     #     graph_accuracy_vs_k_avg(path, df, success_thresh)
 
 
@@ -130,5 +130,5 @@ if __name__ == '__main__':
         print(path)
         print('#'*60)
         df, factors, groups_dict = load_custom_data(response, i, '3_steps')
-        polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration')
+        polar_design_plot(path, df, factors, success_thresh, f'task: {i}D path integration', ascending=[1, 1, 0, 1, 1])
         graph_accuracy_vs_k_avg(path, df, success_thresh)

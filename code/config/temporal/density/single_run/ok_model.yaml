@@ -1,4 +1,4 @@
-# grid_search -> single_run: 'single_run' in out_path, set evaluation=test, set record_history=true, delete save_keys
+# grid_search -> single_run: 'single_run' in out_path, set evaluation=test, set record=true, delete save_keys
 # df = pd.read_hdf('/out/temporal/density/grid_search/homogeneous-deterministic/log.h5', 'df')
 # df[(df['accuracy'] < 0.85) & (df['accuracy'] > .8)]['params'].apply(lambda p: p.model)
 # out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/checkpoints/2025_05_09_014405_021874
@@ -21,7 +21,7 @@ logging:
     seed: 0
   history:
     buffer_size: 64
-    record_history: true
+    record: true
     save_path: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/history
   last_checkpoint: out/temporal/density/grid_search/homogeneous-deterministic/runs/2025_05_09_014400_078455/checkpoints/2025_05_09_014405_021874
   out_path: out/temporal/density/single_run/homogeneous-deterministic

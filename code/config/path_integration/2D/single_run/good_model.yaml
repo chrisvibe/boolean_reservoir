@@ -29,7 +29,7 @@ model:
 logging:
   out_path: 'out/path_integration/single_run/2D/good_model'
   # history:
-  #   record_history: true
+  #   record: true
   #   buffer_size: 64
 dataset:
   dimensions: 2
