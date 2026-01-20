@@ -98,16 +98,16 @@ def test_path_integration_verification_models(model_class, config_path):
         logging.debug(f"Model instance created: {model_instance}")
         
         p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
-        logging.debug(f"Training completed with accuracy {trained_model.P.L.train_log.accuracy}")
+        logging.debug(f"Training completed with accuracy {trained_model.P.L.T.accuracy}")
         
-        assert trained_model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
+        assert trained_model.P.L.T.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.T.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
 
 if __name__ == '__main__':
-    # P = load_yaml_config('project/path_integration/test/config/1D/grid_search/verification_model.yaml')
-    P = load_yaml_config('project/path_integration/test/config/2D/grid_search/verification_model.yaml')
+    P = load_yaml_config('project/path_integration/test/config/1D/grid_search/verification_model.yaml')
+    # P = load_yaml_config('project/path_integration/test/config/2D/grid_search/verification_model.yaml')
     for pi in generate_param_combinations(P):
         pi.M.I.seed = pi.D.seed = 0 # consistancy for debug
         model = PathIntegrationVerificationModelBaseTwoEncoding(pi)
         # model = PathIntegrationVerificationModel(pi)
         p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
-        assert model.P.L.train_log.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {model.P.L.train_log.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
+        assert model.P.L.T.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {model.P.L.T.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"

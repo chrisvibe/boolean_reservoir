@@ -147,7 +147,7 @@ class ReservoirParams(BaseModel):
                 self.k_min = self.k_max = 0
             else:
                 self.k_min = self.k_max = int(self.k_avg)
-        elif isinstance(self.k_max, str):
+        elif isinstance(self.k_max, str) and all([not isinstance(x, list) for x in [self.k_min, self.k_avg, self.k_max]]):
             context = {'k_avg': self.k_avg, 'k_min': self.k_min}
             self.k_max = int(ExpressionEvaluator(context).eval(self.k_max))
         return self
@@ -208,9 +208,20 @@ class HistoryParams(BaseModel):
     save_path: Optional[Path] = Field(Path('out/history'), description="Where model is saved when recording history")
 
 class TrainLog(BaseModel):
-    accuracy: Optional[float] = Field(None, description="accuracy")
-    loss: Optional[float] = Field(None, description="loss")
-    epoch: Optional[int] = Field(None, description="epoch")
+    config: int | None = None
+    sample: int | None = None
+    eval: str | None = None
+    accuracy: float | None = None
+    loss: float | None = None
+    epoch: int | None = None
+
+class KQGRMetrics(BaseModel):
+    config: int | None = None
+    sample: int | None = None
+    kq: int | None = None
+    gr: int | None = None
+    delta: int | None = None
+    spectral_radius: float | None = None
 
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")
@@ -218,8 +229,9 @@ class LoggingParams(BaseModel):
     save_path: Optional[Path] = Field(Path('out'), description="Where last run was saved")
     last_checkpoint: Optional[Path] = Field(None, description="Where last checkpoint was saved")
     grid_search: Optional[GridSearchParams] = Field(None)
-    history: HistoryParams = Field(HistoryParams(), description="Parameters pertaining to recoding of reservoir dynamics")
-    train_log: TrainLog = Field(TrainLog())
+    history: HistoryParams = Field(default_factory=HistoryParams, description="Parameters pertaining to recoding of reservoir dynamics")
+    train: TrainLog | None = None 
+    kqgr: KQGRMetrics | None = None
     save_keys: Optional[List[str]] = Field(
         default=['parameters', 'w_in', 'graph', 'init_state', 'lut', 'weights'],
         description="Only save these model objects",
@@ -232,6 +244,21 @@ class LoggingParams(BaseModel):
         if isinstance(v, str):
             return [v]
         return v
+    
+    @model_validator(mode='before') # TODO remove after some time
+    @classmethod
+    def handle_old_keys(cls, values):
+        if 'train_log' in values:
+            values['train'] = values.pop('train_log')
+        return values
+
+    @property
+    def M(self):
+        return self.kqgr 
+
+    @property
+    def T(self):
+        return self.train 
 
 class Params(BaseModel):
     model: ModelParams

@@ -1,7 +1,7 @@
 from pathlib import Path
 from project.boolean_reservoir.code.parameter import load_yaml_config, save_yaml_config
 from project.boolean_reservoir.code.visualization import plot_grid_search 
-from project.boolean_reservoir.code.utils.utils import override_symlink, load_grid_search_results
+from project.boolean_reservoir.code.utils.utils import override_symlink, load_grid_search_data
 from project.boolean_reservoir.code.utils.explore_grid_search_data import make_combo_column 
 import pandas as pd
 from scipy.stats import f_oneway, levene, shapiro, kruskal, anderson
@@ -64,14 +64,14 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     factors = sorted([f'D_{x}' for x in d_set] + [f'I_{x}' for x in i_set] + [f'R_{x}' for x in r_set])
     data = list()
     for path in kq_and_gr_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
+        df_i, _ = load_grid_search_data(config_paths=path)
         df_i = process_grid_search_data_kq_and_gr(df_i, d_set, i_set, r_set)
         data.append(df_i)
     df_metric = pd.concat(data, ignore_index=True)
 
     data = list()
     for path in training_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
+        df_i, _ = load_grid_search_data(config_paths=path)
         df_i = process_grid_search_data(df_i, d_set, i_set, r_set)
         data.append(df_i)
     df_train = pd.concat(data, ignore_index=True)
@@ -106,7 +106,7 @@ def load_train_data_only(variable):
 
     data = list()
     for path in training_paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path, data_filename='log.yaml')
+        df_i, _ = load_grid_search_data(config_paths=path)
         df_i = process_grid_search_data(df_i, d_set, i_set, r_set, t_set, o_set)
         data.append(df_i)
     df_train = pd.concat(data, ignore_index=True)
@@ -143,10 +143,10 @@ def process_grid_search_data(df, d_set, i_set, r_set, t_set=set(), o_set=set()):
     df = pd.concat([df, df_flattened_params], axis=1)
 
     df['grid_search'] = df['params'].apply(lambda p: p.L.out_path.name)
-    if df.iloc[0]['params'].L.train_log.loss:
-        df['loss'] = df['params'].apply(lambda p: p.L.train_log.loss)
-    if df.iloc[0]['accuracy'].L.train_log.accuracy:
-        df['accuracy'] = df['params'].apply(lambda p: p.L.train_log.accuracy)
+    if df.iloc[0]['params'].L.T.loss:
+        df['loss'] = df['params'].apply(lambda p: p.L.T.loss)
+    if df.iloc[0]['accuracy'].L.T.accuracy:
+        df['accuracy'] = df['params'].apply(lambda p: p.L.T.accuracy)
     df.drop(['params'], axis=1, inplace=True)
     return df
 
@@ -159,12 +159,6 @@ def process_grid_search_data_kq_and_gr(df, d_set, i_set, r_set): # TODO come bac
         how='left')
     df = process_grid_search_data(df, d_set, i_set, r_set)
     return df
-
-def load_grid_search_data_from_yaml(path, data_filename='log.yaml'):
-    P = load_yaml_config(path)
-    data_file_path = P.L.out_path / data_filename
-    df = load_grid_search_results(data_file_path)
-    return P, df
 
 def aggregate_and_merge_data(df1, df2, factors):
     # max_values = df1.groupby(['D_tao', 'sample'])['delta'].idxmax() # max delta per tao-sample (over many k_avg)

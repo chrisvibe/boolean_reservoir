@@ -87,7 +87,7 @@ def test_reproducibility_of_loaded_grid_search_checkpoint():
     
     # Test that the models are equivalent
     _model_likeness_check(model, model2, dataset2)
-    assert model.P.L.train_log.accuracy == model2.P.L.train_log.accuracy, 'log accuracies do not match'
+    assert model.P.L.T.accuracy == model2.P.L.T.accuracy, 'log accuracies do not match'
 
 
 if __name__ == '__main__':
@@ -100,5 +100,5 @@ if __name__ == '__main__':
         force=True
     )
     logger = logging.getLogger(__name__)
-    test_saving_and_loading_models()
+    # test_saving_and_loading_models()
     test_reproducibility_of_loaded_grid_search_checkpoint()

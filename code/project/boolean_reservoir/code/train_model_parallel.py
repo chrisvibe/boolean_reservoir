@@ -1,5 +1,5 @@
 import pandas as pd
-from project.boolean_reservoir.code.utils.utils import set_seed, generate_unique_seed, save_grid_search_results, load_grid_search_results
+from project.boolean_reservoir.code.utils.utils import set_seed, generate_unique_seed, save_grid_search_results
 from project.boolean_reservoir.code.reservoir import BooleanReservoir
 from project.boolean_reservoir.code.train_model import train_and_evaluate
 from project.boolean_reservoir.code.parameter import *
@@ -46,17 +46,23 @@ class BooleanReservoirJob(JobInterface):
         logger.info(f"{timestamp_utc}: {self.get_log_prefix()}, "
                         f"Loss: {best_epoch['loss']:.4f}, Accuracy: {best_epoch['accuracy']:.4f}")
         
+        self.P.L.train = TrainLog(
+            config=self.i,
+            sample=self.j,
+            eval=best_epoch.get('eval', 'dev'),
+            accuracy=best_epoch['accuracy'],
+            loss=best_epoch['loss'],
+            epoch=best_epoch['epoch']
+        )
+
+        logger.info(f"{self.P.L.timestamp_utc}: {self.get_log_prefix()}, "
+                    f"Loss: {self.P.L.T.loss:.4f}, Accuracy: {self.P.L.T.accuracy:.4f}")
+
         # Update shared history
         with self.locks['history']:
-            self.shared['history'].append({
-                'timestamp_utc': timestamp_utc,
-                'config': self.i + 1,
-                'sample': self.j + 1,
-                **best_epoch,
-                'params': self.P
-            })
+            self.shared['history'].append(self.P)
 
-        return {'status': 'completed', 'stats': best_epoch, 'timestamp_utc': timestamp_utc}
+        return {'status': 'completed'}
 
     
 # Factory for Boolean Reservoir jobs
@@ -102,14 +108,12 @@ def boolean_reservoir_grid_search(
     # Define callbacks
     def save_config(output_path):
         save_yaml_config(P, output_path / 'parameters.yaml')
-    
+
     def process_results(history, output_path, done):
         file_path = output_path / 'log.yaml'
-
         if history:
-            history_df = pd.DataFrame(history)
-            save_grid_search_results(history_df, file_path)
-        
+            df = pd.DataFrame({'params': history})
+            save_grid_search_results(df, file_path)
         if done:
             plot_grid_search(file_path)
     

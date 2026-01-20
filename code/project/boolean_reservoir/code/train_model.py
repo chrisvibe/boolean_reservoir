@@ -74,7 +74,7 @@ def optimizer_strategy(p: DynamicParams, model: nn.Module):
 
 # Assumption: the .to(device) call is made outside this function since the data is small
 def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=False, verbose=False, accuracy: AccuracyFunction=EuclideanDistanceAccuracy()):
-    T = model.P.model.training
+    T = model.P.M.T
     set_seed(T.seed)
     optimizer = optimizer_strategy(T.optim, model)
     criterion = criterion_strategy(T.criterion)
@@ -121,7 +121,5 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
             model.record = False
     if verbose:
         print(f'Best loss: {best_stats}')
-    model.P.L.train_log.accuracy = best_stats['accuracy']
-    model.P.L.train_log.loss = best_stats['loss']
-    model.P.L.train_log.epoch = best_stats['epoch']
+    model.P.L.train = TrainLog(**best_stats)
     return best_stats, model, train_history

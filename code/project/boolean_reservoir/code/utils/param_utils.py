@@ -1,7 +1,7 @@
-from pydantic import BaseModel, model_validator, ConfigDict
+from pydantic import BaseModel, model_validator, ConfigDict, Field
 import yaml
 from itertools import product
-from typing import List, Callable, Dict, Any, ClassVar
+from typing import Callable, ClassVar
 from pathlib import Path, PosixPath, WindowsPath
 import sympy
 from inspect import signature, Parameter
@@ -33,9 +33,9 @@ class ExpressionEvaluator:
 
     def eval(self, expr):
         """Convert a string expression to a float using sympy."""
-        if isinstance(expr, (int, float)):
-            return expr
-        if not isinstance(expr, str):
+        if isinstance(expr, list):
+            return expr 
+        elif not isinstance(expr, str):
             return expr
 
         try:
@@ -47,7 +47,7 @@ class ExpressionEvaluator:
                 result = parsed_expr.subs(symbol_values)
             else:
                 result = parsed_expr
-            return float(result)
+            return float(result.evalf())
         except Exception as e:
             raise ValueError(f"Failed to evaluate expression '{expr}': {e}")
 
@@ -57,7 +57,7 @@ class CallParams(BaseModel):
 
 class DynamicParams(BaseModel):
     name: str
-    params: CallParams
+    params: CallParams = Field(default_factory=CallParams)
 
     def call(self, func, evaluator=None, **overrides):
         """

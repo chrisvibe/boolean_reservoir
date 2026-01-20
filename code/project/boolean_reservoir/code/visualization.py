@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE, MDS
 from project.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
-from project.boolean_reservoir.code.utils.utils import load_grid_search_results
+from project.boolean_reservoir.code.utils.utils import load_grid_search_data
 from project.boolean_reservoir.code.utils.explore_grid_search_data import make_combo_column
 from project.boolean_reservoir.code.utils.categorical_ordering import grayish_sort 
 import plotly.express as px
@@ -52,23 +52,21 @@ def plot_grid_search(data_file_path: Path):
     out_path = data_file_path.parent / 'visualizations'
     out_path.mkdir(exist_ok=True, parents=True)
     print('making grid search plots:', out_path)
-    df = load_grid_search_results(data_file_path)
-    df = df[df['loss'] != float('inf')] # filter out error configs (if they are illegal)
-    df['loss'] = df['loss'].apply(lambda x: x ** .5) # TODO watch out MSE to RMS
-    plot_histogram_of_top_percentile_vs_config_id(out_path, df, top_percentile=0.1)
-    flatten_params = lambda x: pd.concat([
-        pd.Series({f"I.{k}": v for k, v in x.M.I.model_dump().items()}),
-        pd.Series({f"R.{k}": v for k, v in x.M.R.model_dump().items()}),
-    # pd.Series({f"O.{k}": v for k, v in x.M.O.model_dump().items()}),
-    # pd.Series({f"T.{k}": v for k, v in x.M.T.model_dump().items()}),
-    ])
-    df_flattend_params = df['params'].apply(lambda p: flatten_params(p))
-    df = pd.concat([df, df_flattend_params], axis=1)
-    df = df[['accuracy', 'loss'] + list(df_flattend_params.keys())]
-    df = df.loc[:, [(col == 'params' or len(df[col].unique()) > 1) for col in df.columns]]
-    features = df.drop(columns=['accuracy', 'loss'])
+    extractions = [
+        ('P', lambda p: p, None),
+        ('I', lambda p: p.M.I, {}),
+        ('R', lambda p: p.M.R, {}),
+        ('O', lambda p: p.M.O, {}), 
+        # ('MT', lambda p: p.M.T, {}),  # nested :(
+        ('T', lambda p: p.L.T, {}), 
+    ]
+    df, _ = load_grid_search_data(data_paths=data_file_path, extractions=extractions)
+    df = df[df['T_loss'] != float('inf')] # filter out error configs (if they are illegal)
+    df['T_loss'] = df['T_loss'].apply(lambda x: x ** .5) # TODO watch out MSE to RMS
+    df = df.loc[:, [(col != 'P' and len(df[col].unique()) > 1) for col in df.columns]]
+    features = df.drop(columns=['T_accuracy', 'T_loss'])
     features = features.loc[:, ~features.columns.str.contains('seed', case=False)]
-    features_pluss_loss = df.drop(columns=['accuracy'])
+    features_pluss_loss = df.drop(columns=['T_accuracy'])
     features_pluss_loss = features_pluss_loss.loc[:, ~features_pluss_loss.columns.str.contains('seed', case=False)]
 
     # Identify categorical and numerical columns
@@ -85,7 +83,7 @@ def plot_grid_search(data_file_path: Path):
 
     # pre-processing w loss
     numerical_cols_plus_loss = deepcopy(numerical_cols)
-    numerical_cols_plus_loss.append('loss')
+    numerical_cols_plus_loss.append('T_loss')
     transformers2 = list() 
     transformers2.append(('num', StandardScaler(), numerical_cols_plus_loss))
     if categorical_cols:
@@ -103,7 +101,7 @@ def plot_grid_search(data_file_path: Path):
         nested_out_path = out_path / 'pca' 
         nested_out_path.mkdir(exist_ok=True)
         plt.figure(figsize=(10, 8))
-        sns.scatterplot(data=principal_df.join(df[['loss']]), x='PC1', y='PC2', hue='loss', palette='viridis', s=100, alpha=0.7)
+        sns.scatterplot(data=principal_df.join(df[['T_loss']]), x='PC1', y='PC2', hue='T_loss', palette='viridis', s=100, alpha=0.7)
         plt.title('PCA of Parameters')
         plt.savefig(nested_out_path / (file_name + '.png'), bbox_inches='tight')
         
@@ -127,7 +125,7 @@ def plot_grid_search(data_file_path: Path):
     num_columns_to_keep = std[std != 0].index.tolist()
     cat_columns_to_keep = features[categorical_cols].nunique().index.tolist()
     columns_to_keep = num_columns_to_keep + cat_columns_to_keep
-    features_with_performance = pd.concat([features[columns_to_keep], df[['loss']]], axis=1)
+    features_with_performance = pd.concat([features[columns_to_keep], df[['T_loss']]], axis=1)
     correlation_matrix = features_with_performance.corr(method='spearman', numeric_only=True)
 
     plt.figure(figsize=(10, 8))
@@ -137,7 +135,7 @@ def plot_grid_search(data_file_path: Path):
 
     if categorical_cols:
         num_bins = 10
-        features_with_performance['loss_bin'] = pd.qcut(features_with_performance['loss'], q=num_bins)
+        features_with_performance['loss_bin'] = pd.qcut(features_with_performance['T_loss'], q=num_bins)
         crosstab_result = pd.crosstab(
             [features_with_performance[col] for col in categorical_cols],
             features_with_performance['loss_bin']
@@ -150,16 +148,16 @@ def plot_grid_search(data_file_path: Path):
         plt.savefig(out_path / 'correlation_cat.png', bbox_inches='tight')
 
     def loss_vs_parameter(path, df):
-        for column in df.columns[df.columns != 'loss']:
+        for column in df.columns[df.columns != 'T_loss']:
             c = column.capitalize()
             n_unique = len(df[column].unique())
             if not (n_unique > 1):
                 continue
             plt.figure(figsize=(8, 10))
             if n_unique > 10:
-                sns.scatterplot(data=df, x=column, y='loss')
+                sns.scatterplot(data=df, x=column, y='T_loss')
             else:
-                sns.boxplot(data=df, x=column, y='loss')
+                sns.boxplot(data=df, x=column, y='T_loss')
 
             plt.title(f'Loss vs {c}', fontsize=16)
             plt.xlabel(c, fontsize=16)
@@ -178,18 +176,18 @@ def plot_grid_search(data_file_path: Path):
     loss_vs_parameter(nested_out_path, df1)
 
     df2 = df[col_list]
-    df2 = df2[df2['accuracy'] >= .3]
+    df2 = df2[df2['T_accuracy'] >= .3]
     nested_out_path = out_path / 'loss_vs_parameter_accuracy_lt_30' 
     nested_out_path.mkdir(exist_ok=True)
     loss_vs_parameter(nested_out_path, df2)
 
 def plot_histogram_of_top_percentile_vs_config_id(path, df, top_percentile=0.1):
-    threshold = df['accuracy'].quantile(1-top_percentile)
-    config_ids = df[df['accuracy'] >= threshold]['config']
+    threshold = df['T_accuracy'].quantile(1-top_percentile)
+    config_ids = df[df['T_accuracy'] >= threshold]['config']
     config_counts = config_ids.value_counts().sort_index()
     top_config_id = config_counts.idxmax()
     print(f"Config ID with highest frequency: {top_config_id}, Count: {config_counts[top_config_id]}")
-    print(f"Checkpoint: {str(df.iloc[top_config_id].params.L.last_checkpoint)}")
+    print(f"Checkpoint: {str(df.iloc[top_config_id].P.L.last_checkpoint)}")
     
     plt.figure(figsize=(10, 6))
     plt.bar(config_counts.index, config_counts.values, alpha=0.7, color='skyblue', edgecolor='black')
@@ -575,3 +573,4 @@ def polar_design_plot(out_path: Path, df: pd.DataFrame, factors, success_thresh:
 if __name__ == '__main__':
     pass
     # plot_grid_search('out/temporal/density/grid_search/homogeneous-deterministic/log.yaml')
+    plot_grid_search('/tmp/boolean_reservoir/out/test/path_integration/2D/grid_search/test_sweep/log.yaml')

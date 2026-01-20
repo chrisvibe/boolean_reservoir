@@ -17,20 +17,18 @@ def get_kernel_quality_dataset(p: Params):
     return TemporalDensityDataset(p.D)
 
 def get_generalization_rank_dataset(p: Params):
+    """Generate GR dataset for a single sample (n_nodes rows)"""
     dataset = get_kernel_quality_dataset(p)
-
-    # define subsets
-    subset_size = p.M.R.n_nodes # square matrix per rank calculation
-    m = len(dataset)
-    n_subsets = m // subset_size 
-    indices = torch.randperm(m)[:n_subsets]
-
-    # override last tao entries with similar inputs
+    
     x = dataset.data['x']
     shape = x.shape
     x = x.view(shape[0], -1)
     tao = p.D.tao
-    x[:, -tao:] = x[indices][:, -tao:].repeat_interleave(subset_size, dim=0)
+    
+    # Pick one random row's tail and copy to all others
+    idx = torch.randint(0, shape[0], (1,)).item()
+    x[:, -tao:] = x[idx, -tao:].unsqueeze(0).expand(shape[0], -1)
+    
     dataset.data['x'] = x.view(shape)
     return dataset
 

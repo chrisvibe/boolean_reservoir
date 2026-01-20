@@ -1,5 +1,3 @@
-from project.boolean_reservoir.code.utils.utils import load_grid_search_data_from_yaml
-from enum import Enum
 from pathlib import Path
 import plotly.io as pio
 
@@ -11,78 +9,13 @@ import pandas as pd
 import numpy as np
 from hashlib import md5
     
-    
-
-def params_col_to_fields(df, extractions):
-    """
-    Args:
-        df: DataFrame with 'params' column
-        extractions: List of (lambda, field_set) tuples
-                    e.g., [
-                        (lambda p: p.D, d_set),
-                        (lambda p: p.M.I, i_set),
-                        (lambda p: p.M.T.optim, t_subset),
-                    ]
-    
-    Returns:
-        (df, factors): DataFrame with flattened params, and list of factors 
-    """
-    factors = []
-    
-    def flatten_params(params):
-        series_dict = {}
-        
-        for get_source, field_set in extractions:
-            source = get_source(params)
-            attr_names = get_source.__code__.co_names[1:]
-            prefix = "_".join(attr_names)
-            
-            for k, v in source.model_dump().items():
-                if k in field_set:
-                    field_name = f"{prefix}_{k}"
-                    series_dict[field_name] = str(v) if isinstance(v, Enum) else v
-                    if field_name not in factors:
-                        factors.append(field_name)
-        
-        return pd.Series(series_dict)
-    
-    df = pd.concat([df, df['params'].apply(flatten_params)], axis=1)
-    
-    df['grid_search'] = df['params'].apply(lambda p: p.L.out_path.name)
-    factors.append('grid_search')
-    
-    params_sample = df.iloc[0]['params']
-    if params_sample.L.train_log.loss:
-        df['loss'] = df['params'].apply(lambda p: p.L.train_log.loss)
-    if params_sample.L.train_log.accuracy:
-        df['accuracy'] = df['params'].apply(lambda p: p.L.train_log.accuracy)
-    
-    df.drop('params', axis=1, inplace=True)
-    return df, factors
-
-def load_custom_data(paths, extractions, factor_score=[], df_filter=None, response_variable: str=None):
-    data = list()
-    factors = None
-    for path in paths: # concat data
-        _, df_i = load_grid_search_data_from_yaml(path)
-        df_i, factors = params_col_to_fields(df_i, extractions)
-        if df_filter:
-            df_i = df_i[df_filter(df_i)]
-        data.append(df_i)
-    df = pd.concat(data, ignore_index=True)
-
-    if factor_score:
-        factors = [x for _, x in sorted(zip(factor_score, factors), reverse=True)]
-    df, factors = fix_factors_and_combo(df, factors)
-    groups_dict = {k: v[response_variable].values for k, v in df.groupby('combo')} if response_variable else dict()
-    return df, factors, groups_dict
-
-def fix_factors_and_combo(df, factors=list()):
+def fix_factors_and_combo(df, factors=list(), keep=None, exclude=None):
     # need more than one to be considered a factor (and be part of a set)
     factors = [f for f in factors if f in df.columns]
     factors = list(df[factors].nunique()[df[factors].nunique() > 1].index)
-    df['combo'], _ = make_combo_column(df, factors, return_as_str=False)
+    df['combo'], _ = make_combo_column(df, factors, return_as_str=False, keep=keep, exclude=exclude)
     df['combo_str'] = df['combo'].apply(lambda t: "_".join(map(str, t)))
+    df['combo_id'] = df['combo_str'].astype('category').cat.codes
     return df, factors
 
 def make_combo_column(df, factors, keep=None, exclude=None, return_as_str=True):
@@ -122,12 +55,12 @@ def graph_accuracy_vs_k_avg(out_path: Path, df: pd.DataFrame, factors: list[str]
     fig = px.scatter(
         df, 
         x='R_k_avg_w_jitter', 
-        y='accuracy',
+        y='T_accuracy',
         color='design',
         opacity=0.7,
         labels={
             'R_k_avg_w_jitter': 'R_k_avg',
-            'accuracy': 'Accuracy'
+            'T_accuracy': 'Accuracy'
         }
     )
     fig.update_traces(marker=dict(size=5))
@@ -160,7 +93,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
     
     # ---- Factor handling -----------------------------------------------------
     df['design'], factors_subset = make_combo_column(
-        df, factors, exclude='R_k_avg'
+        df, factors, exclude=['R_k_avg', 'T_accuracy', 'T_loss'], return_as_str=True
     )
     filter_factors = list(factors_subset) + ['R_k_avg']
     
@@ -171,7 +104,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
     }
     
     # ---- Available axis options ----------------------------------------------
-    axis_options = [*new_cols, 'accuracy', 'loss'] + filter_factors
+    axis_options = [*new_cols, 'T_accuracy', 'T_loss'] + filter_factors
     
     # ---- Stable color mapping ------------------------------------------------
     # Use a large color palette for consistent coloring
@@ -277,7 +210,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
             fig.update_xaxes(tickmode='array', tickvals=x_ticks)
         
         # Special handling for accuracy y-axis
-        if y_col == 'accuracy':
+        if y_col == 'T_accuracy':
             fig.update_yaxes(range=[0, 1], fixedrange=True)
         
         return fig
@@ -320,7 +253,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
                     dcc.Dropdown(
                         id='y-axis',
                         options=[{'label': col, 'value': col} for col in axis_options],
-                        value='accuracy',
+                        value='T_accuracy',
                         clearable=False,
                     ),
                 ], style={'width': '20%', 'display': 'inline-block'}),

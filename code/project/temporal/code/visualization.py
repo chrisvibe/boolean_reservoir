@@ -43,14 +43,13 @@ def group_df_data_by_parameters(df):
     grouped = df.groupby(df['group_params_str'])
     return grouped
 
-def plot_kq_and_gr(df, P: Params, filename: str):
-    subtitle = f"Mode: {df.iloc[0]['params'].M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {df['sample'].nunique()}, Configs: {df['group_params_str'].nunique()}"
+def plot_kq_and_gr(df, P: Params, filename: str, metrics: list[str] = ['M_kq', 'M_gr', 'M_delta']):
+    subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {P.D.samples}"
     
-    # Create the figure and axis with extra space for legends
-    fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
+    fig, ax = plt.subplots(figsize=(18, 8))
     
     # Create a color mapper for spectral radius
-    norm = plt.Normalize(df['spectral_radius'].min(), df['spectral_radius'].max())
+    norm = plt.Normalize(df['M_spectral_radius'].min(), df['M_spectral_radius'].max())
     
     # Predefined marker styles
     markers = ['<', '>', '^']
@@ -59,21 +58,19 @@ def plot_kq_and_gr(df, P: Params, filename: str):
     scatter_handles = []
     trend_lines = []
     
-    # Scatter plot with a custom color scheme
-    for i, metric in enumerate(sorted(df['metric'].unique())):
-        # Subset for this metric
-        subset = df[df['metric'] == metric]
+    for i, metric in enumerate(metrics):
+        if metric not in df.columns:
+            continue
         
-        # Choose color
         color = plt.cm.tab10(i % 10)
         
         # Scatter plot
         scatter = ax.scatter(
-            subset['k_avg'],
-            subset['value'],
+            df['R_k_avg'],
+            df[metric],
             label=metric,
             marker=markers[i % len(markers)],
-            c=subset['spectral_radius'],
+            c=df['M_spectral_radius'],
             cmap='viridis',
             norm=norm,
             edgecolors='black',
@@ -85,16 +82,17 @@ def plot_kq_and_gr(df, P: Params, filename: str):
         
         # Regression line
         trend = sns.regplot(
-            x='k_avg',
-            y='value',
-            data=subset,
+            x='R_k_avg',
+            y=metric,
+            data=df,
             scatter=False,
             lowess=True,
             ax=ax,
             color=color,
-            line_kws={'linestyle':'--', 'linewidth':2}
+            line_kws={'linestyle': '--', 'linewidth': 2}
         )
-        trend_lines.append(trend.lines[0])
+        trend_lines.append(trend.lines[-1])  # use -1 to get the most recent line
+    
     ax.set_ylabel('Rank')
     ax.set_xlabel('Average K')
     
@@ -103,8 +101,7 @@ def plot_kq_and_gr(df, P: Params, filename: str):
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, aspect=30, pad=0.02, label='Spectral Radius')
     
-    # Adjust subplot parameters to give specified padding
-    plt.subplots_adjust(right=0.8)  # This leaves room for legends
+    plt.subplots_adjust(right=0.8)
     
     # Custom legend with scatter points
     first_legend = ax.legend(
@@ -112,33 +109,75 @@ def plot_kq_and_gr(df, P: Params, filename: str):
         [h.get_label() for h in scatter_handles],
         title='Points',
         loc='upper left',
-        bbox_to_anchor=(0.0, 1.0)  # Positioned slightly inside the top left corner, above the plot
+        bbox_to_anchor=(0.0, 1.0)
     )
-    
-    # Add the first legend to the plot
     ax.add_artist(first_legend)
     
     # Trend lines legend
     trend_legend = ax.legend(
-        [plt.Line2D([0], [0], color=plt.cm.tab10(i % 10), linestyle='--', linewidth=2) for i in range(len(trend_lines))],
-        [f'{h.get_label()}' for h in scatter_handles],
+        [plt.Line2D([0], [0], color=plt.cm.tab10(i % 10), linestyle='--', linewidth=2) for i in range(len(metrics))],
+        metrics,
         title='Lines (lowess)',
         loc='upper left',
-        bbox_to_anchor=(0.0, 0.8)  # Positioned below the first legend
+        bbox_to_anchor=(0.0, 0.8)
     )
     
     plt.title('Reservoir Metrics: Kernel Quality, Generalization Rank, Delta', fontsize=16)
-    
-    # Add subtitle at the bottom of the plot
     fig.text(0.5, 0.01, subtitle, ha='right', fontsize=12)
     
-    # Save the figure
     save_path = P.L.out_path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path / filename, bbox_inches='tight')
     plt.close(fig)
 
-def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str):
+def plot_kq_and_gr_many_config(grouped_df, P: Params, filename: str, metrics: list[str] = ['M_kq', 'M_gr', 'M_delta']):
+    fig, ax = plt.subplots(figsize=(18, 8))
+    color_idx = 0
+    xvals = list()
+    shift = 5
+    g = len(grouped_df)
+    val_range = grouped_df['R_k_avg'].max().max() - shift
+    
+    for name, subset in grouped_df:
+        n_metrics = len(metrics)
+        for i, metric in enumerate(metrics):
+            if metric not in subset.columns:
+                continue
+                
+            color = plt.cm.tab10(color_idx % 10)
+            
+            # Aggregate by R_k_avg
+            data = subset.groupby('R_k_avg').agg({metric: 'mean'}).reset_index()
+            data.sort_values(by='R_k_avg', inplace=True)
+            
+            x_sorted = data['R_k_avg'].values
+            y_sorted = data[metric].values
+            
+            # Cubic spline interpolation
+            cubic_spline = UnivariateSpline(x_sorted, y_sorted, k=3, s=0.0)
+            x_fine = np.linspace(x_sorted.min(), x_sorted.max(), 300)
+            y_smooth = cubic_spline(x_fine)
+            
+            ax.plot(x_fine, y_smooth, linestyle='--', linewidth=2, color=color, label=f'{color_idx}-{metric}')
+            
+            xvals.append(color_idx * val_range / g + ((i + 1) / n_metrics) - 1 + shift)
+        color_idx += 1
+    
+    lines = plt.gca().get_lines()
+    labelLines(lines, align=False, xvals=xvals, fontsize=10)
+    
+    ax.set_ylabel('Rank')
+    ax.set_xlabel('Average K')
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    plt.subplots_adjust(right=0.8)
+    plt.title('Reservoir Metrics: Kernel Quality, Generalization Rank, Delta', fontsize=16)
+    
+    save_path = P.L.out_path / 'visualizations'
+    save_path.mkdir(parents=True, exist_ok=True)
+    plt.savefig(save_path / filename, bbox_inches='tight')
+    plt.close(fig)
+
+def plot_kq_and_gr_many_config2(grouped_df, P: Params, filename: str):
     # Create the figure and axis with extra space for legends
     fig, ax = plt.subplots(figsize=(18, 8))  # Increased width to accommodate legends
     

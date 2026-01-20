@@ -9,11 +9,11 @@ if __name__ == '__main__':
     path = out_path / ''
     print(path)
     extractions = [
-        (lambda p: p.M.T.optim, {'name'}),
-        (lambda p: p.M.T.optim.params, {'lr', 'weight_decay'}),
-        (lambda p: p.M.T, {'batch_size'}),
-        (lambda p: p.M.R, {'mode', 'k_avg', 'init'}),
-        (lambda p: p.M.I, {'chunks', 'interleaving'}),
+        ('T', lambda p: p.M.T.optim, {'name'}),
+        ('params', lambda p: p.M.T.optim.params, {'lr', 'weight_decay'}),
+        ('T', lambda p: p.M.T, {'batch_size'}),
+        ('R', lambda p: p.M.R, {'mode', 'k_avg', 'init'}),
+        ('I', lambda p: p.M.I, {'chunks', 'interleaving'}),
     ]
     paths = list()
     paths.append(f'config/path_integration/2D/grid_search/design_choices_prep/test_optim.yaml')

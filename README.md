@@ -36,4 +36,4 @@ Optionally, there is a Conda environment file located in the `/docker/src` direc
 Examples:
 pytest /code/project/boolean_reservoir/test/test_graphs.py
 pytest /code/project/path_integration/test/test_load_and_save.py
-pytest /code/project/path_integration/test/test_verification_models.py
+pytest /code/project/path_integration/test/test_verification_model.py
