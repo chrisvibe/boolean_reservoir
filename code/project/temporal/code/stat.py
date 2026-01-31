@@ -34,16 +34,16 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     training_paths = list()
 
     if one_hot_selector[0] == '1':
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_stochastic.yaml')
-        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
-        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
+        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_deterministic.yaml')
+        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_stochastic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_deterministic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_stochastic.yaml')
 
     if one_hot_selector[1] == '1':
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
-        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_stochastic.yaml')
-        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
-        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
+        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_deterministic.yaml')
+        kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_stochastic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_deterministic.yaml')
+        # kq_and_gr_paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_stochastic.yaml')
 
     if one_hot_selector[2] == '1':
         training_paths.append('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
@@ -58,7 +58,7 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
         # training_paths.append('config/temporal/parity/grid_search/heterogeneous_stochastic.yaml')
 
     d_set = {}
-    d_set = {'task', 'tao', 'window_size'}
+    d_set = {'task', 'delay', 'window_size'}
     i_set = {'connection', 'pertubation'}
     r_set = {'mode', 'k_avg', 'init'}
     factors = sorted([f'D_{x}' for x in d_set] + [f'I_{x}' for x in i_set] + [f'R_{x}' for x in r_set])
@@ -77,8 +77,8 @@ def load_custom_data(variable, one_hot_selector, delay, window_size):
     df_train = pd.concat(data, ignore_index=True)
 
     # Note: make sure all factors represent main variations s.t. we get normal distributions within the groups
-    df_metric = df_metric[df_metric['D_tao'] == 5] # metric for prediction
-    df_train = df_train[df_train['D_tao'] == delay] # delay in temporal dataset task
+    df_metric = df_metric[df_metric['D_delay'] == 5] # metric for prediction
+    df_train = df_train[df_train['D_delay'] == delay] # delay in temporal dataset task
     df_train = df_train[df_train['D_window_size'] == window_size] # adjust to increase difficulty and reduce accuracy == 100%
     df_train = df_train[df_train['I_connection'] != 'out-0:b:1/b'] # terrible performance, no point in including 
     factors = list(df_train[factors].nunique()[df_train[factors].nunique() > 1].index)
@@ -95,7 +95,7 @@ def load_train_data_only(variable):
     training_paths.append('/code/config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml')
 
     d_set = {}
-    d_set = {'task', 'tao', 'window_size'}
+    d_set = {'task', 'delay', 'window_size'}
     i_set = {'connection', 'pertubation'}
     r_set = {'mode', 'k_avg', 'init'}
     t_set = {'optim', 'criterion'}
@@ -161,7 +161,7 @@ def process_grid_search_data_kq_and_gr(df, d_set, i_set, r_set): # TODO come bac
     return df
 
 def aggregate_and_merge_data(df1, df2, factors):
-    # max_values = df1.groupby(['D_tao', 'sample'])['delta'].idxmax() # max delta per tao-sample (over many k_avg)
+    # max_values = df1.groupby(['D_delay', 'sample'])['delta'].idxmax() # max delta per delay-sample (over many k_avg)
     # max_subset = df1.loc[max_values]
     # max_subset['k_avg*'] = max_subset['k_avg'].mean() # average delta* over the grid_search samples
 

@@ -1,46 +1,86 @@
 import torch
-from project.boolean_reservoir.code.parameter import InputParams
+from project.boolean_reservoir.code.parameter import Params, InputParams
 
+
+class BooleanTransformer:
+    def __init__(self, P: Params, apply_redundancy=True):
+        self.P = P
+        self.I: InputParams = P.M.I
+        self.redundancy = self.I.redundancy
+        self.interleaving = self.I.interleaving
+        self.apply_redundancy = apply_redundancy
+        
+        if self.I.encoding == 'binary_embedding':
+            self.binary_encoder = BinaryEmbedding(b=I.resolution, n=self.I.redundancy)
+        else:
+            self.binary_encoder = None
+    
+    def __call__(self, bin_values):
+        # Apply tau operation BEFORE redundancy
+        if self._has_tau():
+            bin_values = self._apply_tau(bin_values)
+        
+        # needs branch as some encoders handle redundancy internally
+        if self.apply_redundancy and self.redundancy > 1:
+            bin_values = bin_values.repeat(1, 1, 1, self.redundancy)
+        elif self.binary_encoder is not None:
+            bin_values = self.binary_encoder.encode_boolean(bin_values)
+            
+        if self.interleaving:
+            bin_values = interleave_features(bin_values, group_size=self.interleaving)
+            
+        return bin_values.to(torch.uint8)
+    
+    def _has_tau(self):
+        return (self.P is not None 
+                and hasattr(self.P, 'L') 
+                and hasattr(self.P.L, 'kqgr') 
+                and self.P.L.kqgr.tau > 0)
+    
+    def _apply_tau(self, x):
+        kqgr = self.P.L.kqgr
+        if kqgr.tau == 0:
+            return x 
+        m, s, f, b = x.shape
+        n_identical_bits = kqgr.tau
+        
+        ref_idx = torch.randint(0, m, (1,)).item()
+        mask = torch.zeros(f, b, dtype=torch.bool, device=x.device)
+        
+        if kqgr.mode == 'first':
+            mask[:, :n_identical_bits] = True
+        elif kqgr.mode == 'last':
+            mask[:, -n_identical_bits:] = True
+        elif kqgr.mode == 'random':
+            for feat_idx in range(f):  # Only need loop for random
+                perm_idx = torch.randperm(b, device=x.device)[:n_identical_bits]
+                mask[feat_idx, perm_idx] = True
+        
+        x[:, :, mask] = x[ref_idx:ref_idx+1, :, mask]
+        return x
 
 class BooleanEncoder:
-    def __init__(self, I):
-        self.I = I
-
+    def __init__(self, P):
+        self.P = P
+        self.I: InputParams = P.M.I
+        apply_redundancy = (self.I.encoding != 'binary_embedding')
+        self.transformer = BooleanTransformer(P, apply_redundancy=apply_redundancy)
+    
     def __call__(self, x):
-        return float_array_to_boolean(x, self.I)
-
-
-def float_array_to_boolean(values, I: InputParams):
-    '''
-    accepts a point tensor with dimensions as columns and points are rows
-    returns a boolean encoding of this
-
-    1. assume input is normalized [0, 1] as float vals
-    2. rescaling based on bit representation
-    3. convert to bits
-    4. optionally: add redundancy
-    5. optionally: perform interleaving
-    '''
-    bin_values = None
-    values = values.float()
-    assert torch.max(values) <= 1
-    assert torch.min(values) >= 0
-    if I.encoding == 'base2':
-        bin_values = dec2bin(values, I.resolution)
-        bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
-    elif I.encoding == 'tally':
-        bin_values = dec2tally(values, I.resolution)
-        bin_values = bin_values.repeat(1, 1, 1, I.redundancy)
-    elif I.encoding == 'binary_embedding':
-        encoder = BinaryEmbedding(b=I.resolution, n=I.redundancy)
-        bin_values = encoder.encode(values)
-    else:
-        raise ValueError(f"encoding {I.encoding} is not an option!")
-
-    if I.interleaving:
-        # Note: no effect at 1D with grouping=1
-        bin_values = interleave_features(bin_values, group_size=I.interleaving)
-    return bin_values.to(torch.uint8)
+        bin_values = self._encode(x)
+        return self.transformer(bin_values)
+    
+    def _encode(self, values):
+        values = values.float()
+        assert torch.max(values) <= 1
+        assert torch.min(values) >= 0
+        if self.I.encoding == 'base2' or self.I.encoding == 'binary_embedding':
+            bin_values = dec2bin(values, self.I.resolution)
+        elif self.I.encoding == 'tally':
+            bin_values = dec2tally(values, self.I.resolution)
+        else:
+            raise ValueError(f"encoding {self.I.encoding} is not an option!")
+        return bin_values
 
 
 def dec2bin(x, bits):
@@ -126,57 +166,54 @@ def standard_normalization(data):
 
 class BinaryEmbedding:
     def __init__(self, b, n):
-        """
-        Initializes the BinaryEmbeddingEncoder with a fixed set of random boolean key vectors.
-
-        Args:
-            b (int): Bit resolution of data (2^b values).
-            n (int): The expansion factor.
-        """
         self.b = None
         self.n = None
         self.random_boolean_keys = None
         self.set_random_boolean_keys(b, n)
 
-    def encode(self, data):
-        """Encode float data using the Binary Embedding method with the pre-generated random key vectors.
+    def _encode_bits(self, bits: torch.Tensor):
+        """
+        Core encoder operating on boolean bit tensors.
 
         Args:
-            data: A normalized [0, 1] float tensor of shape (batch_size, sequence_length, features).
+            bits: uint8 tensor of shape (B, T, F, b)
 
         Returns:
-            A binary encoded tensor with self-similar properties of shape (batch_size, sequence_length, features, n*bit_resolution).
+            Encoded tensor of shape (B, T, F, n*b)
         """
-        batch_size, seq_length, features = data.size()
+        batch_size, seq_length, features, b = bits.size()
+        assert b == self.b, "Input bit resolution does not match encoder configuration."
 
-        # Convert normalized data to binary representation
-        binary_tensors = dec2bin(data, self.b).to(torch.uint8)
+        # (B, T, F, 1, b) -> (B, T, F, n, b)
+        bits = bits.unsqueeze(3).expand(-1, -1, -1, self.n, -1)
 
-        # Expand dimensions for broadcasting
-        # Output shape: (batch_size, seq_length, features, self.n, self.b)
-        binary_tensors = binary_tensors.unsqueeze(
-            3).expand(-1, -1, -1, self.n, -1)
+        # XOR with random keys
+        encoded = bits ^ self.random_boolean_keys
 
-        # Perform XOR operations
-        encoded_tensors = binary_tensors ^ self.random_boolean_keys
+        # Flatten last two dims
+        return encoded.view(batch_size, seq_length, features, -1)
 
-        # Flatten encoded tensors per value
-        encoded_tensors = encoded_tensors.view(
-            batch_size, seq_length, features, -1)
+    def encode_float(self, data: torch.Tensor):
+        """
+        Args:
+            data: float tensor in [0,1] of shape (B, T, F)
+        """
+        bits = dec2bin(data, self.b).to(torch.uint8)
+        return self._encode_bits(bits)
 
-        return encoded_tensors
+    def encode_boolean(self, data: torch.Tensor):
+        """
+        Args:
+            data: boolean / uint8 tensor of shape (B, T, F, b)
+        """
+        return self._encode_bits(data)
 
     def set_random_boolean_keys(self, new_b=None, new_n=None):
-        """Set a new set of random vectors. If new_n or new_b is None, current values are used.
-
-        Args:
-            new_b (int, optional): New bit resolution. Defaults to None.
-            new_n (int, optional): New expansion factor. Defaults to None.
-        """
         self.n = new_n if new_n is not None else self.n
         self.b = new_b if new_b is not None else self.b
         self.random_boolean_keys = torch.randint(
-            0, 2, (1, 1, 1, self.n, self.b)).to(torch.uint8)
+            0, 2, (1, 1, 1, self.n, self.b), dtype=torch.uint8
+        )
 
 
 if __name__ == '__main__':
@@ -193,8 +230,9 @@ if __name__ == '__main__':
     print((p * (2**bits - 1)).numpy())
 
     print("Boolean representation:")
-    I = InputParams(chunk_size=bits, encoding='base2', features=p.shape[-1])
-    boolean_representation = float_array_to_boolean(p, I)
+    I = InputParams(bits=bits, chunk_size=bits, encoding='base2', features=p.shape[-1])
+    encoder = BooleanEncoder(I)
+    boolean_representation = encoder(p)
     print(boolean_representation.to(torch.int).numpy())
 
     ##########################################################
@@ -205,7 +243,7 @@ if __name__ == '__main__':
     x = torch.randint(0, 10, (batch_size, s, features,),
                       dtype=torch.float) / 10
 
-    encoded_tensors = encoder.encode(x)
+    encoded_tensors = encoder.encode_float(x)
     print("Input Tensor:\n", x.numpy())
     print("Encoded Tensor Shape:", encoded_tensors.shape)
     print("Encoded Tensor:\n", encoded_tensors.to(torch.int).numpy())

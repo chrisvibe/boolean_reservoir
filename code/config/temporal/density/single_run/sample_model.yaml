@@ -11,7 +11,7 @@ dataset:
     dev: 0.3
     test: 0.3
     train: 0.4
-  tao: 0
+  delay: 0
   task: density
   window_size: 3
 logging:

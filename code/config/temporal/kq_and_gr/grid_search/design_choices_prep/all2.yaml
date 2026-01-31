@@ -3,31 +3,33 @@ logging:
   save_keys: null 
   grid_search:
     seed: 0
-    n_samples: 1 # each job completes many samples for this grid search since forward pass is not costly + re-use of datasets
+    n_samples: 1
   history:
     record: True
+  kqgr:
+    eval: ['last', 'random']
+    tau: 3
 model:
   input_layer:
     w_bi: identity
     w_ir: identity 
     pertubation: override
-    encoding: base2
-    features: 10 # PI to this means different input encoding
-    resolution: 1 # PI to this means different input encoding
-    redundancy: 1  # PI to this means different input encoding
-    chunks: 1
-    interleaving: 0
+    encoding: [base2, 'binary_embedding']
+    features: [1, 2] # affects how redundancy is applied
+    redundancy: [1, 2, 3] # changes the task complexity
+    resolution: 7
+    chunk_size: 7 # set to resolution
+    ticks: ['1', '2']
+    interleaving: 0 # no point in testing for temporal tasks
   output_layer:
-    n_outputs: 2
+    n_outputs: 1 # no effect on kq and gr
   reservoir_layer:
     init: [zeros, ones, random]
     k_avg: [1.0, 2.0, 3.0, 4.0, 5.0]
     k_min: 0
-    # k_max: 10
     k_max: ['k_avg + 1', 'k_avg + 2', 'k_avg + 3', 'k_avg + 4', 'k_avg + 5', 10] # interesting number of attractors
     mode: [homogeneous, heterogeneous]
-    n_nodes: [500, 1000, 2000] # EXPLORE WITH KQ AND GR AND TRY THIS LATER
-    p: 0.5
+    n_nodes: [512, 1024] # make sure 2**D.bits-1 >= n_nodes to have enough states
     reset: true
     self_loops: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1] # interesting number of attractors
   training:
@@ -37,13 +39,15 @@ model:
     epochs: 40
     evaluation: dev
 dataset: # this whole section is repurposed to control the custom experiments
+  dimensions: 1
   task: density # not really just using the x values and ignoring y
-  bit_stream_length: 10
-  window_size: 3 # not using this
-  tao: [1, 2, 3, 4, 5, 6, 7] # controls tao for KQ and GR instead of tao for temporal density task (bits overriden to make similar inputs)
+  bits: 1 # overridden in dataset_init to features * resolution
+  window: 1 # not using this
+  delay: 1 # not using this
   split: # not training the model, just recording state changes with input
     train: 1
     dev: 0
     test: 0
-  samples: 25 # number of samples/random seeds per configuration. overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)
+  samples: 1 # overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)
+  sampling_mode: 'exhaustive' 
   seed: 0

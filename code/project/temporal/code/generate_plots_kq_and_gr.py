@@ -11,27 +11,27 @@ def load_data_from_yaml(path):
     data_file_path = P.L.out_path / 'log.yaml'
     df, _ = load_grid_search_data(data_paths=data_file_path)
     df.loc[:, 'k_avg'] = df['params'].apply(lambda p: p.M.R.k_avg)
-    df.loc[:, 'tao'] = df['params'].apply(lambda p: p.D.tao)
+    df.loc[:, 'delay'] = df['params'].apply(lambda p: p.D.delay)
     return P, df
     
 if __name__ == '__main__':
     paths = list()
     # paths.append('config/temporal/kq_and_gr/test.yaml')
 
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_stochastic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_stochastic.yaml')
 
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_stochastic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_stochastic.yaml')
 
-    paths.append('config/temporal/kq_and_gr/vary_tao/homogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/vary_tao/homogeneous_stochastic.yaml')
-    paths.append('config/temporal/kq_and_gr/vary_tao/heterogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/vary_tao/heterogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_delay/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_delay/homogeneous_stochastic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_delay/heterogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/vary_delay/heterogeneous_stochastic.yaml')
 
 
     for path in paths:
@@ -54,8 +54,8 @@ if __name__ == '__main__':
         
     # smooth curve for example config
     paths = list()
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
-    paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_deterministic.yaml')
+    paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_deterministic.yaml')
     for path in paths:
         P, df = load_data_from_yaml(path)
         grouped_df = group_df_data_by_parameters(df)
@@ -67,15 +67,15 @@ if __name__ == '__main__':
     # # special
     # ##########################
     # paths = list()
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_deterministic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/homogeneous_stochastic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_deterministic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_3/heterogeneous_stochastic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_deterministic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/homogeneous_stochastic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_deterministic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_3/heterogeneous_stochastic.yaml')
 
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_deterministic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/homogeneous_stochastic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_deterministic.yaml')
-    # paths.append('config/temporal/kq_and_gr/fixed_tao/tao_5/heterogeneous_stochastic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_deterministic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/homogeneous_stochastic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_deterministic.yaml')
+    # paths.append('config/temporal/kq_and_gr/fixed_delay/delay_5/heterogeneous_stochastic.yaml')
 
     # data = list()
     # for path in paths: # concat data

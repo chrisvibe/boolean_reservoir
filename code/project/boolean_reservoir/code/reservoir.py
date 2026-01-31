@@ -53,7 +53,7 @@ class BooleanReservoir(nn.Module):
             input_nodes = cs.eval(self.M.I.selector)
             input_nodes_mask = torch.zeros(self.M.n_nodes, dtype=torch.bool)
             input_nodes_mask[input_nodes] = True
-            ticks = torch.tensor([int(c) for c in self.I.ticks])
+            ticks = torch.tensor([int(c) for c in self.I.ticks_expanded])
 
             # RESERVOIR LAYER
             # Properties of reservoir nodes that dont receive input (R)

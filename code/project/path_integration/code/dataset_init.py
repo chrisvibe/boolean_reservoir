@@ -6,14 +6,12 @@ from benchmark.path_integration.constrained_foraging_path_dataset import Constra
 
 class PathIntegrationDatasetInit(DatasetInit): # Note dont use I.seed here dataset init will use D.seed
     def dataset_init(self, P: Params):
-        D = P.D
-        I = P.M.I
-        dataset = ConstrainedForagingPathDataset(D)
+        dataset = ConstrainedForagingPathDataset(P.D)
         dataset = balance_dataset(dataset, num_bins=100) # Note that data range affects bin assignment (outliers dangerous)
         dataset.set_normalizer_x(min_max_normalization)
         dataset.set_normalizer_y(min_max_normalization)
         dataset.normalize()
-        encoder = BooleanEncoder(I)
+        encoder = BooleanEncoder(P)
         dataset.set_encoder_x(encoder)
         dataset.encode_x()
         dataset.split_dataset()

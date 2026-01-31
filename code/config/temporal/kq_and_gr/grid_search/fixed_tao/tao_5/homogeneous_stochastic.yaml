@@ -2,7 +2,7 @@ logging:
   history:
     buffer_size: 64
     record: True
-  out_path: out/temporal/kq_and_gr/grid_search/homogeneous-stochastic-tao5
+  out_path: out/temporal/kq_and_gr/grid_search/homogeneous-stochastic-delay5
   save_keys: null
 model:
   input_layer:
@@ -36,9 +36,9 @@ model:
     evaluation: dev
 dataset: # this whole section is repurposed to control the custom experiments
   task: density # not really just using the x values and ignoring y
-  bit_stream_length: 10
-  window_size: 3 # not using this
-  tao: 5 # controls tao for KQ and GR instead of tao for temporal density task (bits overriden to make similar inputs)
+  bits: 10
+  window: 3 # not using this
+  delay: 5 # controls delay for KQ and GR instead of delay for temporal density task (bits overriden to make similar inputs)
   split: # not training the model, just recording state changes with input
     train: 1
     dev: 0

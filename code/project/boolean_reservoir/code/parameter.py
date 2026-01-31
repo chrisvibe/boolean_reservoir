@@ -4,7 +4,7 @@ from typing import List, Union, Optional
 from pathlib import Path
 from benchmark.path_integration.parameters import PathIntegrationDatasetParams
 from benchmark.temporal.parameters import TemporalDatasetParams
-from project.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams, CallParams, ExpressionEvaluator
+from project.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams, CallParams, ExpressionEvaluator, expand_ticks
 
 pydantic_init()
 
@@ -47,7 +47,7 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
     resolution: Optional[Union[int, List[int]]] = Field(None, description="Bits per dimension before redundancy")
     redundancy: Union[int, List[int]] = Field(1, description="Redundancy factor of resolution")
     chunks: Optional[Union[int, List[int]]] = Field(None, description="Number of chunks to split bits into")
-    chunk_size: Optional[Union[int, List[int]]] = Field(None, description="Bits per chunk. Overridden by chunks")
+    chunk_size: Optional[Union[int, List[int]]] = Field(1, description="Bits per chunk. Overridden by chunks")
     ticks: Optional[Union[str, List[str]]] = Field(None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
 
     @model_validator(mode='after')
@@ -102,22 +102,30 @@ class InputParams(BaseModel): # TODO split into Bits layer (B→I) and Input lay
         return self
 
     @model_validator(mode='after')
-    def calculate_ticks(self):
-        # Skip if chunks is a list (will be handled after expansion)
-        if isinstance(self.chunks, list):
+    def set_default_ticks(self):
+        if self.chunks is None or isinstance(self.chunks, list):
             return self
-
-        # Initialize ticks as '1' repeated for each chunk count
         if self.ticks is None:
-            self.ticks = calculate_w_broadcasting(lambda t, c: '1' * c, self.ticks, self.chunks)
-        
-        # Repeat or truncate ticks to match chunk length
-        self.ticks = calculate_w_broadcasting(
-            lambda t, c: t * (c // len(t)) if c >= len(t) else t[:c],
-            self.ticks,
-            self.chunks
-        )
+            self.ticks = f'1{{{self.chunks}}}'
         return self
+    
+    @property
+    def ticks_expanded(self):
+        if self.ticks is None:
+            return '1' * self.chunks if self.chunks else None
+        
+        expanded = expand_ticks(self.ticks)
+        
+        # Repeat/truncate to match chunks
+        if self.chunks and len(expanded) != self.chunks:
+            if len(expanded) < self.chunks:
+                # Repeat pattern to fill
+                expanded = (expanded * (self.chunks // len(expanded) + 1))[:self.chunks]
+            else:
+                # Truncate
+                expanded = expanded[:self.chunks]
+        
+        return expanded
 
 class ReservoirParams(BaseModel):
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
@@ -218,10 +226,16 @@ class TrainLog(BaseModel):
 class KQGRMetrics(BaseModel):
     config: int | None = None
     sample: int | None = None
+    tau: Union[int, List[int]] = Field(3, description="Identical bits in generalization rank metric")
+    eval: Union[str, List[str]] = Field(None, description="Evaluation mode for GR metrics")
     kq: int | None = None
     gr: int | None = None
     delta: int | None = None
     spectral_radius: float | None = None
+
+    @property
+    def mode(self):
+        return self.eval.split('-')[0]
 
 class LoggingParams(BaseModel):
     timestamp_utc: Optional[str] = Field(None, description="timestamp utc")

@@ -10,6 +10,7 @@ from project.parallel_grid_search.code.train_model_parallel import generic_paral
 from project.parallel_grid_search.code.parallel_utils import JobInterface
 from copy import deepcopy
 from pathlib import Path
+from shutil import copy
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,19 +64,17 @@ class BooleanReservoirKQGRJob(JobInterface):
         model.eval()
         
         # Compute metrics
-        spectral_radius = calc_spectral_radius(model.graph)
+        spectral_radius = float(calc_spectral_radius(model.graph))
         kq_rank = compute_rank(model, x_kq, 'kq')
         gr_rank = compute_rank(model, x_gr, 'gr')
         
         # Store in params
-        self.P.L.kqgr = KQGRMetrics(
-            config=self.i,
-            sample=self.j,
-            kq=kq_rank,
-            gr=gr_rank,
-            delta=kq_rank - gr_rank,
-            spectral_radius=spectral_radius
-        )
+        self.P.L.kqgr.config = self.i
+        self.P.L.kqgr.sample = self.j
+        self.P.L.kqgr.kq = kq_rank
+        self.P.L.kqgr.gr = gr_rank
+        self.P.L.kqgr.delta = kq_rank - gr_rank
+        self.P.L.kqgr.spectral_radius = spectral_radius
         
         # Append params to history
         with self.locks['history']:
@@ -130,7 +129,8 @@ def boolean_reservoir_kq_gr_grid_search(
     factory = boolean_reservoir_kq_gr_job_factory(P, param_combinations, dataset_init)
     
     def save_config(output_path):
-        save_yaml_config(P, output_path / 'parameters.yaml')
+        copy(yaml_path, output_path / 'parameters.yaml')
+        save_yaml_config(P, output_path / 'parameters_full.yaml')
     
     def process_results(history, output_path, done):
         if history:

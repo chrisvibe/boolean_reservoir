@@ -24,7 +24,7 @@ if __name__ == '__main__':
     # from project.boolean_reservoir.code.reservoir import BooleanReservoir
     # from project.boolean_reservoir.code.utils import print_pretty_binary_matrix
     # import torch
-    # from project.boolean_reservoir.code.parameters import generate_param_combinations, load_yaml_config
+    # from project.boolean_reservoir.code.parameter import generate_param_combinations, load_yaml_config
     # p = load_yaml_config('config/temporal/density/grid_search/homogeneous_deterministic.yaml')
     # p.L.out_path = '/out/debug'
     # p.L.history.record = True
@@ -85,48 +85,47 @@ if __name__ == '__main__':
         print(config)
         boolean_reservoir_kq_gr_grid_search(config)
 
+    # # # Grid search stuff 
+    # # #####################################
+    # # configs = [
+    # #     'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+    # #     'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
+    # #     'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
+    # #     'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
 
-    # # Grid search stuff 
-    # #####################################
-    # configs = [
-    #     'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
-    #     'config/temporal/density/grid_search/homogeneous_deterministic.yaml',
-    #     'config/temporal/density/grid_search/heterogeneous_stochastic.yaml',
-    #     'config/temporal/density/grid_search/heterogeneous_deterministic.yaml',
+    # #     'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
+    # #     'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
+    # #     'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
+    # #     'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
 
-    #     'config/temporal/parity/grid_search/homogeneous_stochastic.yaml',
-    #     'config/temporal/parity/grid_search/homogeneous_deterministic.yaml',
-    #     'config/temporal/parity/grid_search/heterogeneous_stochastic.yaml',
-    #     'config/temporal/parity/grid_search/heterogeneous_deterministic.yaml',
+    # #     # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
+    # #     # 'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
 
-    #     # 'config/temporal/density/test/heterogeneous_deterministic.yaml',
-    #     # 'config/temporal/density/grid_search/homogeneous_stochastic.yaml',
+    # #     'config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml',
+    # # ]
 
-    #     'config/temporal/density/grid_search/test_optimizer_and_readout_mode.yaml',
-    # ]
+    # # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
+    # # if "hpc" in node:
+    # #     logger.info(f"This is hpc node: {node}")
+    # # else:
+    # #     logger.warning(f"Unknown node detected: {node}")
 
-    # node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    # if "hpc" in node:
-    #     logger.info(f"This is hpc node: {node}")
-    # else:
-    #     logger.warning(f"Unknown node detected: {node}")
+    # # node_job_assigments = {
+    # #     1: [0, 7],
+    # #     5: [1, 6],
+    # #     # 7: [2, 5],
+    # #     7: [-1],
+    # #     8: [3, 4],
+    # #     10: [-1],
+    # #     11: [-1],
+    # #     'unknown': [-1],
+    # # }
+    # # if node != 'unknown':
+    # #     id = int(node[3:])
+    # #     configs = [configs[idx] for idx in node_job_assigments[id]]
+    # # else:
+    # #     configs = [configs[idx] for idx in node_job_assigments['unknown']]
 
-    # node_job_assigments = {
-    #     1: [0, 7],
-    #     5: [1, 6],
-    #     # 7: [2, 5],
-    #     7: [-1],
-    #     8: [3, 4],
-    #     10: [-1],
-    #     11: [-1],
-    #     'unknown': [-1],
-    # }
-    # if node != 'unknown':
-    #     id = int(node[3:])
-    #     configs = [configs[idx] for idx in node_job_assigments[id]]
-    # else:
-    #     configs = [configs[idx] for idx in node_job_assigments['unknown']]
-
-    # for c in configs:
-    #     boolean_reservoir_grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    # print('done!')
+    # # for c in configs:
+    # #     boolean_reservoir_grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # # print('done!')

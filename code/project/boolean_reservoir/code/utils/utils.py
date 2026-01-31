@@ -10,6 +10,7 @@ from os import getpid, replace
 from project.boolean_reservoir.code.parameter import Params, load_yaml_config
 import yaml
 from enum import Enum
+from inspect import getsource
 
 # Ensure reproducibility by setting seeds globally
 # Wont work across architectures and GPU vs CPU etc
@@ -211,6 +212,10 @@ def params_col_to_fields(df, extractions):
         row = {}
         for prefix, get_source, field_set in extractions:
             source = get_source(params)
+            if source is None:
+                lambda_str = getsource(get_source).strip() 
+                print(f"Warning: Extraction source is None for extraction: {lambda_str}")
+                continue
             if field_set is None:
                 row[prefix] = source
                 continue

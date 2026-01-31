@@ -5,6 +5,7 @@ from typing import Callable, ClassVar
 from pathlib import Path, PosixPath, WindowsPath
 import sympy
 from inspect import signature, Parameter
+import re
 
 def pydantic_init():
     def represent_pathlib_path(dumper, data):
@@ -155,3 +156,10 @@ def _generate_combinations_from_dict(expanded_fields, original_type):
         else:
             combos.append(original_type(**dict(zip(field_names, combo))))
     return combos
+
+def expand_ticks(s):
+    # Expand pattern repetition: '(123){3}' → '123123123'
+    s = re.sub(r'\(([^)]+)\)\{(\d+)\}', lambda m: m.group(1) * int(m.group(2)), s)
+    # Expand single-char RLE: '1{3}' → '111'
+    s = re.sub(r'(.)\{(\d+)\}', lambda m: m.group(1) * int(m.group(2)), s)
+    return s

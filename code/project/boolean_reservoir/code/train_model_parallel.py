@@ -12,6 +12,7 @@ from typing import Callable
 from torch.utils.data import Dataset
 from torch import compile
 import logging
+from shutil import copy
 logger = logging.getLogger(__name__)
 
 
@@ -107,7 +108,8 @@ def boolean_reservoir_grid_search(
     
     # Define callbacks
     def save_config(output_path):
-        save_yaml_config(P, output_path / 'parameters.yaml')
+        copy(yaml_path, output_path / 'parameters.yaml')
+        save_yaml_config(P, output_path / 'parameters_full.yaml')
 
     def process_results(history, output_path, done):
         file_path = output_path / 'log.yaml'

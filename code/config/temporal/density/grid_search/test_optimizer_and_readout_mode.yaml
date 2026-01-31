@@ -40,7 +40,7 @@ dataset:
   task: density
   bit_stream_length: 10
   window_size: [5]
-  tao: [3]
+  delay: [3]
   split:
     train: 0.4
     dev: 0.3

@@ -1,4 +1,4 @@
-from project.boolean_reservoir.code.utils.explore_grid_search_data import load_custom_data, graph_accuracy_vs_k_avg, create_accuracy_vs_k_avg_dashboard
+from project.boolean_reservoir.code.utils.explore_grid_search_data import load_custom_data, graph_accuracy_vs_k_avg, create_scatter_dashboard
 from project.boolean_reservoir.code.visualization import polar_design_plot
 from pathlib import Path
 
@@ -24,5 +24,5 @@ if __name__ == '__main__':
     df = df[df['I_chunks'] != 2]
     polar_design_plot(out_path, df, factors, success_thresh=.2, title='test optim')
     graph_accuracy_vs_k_avg(path, df, factors)
-    app = create_accuracy_vs_k_avg_dashboard(df, factors)
+    app = create_scatter_dashboard(df, factors)
     app.run_server(debug=True)

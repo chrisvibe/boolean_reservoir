@@ -1,23 +1,25 @@
 logging:
   out_path: out/temporal/kq_and_gr/grid_search/test
-  # save_keys: ['parameters'] 
   save_keys: null 
   grid_search:
     seed: 0
-    n_samples: 1 # each job completes many samples for this grid search since forward pass is not costly + re-use of datasets
+    n_samples: 1
   history:
-    buffer_size: 64
     record: True
+  kqgr:
+    eval: 'last-random'
+    tau: 3
 model:
   input_layer:
     w_bi: identity
-    w_ir: out-1:b:1/b
+    w_ir: identity
     encoding: base2
+    features: 2
+    redundancy: [10, 15, 20] 
+    resolution: 10 # affects how redundancy is applied 
+    chunk_size: 10 # set to resolution 
     interleaving: 0
-    features: 10
     pertubation: override
-    redundancy: 1
-    resolution: 1
     w_in: null
   output_layer:
     activation: sigmoid
@@ -28,7 +30,7 @@ model:
     k_min: 0
     k_max: 25
     mode: [homogeneous, heterogeneous]
-    n_nodes: 25
+    n_nodes: 500
     p: 0.5
     reset: true
     self_loops: null
@@ -40,12 +42,12 @@ model:
     evaluation: dev
 dataset: # this whole section is repurposed to control the custom experiments
   task: density # not really just using the x values and ignoring y
-  bit_stream_length: 10
-  window_size: 3 # not using this
-  tao: [1, 2, 3, 4, 5, 6, 7] # controls tao for KQ and GR instead of tao for temporal density task (bits overriden to make similar inputs)
+  bits: 10
+  window: 3 # not using this
+  delay: 1 # not using this
   split: # not training the model, just recording state changes with input
     train: 1
     dev: 0
     test: 0
-  samples: 25 # number of samples/random seeds per configuration. overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)
+  samples: 1 # overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)
   seed: 0

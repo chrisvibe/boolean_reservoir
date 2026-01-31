@@ -24,6 +24,9 @@ if __name__ == '__main__':
 
     for config in configs:
         print(config)
+        # from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations
+        # param_combinations = generate_param_combinations(load_yaml_config(config))
+        # P = boolean_reservoir_kq_gr_grid_search(config, dataset_init, param_combinations=[param_combinations[0]])
         P = boolean_reservoir_kq_gr_grid_search(config, dataset_init)
 
         P = load_yaml_config(config)

@@ -59,7 +59,7 @@ def fix_combo(df, factors):
     return df, factors
 
 def aggregate_and_merge_data(df1, df2, factors):
-    # max_values = df1.groupby(['D_tao', 'sample'])['delta'].idxmax() # max delta per tao-sample (over many k_avg)
+    # max_values = df1.groupby(['D_delay', 'sample'])['delta'].idxmax() # max delta per delay-sample (over many k_avg)
     # max_subset = df1.loc[max_values]
     # max_subset['k_avg*'] = max_subset['k_avg'].mean() # average delta* over the grid_search samples
 

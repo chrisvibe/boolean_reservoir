@@ -4,23 +4,23 @@ from project.boolean_reservoir.code.utils.utils import custom_load_grid_search_d
 from pathlib import Path
 
 if __name__ == '__main__':
-    # config = Path('config/path_integration/2D/grid_search/design_choices_prep/all.yaml')
-    config = Path('config/path_integration/2D/grid_search/design_choices_prep/all2.yaml')
+    config = Path('config/temporal/kq_and_gr/grid_search/design_choices_prep/all2.yaml')
     paths = list()
     paths.append(config)
+
     response = 'accuracy'
-    out_path = Path('/out/path_integration/stats/design_evaluation_prep/test_all')
-    out_path = Path('/out/path_integration/stats/design_evaluation_prep/test_all2')
+    out_path = Path('/out/path_integration/stats/design_evaluation_prep/kqgr/test_all2')
     path = out_path / ''
     print(path)
 
     extractions = [
-        ('T', lambda p: p.L.T, {'accuracy', 'loss'}),
-        ('I', lambda p: p.M.I, {'pertubation', 'encoding', 'redundancy', 'chunks', 'interleaving'}),
+        ('T', lambda p: p.L.kqgr, {'kq', 'gr', 'delta'}),
+        ('I', lambda p: p.M.I, {'pertubation', 'encoding', 'redundancy', 'chunks', 'interleaving', 'ticks'}),
         ('R', lambda p: p.M.R, {'mode', 'k_avg', 'init', 'k_max', 'self_loops', 'n_nodes'}),
     ]
 
-    df, factors = custom_load_grid_search_data(config_paths=config, extractions=extractions, df_filter_mask=lambda df: df.index < 100)
+    # df, factors = custom_load_grid_search_data(config_paths=config, extractions=extractions, df_filter_mask=lambda df: df.index < 100)
+    df, factors = custom_load_grid_search_data(config_paths=config, extractions=extractions)
     print('data loaded...')
     app = create_scatter_dashboard(df, factors)
     app.run(debug=False, dev_tools_hot_reload=False)

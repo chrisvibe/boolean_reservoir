@@ -80,11 +80,13 @@ def graph_accuracy_vs_k_avg(out_path: Path, df: pd.DataFrame, factors: list[str]
     pio.write_image(fig, out_path / 'scatter_accuracy_vs_k_avg.svg', format='svg', width=1200, height=1600)
     return fig
 
-def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jitter={'R_k_avg': [-0.5, 0.5]}):
+def create_scatter_dashboard(df: pd.DataFrame, factors: list[str], jitter={'R_k_avg': [-0.5, 0.5]}):
     # ---- jitter --------------------------------------------
     df = df.copy()
     new_cols = list()
     for col, jitt in jitter.items():
+        if col not in df.columns:
+            continue
         new_col = col + '_w_jitter'
         new_cols.append(new_col)
         df[new_col] = (
@@ -92,10 +94,12 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         )
     
     # ---- Factor handling -----------------------------------------------------
+    exclude_cols = list(jitter.keys()) + [c + '_w_jitter' for c in jitter.keys()]
     df['design'], factors_subset = make_combo_column(
-        df, factors, exclude=['R_k_avg', 'T_accuracy', 'T_loss'], return_as_str=True
+        df, factors, exclude=exclude_cols, return_as_str=True
     )
-    filter_factors = list(factors_subset) + ['R_k_avg']
+    candidate_factors = list(factors_subset) + [c for c in jitter.keys() if c in df.columns]
+    filter_factors = [f for f in candidate_factors if df[f].nunique() < 20]
     
     # Convert all factor values to strings for consistency
     factor_values = {
@@ -104,17 +108,21 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
     }
     
     # ---- Available axis options ----------------------------------------------
-    axis_options = [*new_cols, 'T_accuracy', 'T_loss'] + filter_factors
+    numeric_cols = df.select_dtypes(include='number').columns.tolist()
+    axis_options = [c for c in new_cols + numeric_cols if c in df.columns]
+    axis_options = list(dict.fromkeys(axis_options))  # dedupe, preserve order
+    
+    # ---- Default axis values -------------------------------------------------
+    default_x = 'R_k_avg_w_jitter' if 'R_k_avg_w_jitter' in axis_options else None
+    default_y = 'T_accuracy' if 'T_accuracy' in axis_options else None
     
     # ---- Stable color mapping ------------------------------------------------
-    # Use a large color palette for consistent coloring
     color_palette = px.colors.qualitative.Alphabet + px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
     
     def get_stable_color(combo_str, offset=0):
         """Get a consistent color for a combination string using hash and offset"""
         if combo_str == "Other":
-            return '#CCCCCC'  # Gray for "Other"
-        # Add offset to get different colors
+            return '#CCCCCC'
         hash_input = f"{combo_str}_{offset}"
         hash_value = int(md5(hash_input.encode()).hexdigest(), 16)
         return color_palette[hash_value % len(color_palette)]
@@ -135,6 +143,16 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
     
     # ---- Helper to create figure ---------------------------------------------
     def create_figure(filtered_df, x_col, y_col, color_group_col=None, color_offsets=None):
+        # Handle missing axis selection
+        if not x_col or not y_col:
+            fig = go.Figure()
+            fig.update_layout(
+                title="Select X and Y axes to display data",
+                xaxis_title="X",
+                yaxis_title="Y",
+            )
+            return fig
+        
         if filtered_df.empty:
             fig = go.Figure()
             fig.update_layout(
@@ -150,20 +168,14 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         use_color = color_group_col and filtered_df[color_group_col].nunique() > 1
         
         if use_color:
-            # Create stable color mapping with offsets
             unique_combos = sorted(filtered_df[color_group_col].unique())
             color_map = {}
             for combo in unique_combos:
-                # Calculate offset based on all values in this combo
                 offset = 0
                 if color_offsets and combo != "Other":
-                    # Parse the combo string to extract keys
                     for part in combo.split(', '):
                         if ':' in part:
-                            # Key is already in "factor:value" format
                             offset += color_offsets.get(part, 0)
-                
-                # IMPORTANT: Use the full combo string + offset for unique colors
                 color_map[combo] = get_stable_color(combo, offset)
             
             fig = px.scatter(
@@ -171,10 +183,10 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
                 x=x_col,
                 y=y_col,
                 color=color_group_col,
-                color_discrete_map=color_map,  # Use our stable color map
+                color_discrete_map=color_map,
                 labels={color_group_col: 'Combination'},
                 custom_data=['combo_str'],
-                category_orders={color_group_col: unique_combos}  # Stable ordering
+                category_orders={color_group_col: unique_combos}
             )
             hover_template = f'<b>Combo:</b> %{{customdata[0]}}<br><b>{x_col}:</b> %{{x}}<br><b>{y_col}:</b> %{{y}}<extra></extra>'
         else:
@@ -202,23 +214,25 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
             uirevision="scatter-plot",
         )
         
-        # Special handling for R_k_avg x-axis
-        if x_col == 'R_k_avg_w_jitter':
-            x_min = int(df['R_k_avg'].min())
-            x_max = int(df['R_k_avg'].max())
+        # Special handling for jittered x-axis - show integer ticks
+        base_col = x_col.replace('_w_jitter', '')
+        if x_col.endswith('_w_jitter') and base_col in df.columns:
+            x_min = int(df[base_col].min())
+            x_max = int(df[base_col].max())
             x_ticks = list(range(x_min, x_max + 1))
             fig.update_xaxes(tickmode='array', tickvals=x_ticks)
         
-        # Special handling for accuracy y-axis
-        if y_col == 'T_accuracy':
-            fig.update_yaxes(range=[0, 1], fixedrange=True)
+        # Special handling for 0-1 range columns (accuracy, etc)
+        if y_col in df.columns:
+            y_min, y_max = df[y_col].min(), df[y_col].max()
+            if y_min >= 0 and y_max <= 1:
+                fig.update_yaxes(range=[0, 1], fixedrange=True)
         
         return fig
     
     # ---- Dash app ------------------------------------------------------------
     app = Dash(__name__)
     app.layout = html.Div([
-        # Collapse/expand button
         html.Button(
             '▼ Hide Controls',
             id='toggle-controls',
@@ -234,33 +248,33 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
             }
         ),
         
-        # Controls container
         html.Div([
-            # Axis selection
             html.Div([
                 html.Div([
                     html.Label('X-axis:'),
                     dcc.Dropdown(
                         id='x-axis',
                         options=[{'label': col, 'value': col} for col in axis_options],
-                        value='R_k_avg_w_jitter',
-                        clearable=False,
+                        value=default_x,
+                        clearable=True,
+                        placeholder='Select X axis...',
                     ),
-                ], style={'width': '20%', 'display': 'inline-block', 'marginRight': '2%'}),
+                ], style={'width': '18%', 'display': 'inline-block', 'marginRight': '2%'}),
                 
                 html.Div([
                     html.Label('Y-axis:'),
                     dcc.Dropdown(
                         id='y-axis',
                         options=[{'label': col, 'value': col} for col in axis_options],
-                        value='T_accuracy',
-                        clearable=False,
+                        value=default_y,
+                        clearable=True,
+                        placeholder='Select Y axis...',
                     ),
-                ], style={'width': '20%', 'display': 'inline-block'}),
+                ], style={'width': '18%', 'display': 'inline-block', 'marginRight': '2%'}),
                 
                 html.Div([
                     html.Button(
-                        '🎨 Change Color Mode (OFF)',
+                        '🎨 Color Mode (OFF)',
                         id='color-mode-toggle',
                         n_clicks=0,
                         style={
@@ -272,10 +286,42 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
                             'background': 'white',
                         }
                     ),
-                ], style={'width': '20%', 'display': 'inline-block', 'marginLeft': '2%'}),
+                ], style={'width': '15%', 'display': 'inline-block', 'marginRight': '2%'}),
+                
+                html.Div([
+                    html.Button(
+                        '⏸️ Lazy Mode (ON)',
+                        id='lazy-mode-toggle',
+                        n_clicks=0,
+                        style={
+                            'padding': '6px 12px',
+                            'fontSize': '12px',
+                            'cursor': 'pointer',
+                            'border': '2px solid #ccc',
+                            'borderRadius': '4px',
+                            'background': '#e3f2fd',
+                            'fontWeight': 'bold',
+                            'marginRight': '8px',
+                        }
+                    ),
+                    html.Button(
+                        '🔄 Refresh',
+                        id='refresh-btn',
+                        n_clicks=0,
+                        style={
+                            'padding': '6px 12px',
+                            'fontSize': '12px',
+                            'cursor': 'pointer',
+                            'border': '2px solid #4CAF50',
+                            'borderRadius': '4px',
+                            'background': '#4CAF50',
+                            'color': 'white',
+                            'fontWeight': 'bold',
+                        }
+                    ),
+                ], style={'width': '25%', 'display': 'inline-block'}),
             ], style={'marginBottom': '20px'}),
             
-            # Filter dropdowns
             html.Div([
                 html.Div([
                     "Select values to filter. Click buttons below to color by specific values."
@@ -310,7 +356,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
                         dcc.Dropdown(
                             id={'type': 'dropdown', 'factor': factor},
                             options=[{'label': v, 'value': v} for v in factor_values[factor]],
-                            value=[],  # Start with nothing selected (= all data shown)
+                            value=[],
                             multi=True,
                         ),
                         html.Div([
@@ -336,22 +382,21 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         dcc.Store(id='color-state', data={}),
         dcc.Store(id='value-color-offsets', data={}),
         dcc.Store(id='color-mode-active', data=False),
+        dcc.Store(id='lazy-mode-active', data=True),
         dcc.Graph(id='scatter-plot', style={'height': '85vh'}),
     ])
     
-    # ---- Callback for collapsing controls ------------------------------------
     @callback(
         Output('controls-container', 'style'),
         Output('toggle-controls', 'children'),
         Input('toggle-controls', 'n_clicks'),
     )
     def toggle_controls(n_clicks):
-        if n_clicks % 2 == 1:  # Collapsed
+        if n_clicks % 2 == 1:
             return {'display': 'none'}, '▶ Show Controls'
-        else:  # Expanded
+        else:
             return {'display': 'block'}, '▼ Hide Controls'
     
-    # ---- Callback to toggle color mode ---------------------------------------
     @callback(
         Output('color-mode-active', 'data'),
         Output('color-mode-toggle', 'children'),
@@ -362,7 +407,7 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
     )
     def toggle_color_mode(n_clicks, is_active):
         new_state = not is_active
-        label = '🎨 Change Color Mode (ON)' if new_state else '🎨 Change Color Mode (OFF)'
+        label = '🎨 Color Mode (ON)' if new_state else '🎨 Color Mode (OFF)'
         style = {
             'padding': '6px 12px',
             'fontSize': '12px',
@@ -374,7 +419,29 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         }
         return new_state, label, style
     
-    # ---- Callback for select all / clear all ---------------------------------
+    @callback(
+        Output('lazy-mode-active', 'data'),
+        Output('lazy-mode-toggle', 'children'),
+        Output('lazy-mode-toggle', 'style'),
+        Input('lazy-mode-toggle', 'n_clicks'),
+        State('lazy-mode-active', 'data'),
+        prevent_initial_call=True,
+    )
+    def toggle_lazy_mode(n_clicks, is_active):
+        new_state = not is_active
+        label = '⏸️ Lazy Mode (ON)' if new_state else '▶️ Lazy Mode (OFF)'
+        style = {
+            'padding': '6px 12px',
+            'fontSize': '12px',
+            'cursor': 'pointer',
+            'border': '2px solid #ccc',
+            'borderRadius': '4px',
+            'background': '#e3f2fd' if new_state else 'white',
+            'fontWeight': 'bold' if new_state else 'normal',
+            'marginRight': '8px',
+        }
+        return new_state, label, style
+    
     @callback(
         Output({'type': 'dropdown', 'factor': MATCH}, 'value'),
         Input({'type': 'select-all', 'factor': MATCH}, 'n_clicks'),
@@ -391,10 +458,9 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         
         if triggered_id['type'] == 'select-all':
             return factor_values[factor]
-        else:  # clear-all
+        else:
             return []
     
-    # ---- Callback for button toggles -----------------------------------------
     @callback(
         Output('color-state', 'data'),
         Output({'type': 'color-btn', 'factor': ALL, 'value': ALL}, 'style'),
@@ -418,11 +484,8 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         key = f"{factor}:{value}"
         
         if color_mode_active:
-            # Change color mode - cycle the color offset
             color_offsets[key] = color_offsets.get(key, 0) + 1
-            print(f"Color offset updated: {key} = {color_offsets[key]}")  # Debug
         else:
-            # Normal mode - toggle selection
             if factor not in color_state:
                 color_state[factor] = []
             
@@ -431,7 +494,6 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
             else:
                 color_state[factor].append(value)
         
-        # Generate button styles
         styles = [
             button_style(
                 is_active=(f in color_state and v in color_state[f])
@@ -442,33 +504,40 @@ def create_accuracy_vs_k_avg_dashboard(df: pd.DataFrame, factors: list[str], jit
         
         return color_state, styles, color_offsets
     
-    # ---- Main plot callback --------------------------------------------------
     @callback(
         Output('scatter-plot', 'figure'),
+        Input('refresh-btn', 'n_clicks'),
         Input('x-axis', 'value'),
         Input('y-axis', 'value'),
         Input({'type': 'dropdown', 'factor': ALL}, 'value'),
         Input('color-state', 'data'),
         Input('value-color-offsets', 'data'),
+        State('lazy-mode-active', 'data'),
     )
-    def update_figure(x_col, y_col, filter_values, color_state, color_offsets):
-        print(f"Color offsets in update_figure: {color_offsets}")  # Debug
+    def update_figure(refresh_clicks, x_col, y_col, filter_values, color_state, color_offsets, lazy_mode):
+        # In lazy mode, only update on refresh button click
+        if lazy_mode:
+            triggered = ctx.triggered_id
+            if triggered != 'refresh-btn':
+                raise PreventUpdate
         
-        # Apply filters (empty list = show all)
+        # Handle missing axis selection early
+        if not x_col or not y_col:
+            return create_figure(None, x_col, y_col)
+        
+        # Apply filters
         mask = np.ones(len(df), dtype=bool)
         for factor, values in zip(filter_factors, filter_values):
-            if values:  # Only filter if something is selected
+            if values:
                 mask &= df[factor].astype(str).isin(values)
         
         filtered_df = df[mask]
         
-        # Determine if we need color grouping
         color_factors = [f for f in filter_factors if color_state.get(f, [])]
         
         if not color_factors:
             return create_figure(filtered_df, x_col, y_col)
 
-        # Create color grouping - DON'T filter, just label as "Other"
         def make_color_key(row):
             parts = []
             has_all_color_factors = True

@@ -44,7 +44,7 @@ def group_df_data_by_parameters(df):
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str, metrics: list[str] = ['M_kq', 'M_gr', 'M_delta']):
-    subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, Tao: {P.D.tao}, Samples per config: {P.D.samples}"
+    subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, delay: {P.D.delay}, Samples per config: {P.D.samples}"
     
     fig, ax = plt.subplots(figsize=(18, 8))
     
@@ -261,7 +261,7 @@ def plot_optimal_k_avg_vs_configuration(out_path, df):
     for i, (_, subset) in enumerate(grouped_df):
         # p = subset['params'].iloc[1]
         # group_id = f'{i}: {p.M.I.pertubation}-{p.M.I.connection}-{p.M.R.mode}-{p.M.R.init}'
-        max_values = subset.groupby(['tao', 'sample'])['value'].idxmax() # max delta per tao-sample (over many k_avg)
+        max_values = subset.groupby(['delay', 'sample'])['value'].idxmax() # max delta per delay-sample (over many k_avg)
         max_subset = subset.loc[max_values]
         max_subset['k_avg*'] = max_subset['k_avg'].mean() # average delta* over the grid_search samples
         max_subset['group_id'] = i
@@ -277,8 +277,8 @@ def plot_optimal_k_avg_vs_configuration(out_path, df):
     ])
     df_flattened_params = plot_data['params'].apply(lambda p: flattened_params(p))
     plot_data = pd.concat([plot_data, df_flattened_params], axis=1)
-    plot_data['hue'] = plot_data[['D.tao', 'R.mode']].apply(tuple, axis=1)
-    legend = '(tao, mode)'
+    plot_data['hue'] = plot_data[['D.delay', 'R.mode']].apply(tuple, axis=1)
+    legend = '(delay, mode)'
 
     save_path = out_path / 'visualizations'
     save_path.mkdir(parents=True, exist_ok=True)
@@ -298,7 +298,7 @@ def plot_optimal_k_avg_vs_configuration(out_path, df):
     filename='optimal_k_avg_vs_configuration_lines'
     plot_data = plot_data.groupby(['group_id']).first().reset_index() # now k_avg* makes sense but not k_avg
 
-    # make group_id invariant to tao 3 and 5 (assumes only tao is different in yaml for grid search)
+    # make group_id invariant to delay 3 and 5 (assumes only delay is different in yaml for grid search)
     features = ['I.connection', 'I.pertubation', 'R.init']
     plot_data['combo'] = plot_data.apply(lambda row: tuple(row[feature] for feature in features), axis=1)
     plot_data['group_id'], _ = pd.factorize(plot_data['combo'])
