@@ -27,7 +27,7 @@ if __name__ == '__main__':
         # param_combinations = generate_param_combinations(load_yaml_config(c))
         # P = boolean_reservoir_grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy, param_combinations=[param_combinations[0]])
 
-        P = boolean_reservoir_grid_search(yaml_path=c, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        # P = boolean_reservoir_grid_search(yaml_path=c, dataset_init=d().dataset_init, accuracy=a().accuracy)
 
         P = load_yaml_config(c)
         extractions = [
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         file_path = P.L.out_path / 'visualizations' / 'config'
         file_path.mkdir(parents=True, exist_ok=True)
         for name, subset in grouped_df:
-            p = subset.iloc[0]['P']
+            p = subset.iloc[0]['P'].to_pydantic()
             i = subset.iloc[0]['combo_id']
             save_yaml_config(p, file_path, file_name=f'{i}')
             plot_kq_and_gr(subset, p, f'config_{i}_kq_and_gr.svg')

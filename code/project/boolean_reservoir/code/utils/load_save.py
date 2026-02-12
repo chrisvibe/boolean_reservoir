@@ -36,11 +36,12 @@ def save_grid_search_results(df: pd.DataFrame, path: Path):
     pq.write_table(new_table, path)
 
 class DotDict(dict):
-    __slots__ = ('_tree',)
+    __slots__ = ('_tree', '_cls')
     
-    def __init__(self, data, tree=None):
+    def __init__(self, data, cls=None, tree=None):
         super().__init__(data)
-        object.__setattr__(self, '_tree', tree or {})
+        object.__setattr__(self, '_cls', cls)
+        object.__setattr__(self, '_tree', tree or (DotDict._alias_tree(cls) if cls else {}))
     
     def __getattr__(self, key):
         tree = object.__getattribute__(self, '_tree')
@@ -50,27 +51,35 @@ class DotDict(dict):
         except KeyError:
             raise AttributeError(key)
         if isinstance(val, dict):
-            return DotDict(val, tree.get('c', {}).get(resolved))
+            child_tree = tree.get('c', {}).get(resolved)
+            return DotDict(val, tree=child_tree)
         return val
 
-def _alias_tree(cls: Type[BaseModel]) -> dict:
-    """Build {'a': {alias: field}, 'c': {field: subtree}} for cls and children."""
-    aliases = {}
-    for name, obj in vars(cls).items():
-        if isinstance(obj, property) and obj.fget:
-            m = re.search(r'return self\.(\w+)\s*$', getsource(obj.fget), re.MULTILINE)
-            if m:
-                aliases[name] = m.group(1)
+    @staticmethod
+    def _alias_tree(cls: Type[BaseModel]) -> dict:
+        """Build {'a': {alias: field}, 'c': {field: subtree}} for cls and children."""
+        aliases = {}
+        for name, obj in vars(cls).items():
+            if isinstance(obj, property) and obj.fget:
+                m = re.search(r'return self\.(\w+)\s*$', getsource(obj.fget), re.MULTILINE)
+                if m:
+                    aliases[name] = m.group(1)
+        
+        children = {}
+        for fname, finfo in cls.model_fields.items():
+            ann = finfo.annotation
+            if get_origin(ann) is Union:
+                ann = next((a for a in get_args(ann) if a is not type(None)), ann)
+            if isinstance(ann, type) and issubclass(ann, BaseModel):
+                children[fname] = DotDict._alias_tree(ann)
+        
+        return {'a': aliases, 'c': children} if aliases or children else {}
     
-    children = {}
-    for fname, finfo in cls.model_fields.items():
-        ann = finfo.annotation
-        if get_origin(ann) is Union:
-            ann = next((a for a in get_args(ann) if a is not type(None)), ann)
-        if isinstance(ann, type) and issubclass(ann, BaseModel):
-            children[fname] = _alias_tree(ann)
-    
-    return {'a': aliases, 'c': children} if aliases or children else {}
+    def to_pydantic(self):
+        cls = object.__getattribute__(self, '_cls')
+        if cls is None:
+            raise ValueError("No Pydantic class associated")
+        return cls.model_validate(dict(self))
 
 def load_params_df(data_path: Path, model_class: Type[BaseModel]=Params, fast: bool=True) -> pd.DataFrame:
     """Load Parquet → DataFrame with hydrated 'params' column.
@@ -82,8 +91,7 @@ def load_params_df(data_path: Path, model_class: Type[BaseModel]=Params, fast: b
     data_path = Path(data_path).with_suffix('.parquet')
     df = pq.read_table(data_path).to_pandas()
     if fast:
-        tree = _alias_tree(model_class)
-        df['params'] = df['params_json'].apply(lambda s: DotDict(orjson.loads(s), tree))
+        df['params'] = df['params_json'].apply(lambda s: DotDict(orjson.loads(s), cls=Params))
     else:
         df['params'] = df['params_json'].apply(lambda s: model_class.model_validate(orjson.loads(s)))
     df.drop(columns=['params_json'], inplace=True)
