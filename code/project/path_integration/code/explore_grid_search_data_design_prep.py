@@ -1,6 +1,6 @@
 from project.boolean_reservoir.code.utils.explore_grid_search_data import graph_accuracy_vs_k_avg, create_scatter_dashboard
 from project.boolean_reservoir.code.visualization import polar_design_plot
-from project.boolean_reservoir.code.utils.utils import custom_load_grid_search_data
+from project.boolean_reservoir.code.utils.load_save import custom_load_grid_search_data
 from pathlib import Path
 
 if __name__ == '__main__':

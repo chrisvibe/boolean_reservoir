@@ -1,8 +1,8 @@
 import torch
 from project.boolean_reservoir.code.utils.utils import set_seed
-from benchmark.path_integration.constrained_foraging_path import random_walk, positions_to_p_v_pairs
-from benchmark.path_integration.visualizations import plot_random_walk
-from benchmark.path_integration.parameters import PathIntegrationDatasetParams
+from benchmark.path_integration.constrained_foraging_path import random_walk, positions_to_p_v_pairs, to_polar, to_cartesian
+from benchmark.path_integration.visualization import plot_random_walk
+from benchmark.path_integration.parameter import PathIntegrationDatasetParams
 from benchmark.utils.base_dataset import BaseDataset
 import yaml
 
@@ -18,12 +18,12 @@ class ConstrainedForagingPathDataset(BaseDataset):
         if D.path.exists() and not D.generate_data:
             self.load_data()
         else:
-            raw_data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy_obj, D.boundary_obj)
+            raw_data = self.generate_data(D.dimensions, D.samples, D.steps, D.strategy_obj, D.boundary_obj, D.coordinate)
             self.set_data(raw_data)
             self.save_data()
 
     @staticmethod
-    def generate_data(dimensions, samples, n_steps, strategy, boundary):
+    def generate_data(dimensions, samples, n_steps, strategy, boundary, coordinate_system='cartesian'):
         data_x = []
         data_y = []
         
@@ -31,15 +31,22 @@ class ConstrainedForagingPathDataset(BaseDataset):
         for _ in range(samples):
             p = random_walk(dimensions, n_steps, strategy, boundary)
             p, v = positions_to_p_v_pairs(p)
+            p_final = p[-1]
+            
+            # Convert to polar if requested
+            if coordinate_system == 'polar':
+                v = to_polar(v)
+                p_final = to_polar(p_final)
+            
             data_x.append(torch.tensor(v, dtype=torch.float))
-            data_y.append(torch.tensor(p[-1], dtype=torch.float))
+            data_y.append(torch.tensor(p_final, dtype=torch.float))
         
-        # TODO optionally convert raw cartesian to polar? hybrid (test multiplication)?
-
         return {
             'x': torch.stack(data_x),
             'y': torch.stack(data_y),
         }
+
+
 
 
 if __name__ == '__main__':
@@ -79,3 +86,5 @@ if __name__ == '__main__':
     D = P.D
     positions = random_walk(D.dimensions, D.steps, D.strategy_obj, D.boundary_obj)
     plot_random_walk('/out', positions, D.strategy_obj, D.boundary_obj, file_prepend=P.L.out_path.name)
+
+    dataset = ConstrainedForagingPathDataset(D)

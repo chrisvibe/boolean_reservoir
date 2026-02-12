@@ -15,7 +15,7 @@ model:
     w_ir: identity
     encoding: base2
     features: 2
-    redundancy: [10, 15, 20] 
+    redundancy: 1
     resolution: 10 # affects how redundancy is applied 
     chunk_size: 10 # set to resolution 
     interleaving: 0
@@ -26,11 +26,11 @@ model:
     n_outputs: 1
   reservoir_layer:
     init: zeros
-    k_avg: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    k_avg: [1, 2, 3, 4, 5]
     k_min: 0
     k_max: 25
     mode: [homogeneous, heterogeneous]
-    n_nodes: 500
+    n_nodes: 512
     p: 0.5
     reset: true
     self_loops: null
@@ -40,14 +40,24 @@ model:
     criterion: BCE
     epochs: 40
     evaluation: dev
-dataset: # this whole section is repurposed to control the custom experiments
-  task: density # not really just using the x values and ignoring y
-  bits: 10
-  window: 3 # not using this
-  delay: 1 # not using this
-  split: # not training the model, just recording state changes with input
-    train: 1
-    dev: 0
-    test: 0
-  samples: 1 # overwritten by code so we get samples equal to number of reservoir nodes (square matrix) * number of models seeds (each model gets a set)
-  seed: 0
+dataset:
+  train:
+    task: density 
+    bits: 10
+    window: 3
+    delay: 1
+    split:
+      train: 0.5
+      dev: 0.5
+      test: 0
+    samples: 2048 # 2**10=1024 input combinations, twice this ensures a copy for train/dev
+    sampling_mode: 'exhaustive'
+  kqgr:
+    bits: 10
+    split:
+      train: 1
+      dev: 0
+      test: 0
+    sampling_mode: 'exhaustive'
+    tau: 3
+    evaluation: 'last'

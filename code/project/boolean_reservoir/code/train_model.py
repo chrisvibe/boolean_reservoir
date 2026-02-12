@@ -82,7 +82,7 @@ def train_and_evaluate(model: BooleanReservoir, dataset: Dataset, record_stats=F
     m = len(data_loader) * T.batch_size if T.drop_last else len(dataset)
     x_eval = 'x_' + T.evaluation
     y_eval = 'y_' + T.evaluation
-    best_stats = {'eval': T.evaluation, 'epoch': 0, 'accuracy':0, 'loss': float('inf')}
+    best_stats = {'epoch': 0, 'accuracy':0, 'loss': float('inf')}
     train_history = list()
 
     for epoch in range(T.epochs):

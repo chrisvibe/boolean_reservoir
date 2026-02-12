@@ -1,5 +1,5 @@
 import pytest
-from benchmark.temporal.temporal_density_parity_datasets import (
+from benchmark.temporal.temporal_density_parity_dataset import (
     TemporalDatasetParams,
     TemporalDensityDataset,
     TemporalParityDataset,

@@ -1,2 +1,6 @@
 conda install python python-graphviz networkx numpy pandas pytables scikit-learn tqdm pydantic seaborn shapely
 conda install pytorch cudatoolkit=11.8 -c pytorch -c nvidia
+
+
+no docker?
+conda env update --file src/environment.yaml --prune

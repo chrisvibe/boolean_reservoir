@@ -102,14 +102,7 @@ class BooleanReservoir(nn.Module):
             set_seed(self.R.seed)
 
             # LOGGING
-            self.out_path = self.L.out_path
-            self.timestamp_utc = SaveAndLoadModel.get_timestamp_utc()
-            self.save_path = self.out_path / 'runs' / self.timestamp_utc 
-            self.L.save_path = self.save_path
-            self.L.timestamp_utc = self.timestamp_utc
-            self.L.history.save_path = self.save_path / 'history'
-            self.record = self.L.history.record
-            self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record else None
+            self.init_logging()
 
             # TYPE OPTIMIZATION + BUFFER REGISTRATION
             '''
@@ -136,6 +129,16 @@ class BooleanReservoir(nn.Module):
 
             # OTHER
             self.add_graph_labels(self.graph)
+    
+    def init_logging(self):
+        self.out_path = self.L.out_path
+        self.timestamp_utc = SaveAndLoadModel.get_timestamp_utc()
+        self.save_path = self.out_path / 'runs' / self.timestamp_utc 
+        self.L.save_path = self.save_path
+        self.L.timestamp_utc = self.timestamp_utc
+        self.L.history.save_path = self.save_path / 'history'
+        self.record = self.L.history.record
+        self.history = BatchedTensorHistoryWriter(save_path=self.L.history.save_path, buffer_size=self.L.history.buffer_size) if self.record else None
     
     def add_graph_labels(self, graph):
         labels_mapping = {node: node for node in graph.nodes()}
@@ -341,16 +344,16 @@ if __name__ == '__main__':
         bits=4, 
         n_nodes=8,
         ticks='2',
-        seed=0
+        seed=0,
         )
     R = ReservoirParams(
         n_nodes=10,
         k_min=0,
-        k_avg=7,
+        k_avg=3,
         k_max=7,
         p=0.5,
         self_loops=0.1,
-        seed=0
+        seed=0,
         )
     O = OutputParams(features=2, seed=0)
     T = TrainingParams(

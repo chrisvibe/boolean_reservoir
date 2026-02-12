@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from benchmark.temporal.parameters import TemporalDatasetParams
+from benchmark.temporal.parameter import TemporalDatasetParams
 from project.boolean_reservoir.code.utils.utils import set_seed
 from benchmark.utils.base_dataset import BaseDataset
 from project.boolean_reservoir.code.encoding import dec2bin

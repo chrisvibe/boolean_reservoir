@@ -44,7 +44,8 @@ def group_df_data_by_parameters(df):
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str, metrics: list[str] = ['M_kq', 'M_gr', 'M_delta']):
-    subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {P.D.bit_stream_length}, delay: {P.D.delay}, Samples per config: {P.D.samples}"
+    D = P.DD.kqgr
+    subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {D.bits}, Samples per config: {D.samples}"
     
     fig, ax = plt.subplots(figsize=(18, 8))
     

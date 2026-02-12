@@ -20,6 +20,7 @@ class Split(BaseModel):
 class DatasetParameters(BaseModel):
     path: Optional[Path] = Field(None, description="Path to dataset")
     split: Split = Field(Split(), description="fraction for train, dev, test")
+    shuffle: bool = Field(True, description="Shuffle dataset before splitting")
     generate_data: bool = Field(False, description="Ignores loading even if dataset exists at path")
     samples: int = Field(64, description="Number of samples to generate in the dataset")
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")

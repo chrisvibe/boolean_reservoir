@@ -1,23 +1,34 @@
-from torch.utils.data import Dataset
-from project.temporal.code.dataset_init import TemporalDatasetInit as d
-from project.boolean_reservoir.code.parameter import load_yaml_config, Params
-from typing import Callable, Tuple
+from project.boolean_reservoir.code.reservoir import BooleanReservoir, BatchedTensorHistoryWriter
+from project.boolean_reservoir.code.utils.utils import override_symlink
+from pathlib import Path
+import torch
 
-def get_kernel_quality_dataset(p: Params):
-    return d().dataset_init(p)
-
-def get_generalization_rank_dataset(p: Params):
-    return get_kernel_quality_dataset(p) # handled internally in dataset_init
-
-class DatasetInitKQGR:
-    """Dataset initializer that returns both KQ and GR datasets"""
-
-    def __init__(self, get_kq_fn: Callable = get_kernel_quality_dataset, get_gr_fn: Callable = get_generalization_rank_dataset):
-        self.get_kq_fn = get_kq_fn
-        self.get_gr_fn = get_gr_fn
-
-    def __call__(self, P: Params) -> Tuple[Dataset, Dataset]:
-        """Generate/load KQ and GR datasets"""
-        kq_dataset = self.get_kq_fn(P)
-        gr_dataset = self.get_gr_fn(P)
-        return kq_dataset, gr_dataset
+def compute_rank(model: BooleanReservoir, x: torch.Tensor, metric: str) -> int:
+    """Run model and compute rank from reservoir states"""
+    nested_out = model.L.save_path / 'history' / metric
+    new_save_path = nested_out / 'history'
+    
+    record = model.record
+    try: # probs overkill, but want to avoid being stuck in recording when doing grid search...
+        model.record = True
+        if model.history:
+            model.history = BatchedTensorHistoryWriter(
+                save_path=new_save_path,
+                persist_to_disk=model.history.persist_to_disk,
+                buffer_size=model.history.buffer_size
+            )
+        else:
+            model.history = BatchedTensorHistoryWriter(save_path=new_save_path, persist_to_disk=False)
+        model.eval()
+        with torch.no_grad():
+            _ = model(x)
+        model.flush_history()
+    finally:
+        model.record = record
+    
+    override_symlink(Path('../../checkpoint'), new_save_path / 'checkpoint')
+    load_dict, history, expanded_meta, meta = model.history.reload_history()
+    df_filter = expanded_meta[expanded_meta['phase'] == 'output_layer']
+    filtered_history = history[df_filter.index].to(torch.float)
+    reservoir_node_history = filtered_history[:, ~model.input_nodes_mask]
+    return torch.linalg.matrix_rank(reservoir_node_history).item()

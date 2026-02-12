@@ -100,5 +100,5 @@ if __name__ == '__main__':
         force=True
     )
     logger = logging.getLogger(__name__)
-    # test_saving_and_loading_models()
-    test_reproducibility_of_loaded_grid_search_checkpoint()
+    test_saving_and_loading_models()
+    # test_reproducibility_of_loaded_grid_search_checkpoint()

@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE, MDS
 from project.boolean_reservoir.code.reservoir import BatchedTensorHistoryWriter
 from scipy.stats import zscore
 from matplotlib.colors import ListedColormap
-from project.boolean_reservoir.code.utils.utils import load_grid_search_data
+from project.boolean_reservoir.code.utils.load_save import load_grid_search_data
 from project.boolean_reservoir.code.utils.explore_grid_search_data import make_combo_column
 from project.boolean_reservoir.code.utils.categorical_ordering import grayish_sort 
 import plotly.express as px

@@ -1,5 +1,5 @@
-from benchmark.temporal.temporal_density_parity_datasets import TemporalDensityDataset, TemporalParityDataset
-from benchmark.temporal.parameters import TemporalDatasetParams
+from benchmark.temporal.temporal_density_parity_dataset import TemporalDensityDataset, TemporalParityDataset
+from benchmark.temporal.parameter import TemporalDatasetParams
 from project.boolean_reservoir.code.encoding import BooleanTransformer
 from project.boolean_reservoir.code.parameter import Params
 from project.boolean_reservoir.code.train_model import DatasetInit
@@ -25,8 +25,8 @@ class TemporalDatasetInit(DatasetInit): # Note dont use I.seed here dataset init
         x = dataset.x.reshape(dataset.x.shape[0], 1, -1).view( dataset.x.shape[0], 1, I.features, -1)
         dataset.set_data({ 'x': x, 'y': dataset.y })
 
-
         # dataset = balance_dataset(dataset, distance_fn=l2_distance, num_bins=2, labels_are_classes=True, target_mode='minimum_bin')
+        
         encoder = BooleanTransformer(P)
         dataset.set_encoder_x(encoder)
         dataset.encode_x()

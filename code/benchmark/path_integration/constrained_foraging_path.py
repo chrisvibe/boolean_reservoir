@@ -3,7 +3,7 @@ import math
 from shapely.geometry import Point, Polygon, LineString
 from shapely.ops import nearest_points
 from abc import ABC, abstractmethod
-from benchmark.path_integration.visualizations import plot_random_walk
+from benchmark.path_integration.visualization import plot_random_walk
 
 class Boundary(ABC):
     def __init__(self, points):
@@ -228,9 +228,54 @@ def stretch_polygon(boundary: PolygonBoundary, stretch_x: float=1, stretch_y: fl
     boundary.polygon = Polygon(stretched_points)
     return boundary
 
+def to_polar(coords):
+    """Convert cartesian coordinates to polar/spherical.
+    coords: (..., D) where D is dimension
+    """
+    coords = np.asarray(coords)
+    r = np.linalg.norm(coords, axis=-1, keepdims=True)
+    
+    if coords.shape[-1] == 1:
+        return coords  # 1D, already scalar
+    elif coords.shape[-1] == 2:
+        theta = np.arctan2(coords[..., 1:2], coords[..., 0:1])
+        return np.concatenate([r, theta], axis=-1)
+    elif coords.shape[-1] == 3:
+        theta = np.arctan2(coords[..., 1:2], coords[..., 0:1])
+        phi = np.arccos(coords[..., 2:3] / (r + 1e-10))  # avoid div by zero
+        return np.concatenate([r, theta, phi], axis=-1)
+    else:
+        raise ValueError(f"Unsupported dimension: {coords.shape[-1]}")
+    
+def to_cartesian(polar_coords):
+    """Convert polar/spherical coordinates to cartesian.
+    polar_coords: (..., D) where D is dimension
+    """
+    polar_coords = np.asarray(polar_coords)
+    
+    if polar_coords.shape[-1] == 1:
+        return polar_coords  # 1D, already scalar
+    elif polar_coords.shape[-1] == 2:
+        r = polar_coords[..., 0:1]
+        theta = polar_coords[..., 1:2]
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        return np.concatenate([x, y], axis=-1)
+    elif polar_coords.shape[-1] == 3:
+        r = polar_coords[..., 0:1]
+        theta = polar_coords[..., 1:2]
+        phi = polar_coords[..., 2:3]
+        x = r * np.sin(phi) * np.cos(theta)
+        y = r * np.sin(phi) * np.sin(theta)
+        z = r * np.cos(phi)
+        return np.concatenate([x, y, z], axis=-1)
+    else:
+        raise ValueError(f"Unsupported dimension: {polar_coords.shape[-1]}")
+
+
+
 
 if __name__ == '__main__':
-
     # dim = 1
     # # # -------------------------------------------------------------
     # # boundary = NoBoundary()

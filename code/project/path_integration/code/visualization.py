@@ -1,4 +1,4 @@
-from benchmark.path_integration.visualizations import plot_random_walk
+from benchmark.path_integration.visualization import plot_random_walk
 from project.boolean_reservoir.code.visualization import plot_train_history, plot_predictions_and_labels, plot_dynamics_history
 from project.boolean_reservoir.code.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
 import matplotlib

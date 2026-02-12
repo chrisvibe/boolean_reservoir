@@ -11,7 +11,7 @@ class BooleanTransformer:
         self.apply_redundancy = apply_redundancy
         
         if self.I.encoding == 'binary_embedding':
-            self.binary_encoder = BinaryEmbedding(b=I.resolution, n=self.I.redundancy)
+            self.binary_encoder = BinaryEmbedding(b=self.I.resolution, n=self.I.redundancy)
         else:
             self.binary_encoder = None
     
@@ -32,32 +32,43 @@ class BooleanTransformer:
         return bin_values.to(torch.uint8)
     
     def _has_tau(self):
-        return (self.P is not None 
-                and hasattr(self.P, 'L') 
-                and hasattr(self.P.L, 'kqgr') 
-                and self.P.L.kqgr.tau > 0)
+        try:
+            return self.P.DD.kqgr.tau > 0
+        except AttributeError:
+            return False
     
     def _apply_tau(self, x):
-        kqgr = self.P.L.kqgr
+        # state is restored to make sure KQ and GR are identical, just tao related bits change
+        kqgr = self.P.DD.kqgr
         if kqgr.tau == 0:
             return x 
-        m, s, f, b = x.shape
-        n_identical_bits = kqgr.tau
         
-        ref_idx = torch.randint(0, m, (1,)).item()
-        mask = torch.zeros(f, b, dtype=torch.bool, device=x.device)
+        rng_state = torch.get_rng_state()
+        if x.is_cuda:
+            cuda_rng_state = torch.cuda.get_rng_state()
         
-        if kqgr.mode == 'first':
-            mask[:, :n_identical_bits] = True
-        elif kqgr.mode == 'last':
-            mask[:, -n_identical_bits:] = True
-        elif kqgr.mode == 'random':
-            for feat_idx in range(f):  # Only need loop for random
-                perm_idx = torch.randperm(b, device=x.device)[:n_identical_bits]
-                mask[feat_idx, perm_idx] = True
-        
-        x[:, :, mask] = x[ref_idx:ref_idx+1, :, mask]
-        return x
+        try:
+            m, s, f, b = x.shape
+            n_identical_bits = kqgr.tau
+            
+            ref_idx = torch.randint(0, m, (1,)).item()
+            mask = torch.zeros(f, b, dtype=torch.bool, device=x.device)
+            
+            if kqgr.mode == 'first':
+                mask[:, :n_identical_bits] = True
+            elif kqgr.mode == 'last':
+                mask[:, -n_identical_bits:] = True
+            elif kqgr.mode == 'random':
+                for feat_idx in range(f):
+                    perm_idx = torch.randperm(b, device=x.device)[:n_identical_bits]
+                    mask[feat_idx, perm_idx] = True
+            
+            x[:, :, mask] = x[ref_idx:ref_idx+1, :, mask]
+            return x
+        finally:
+            torch.set_rng_state(rng_state)
+            if x.is_cuda:
+                torch.cuda.set_rng_state(cuda_rng_state)
 
 class BooleanEncoder:
     def __init__(self, P):

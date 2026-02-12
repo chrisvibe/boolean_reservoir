@@ -111,7 +111,7 @@ class SaveAndLoadModel:
         paths = {k: all_paths[k] for k in P.L.save_keys if k in all_paths}
 
         save_map = {
-            'parameters': lambda path: save_yaml_config(P, path),
+            'parameters': lambda path: save_yaml_config(P, path.parent),
             'w_in': lambda path: torch.save(config['w_in'], path),
             'graph': lambda path: SaveAndLoadModel.save_graph(path, config['graph']),
             'init_state': lambda path: torch.save(config['initial_states'], path),

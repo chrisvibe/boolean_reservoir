@@ -1,4 +1,4 @@
-from project.boolean_reservoir.code.utils.utils import save_grid_search_results
+from project.boolean_reservoir.code.utils.load_save import save_grid_search_results 
 from project.boolean_reservoir.code.kq_and_gr_metric import calc_kernel_quality_and_generalization_rank
 
 if __name__ == '__main__':

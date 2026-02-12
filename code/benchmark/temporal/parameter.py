@@ -1,4 +1,4 @@
-from benchmark.utils.parameters import DatasetParameters
+from benchmark.utils.parameter import DatasetParameters
 from pydantic import Field, model_validator
 from typing import List, Union
 from pathlib import Path

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.utils.data import Dataset
-from benchmark.utils.parameters import DatasetParameters
+from benchmark.utils.parameter import DatasetParameters
 from math import floor
 
 class BaseDataset(nn.Module, Dataset):
@@ -36,7 +36,7 @@ class BaseDataset(nn.Module, Dataset):
         assert float(sum((split_train, split_dev, split_test))) == 1.0, "Split ratios must sum to 1."
         
         x, y = self.data['x'], self.data['y']
-        idx = torch.randperm(x.size(0))
+        idx = torch.randperm(x.size(0)) if self.D.shuffle else torch.arange(x.size(0))
         train_end, dev_end = floor(split_train * x.size(0)), floor((split_train + split_dev) * x.size(0))
         
         split_data = {

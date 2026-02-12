@@ -2,7 +2,7 @@ from typing import Union, List
 from pydantic import Field, model_validator
 from pathlib import Path
 import math
-from benchmark.utils.parameters import DatasetParameters
+from benchmark.utils.parameter import DatasetParameters
 from benchmark.path_integration.constrained_foraging_path import (
     LevyFlightStrategy, SimpleRandomWalkStrategy, 
     PolygonBoundary, IntervalBoundary, NoBoundary, 
@@ -45,6 +45,7 @@ def boundary_factory(p: DynamicParams):
 
 
 class PathIntegrationDatasetParams(DatasetParameters):
+    coordinate: Union[str, List[str]] = Field('cartesian', description='Coordinate system: cartesian or polar')
     dimensions: Union[int, List[int]] = Field(2, description="Number of dimensions")
     steps: Union[int, List[int]] = Field(10, description="Number of steps")
 
@@ -92,6 +93,7 @@ class PathIntegrationDatasetParams(DatasetParameters):
         
         return (
             Path('data/path_integration')
+            / f'c-{self.coordinate}'
             / f'd-{self.dimensions}'
             / f's-{self.steps}'
             / strategy_str

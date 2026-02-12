@@ -1,4 +1,4 @@
-from project.boolean_reservoir.code.utils.utils import load_grid_search_data
+from project.boolean_reservoir.code.utils.load_save import load_grid_search_data
 from project.temporal.code.stat import process_grid_search_data, polar_design_plot, graph_accuracy_vs_k_avg
 import pandas as pd
 from pathlib import Path

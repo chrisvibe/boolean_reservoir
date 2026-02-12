@@ -3,8 +3,9 @@ import torch
 from project.boolean_reservoir.code.encoding import BooleanTransformer
 from project.boolean_reservoir.code.parameter import (
     Params, ModelParams, InputParams, ReservoirParams, 
-    OutputParams, TrainingParams, LoggingParams, KQGRMetrics
+    OutputParams, TrainingParams, DatasetParams
 )
+from benchmark.kqgr.parameter import KQGRDatasetParams
 
 def create_test_params(tau, eval_mode, features=2, resolution=10):
     """Create minimal params for testing"""
@@ -15,11 +16,8 @@ def create_test_params(tau, eval_mode, features=2, resolution=10):
             output_layer=OutputParams(n_outputs=1),
             training=TrainingParams()
         ),
-        logging=LoggingParams(
-            kqgr=KQGRMetrics(tau=tau, eval=eval_mode)
-        )
+        dataset=DatasetParams(kqgr=KQGRDatasetParams(tau=tau, evaluation=eval_mode))
     )
-
 def create_test_data(m=10, s=1, f=2, b=10):
     """Create synthetic binary data"""
     return torch.randint(0, 2, (m, s, f, b), dtype=torch.uint8)
