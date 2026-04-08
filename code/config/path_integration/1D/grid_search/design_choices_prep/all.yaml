@@ -1,12 +1,13 @@
 logging:
-  out_path: 'out/path_integration/2D/grid_search/design_choices_prep/all'
-  save_keys: null 
+  out_path: 'out/path_integration/1D/grid_search/design_choices_prep/all'
+  save_keys: null
   grid_search:
     n_samples: 1
+    run: ['train', 'kqgr']
 model:
   input_layer:
     w_bi: identity
-    w_ir: identity 
+    w_ir: identity
     pertubation: override
     encoding: [base2, 'binary_embedding']
     features: 1 # affects how redundancy is applied
@@ -16,9 +17,9 @@ model:
     ticks: ['1', '2']
     interleaving: [0, 1]
   output_layer:
-    n_outputs: 2 # no effect on kq and gr
+    n_outputs: 1 # no effect on kq and gr
   reservoir_layer:
-    init: random # not much effect 
+    init: random # not much effect
     k_avg: [1.0, 2.0, 3.0, 4.0, 5.0]
     k_min: 0
     k_max: 10
@@ -33,32 +34,36 @@ model:
     epochs: 40
     evaluation: dev
 dataset:
-  train:
-    encoding: ['cartesian', 'polar']
-    dimensions: 2
-    steps: 5
-    strategy:
-      name: SimpleRandomWalkStrategy
-      params:
-        max_step_size: 0.3
-    boundary:
-      name: PolygonBoundary
-      params:
-        n_sides: 12
-        radius: 1.0
-        rotation: pi/4
-    split:
-      train: 0.5
-      dev: 0.3
-      test: 0.2
-    samples: 20000
-    seed: 0
+  encoding: 'cartesian'
+  dimensions: 2
+  steps: 5
+  strategy:
+    name: PhysicsWalkStrategy
+    params:
+      max_force: 1.0
+      mass: 1.0
+      friction_coeff: 0.3
+      friction_order: 2
+      max_speed: 10
+  boundary:
+    name: PolygonBoundary
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 20000
+  seed: 0
+multiverse_overrides:
   kqgr:
-    bits: 10
-    split:
-      train: 1
-      dev: 0
-      test: 0
-    evaluation: ['first', 'last', 'random']
-    tau: [3, 5]
-    seed: 0
+    dataset:
+      split:
+        train: 1
+        dev: 0
+        test: 0
+      evaluation: ['first', 'last', 'random']
+      tau: [3, 5]
+      seed: 0

@@ -30,10 +30,6 @@ dataset:
   steps: 5
   strategy:
     name: LevyFlightStrategy
-    params:
-      alpha: 3
-      momentum: 0.9
-      bias: 0
   boundary:
     name: PolygonBoundary
     params:

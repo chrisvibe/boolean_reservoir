@@ -1,0 +1,52 @@
+logging:
+  out_path: 'out/temporal/density/grid_search/design_choices/all'
+  save_keys: null
+  grid_search:
+    n_samples: 1
+    run: ['train', 'kqgr']
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: base2
+    features: 1
+    redundancy: [1, 2, 3] # changes the task complexity
+    resolution: 10
+    chunk_size: 1 # one bit at a time
+    ticks: ['1', '2']
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1 # no effect on kq and gr
+  reservoir_layer:
+    init: [random, random-warmup]
+    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    k_min: 0
+    k_max: ['k_avg + 3 * k_avg ** .5', 'k_avg + 1.28 * k_avg ** .5'] # interesting number of attractors 
+    mode: [homogeneous, heterogeneous]
+    n_nodes: [512, 1024] # make sure 2**D.bits-1 >= n_nodes to have enough states
+    reset: true
+    self_loops: [0, .1, .3, .5, 1] # interesting number of attractors
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 128
+    criterion: BCE
+    epochs: 40
+    evaluation: dev
+dataset:
+  task: density
+  window: [3, 5]
+  delay: [0, 3, 5]
+  split:
+    train: 0.5
+    dev: 0.5
+    test: 0
+  samples: 2048 # 2**10=1024 input combinations, twice this ensures a copy for train/dev
+  sampling_mode: 'exhaustive'
+  shuffle: True # avoid bug: n_nodes = 512, bits=10 → dataset loads first 512/1024 samples; all start with "0" 
+  seed: 0
+multiverse_overrides:
+  kqgr:
+    dataset:
+      evaluation: ['first', 'last', 'random']
+      tau: [3, 5]

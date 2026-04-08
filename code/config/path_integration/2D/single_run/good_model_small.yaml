@@ -1,0 +1,60 @@
+logging:
+  out_path: 'out/path_integration/single_run/2D/good_model_small'
+  # history:
+  #   record: true
+model:
+  input_layer:
+    seed: 0
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: base2
+    features: 2
+    redundancy: 3
+    resolution: 3
+    chunks: 1
+    ticks: '1'
+  output_layer:
+    seed: 0
+    n_outputs: 2
+  reservoir_layer:
+    seed: 0
+    init: random
+    k_avg: 3.0
+    k_min: 0
+    k_max: 25
+    mode: homogeneous
+    n_nodes: 512
+    reset: true
+    self_loops: 0
+  training:
+    seed: 0
+    accuracy_threshold: 0.25
+    batch_size: 128
+    criterion: MSE
+    epochs: 40
+    evaluation: test
+dataset:
+  seed: 0
+  encoding: cartesian
+  dimensions: 2
+  steps: 5
+  strategy:
+    name: PhysicsWalkStrategy
+    params:
+      max_force: 0.5
+      mass: 1.0
+      friction_coeff: 0.1
+      friction_order: 2
+      max_speed: 10
+  boundary:
+    name: PolygonBoundary
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 30000

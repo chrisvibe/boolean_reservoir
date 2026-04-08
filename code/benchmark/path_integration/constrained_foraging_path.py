@@ -5,6 +5,24 @@ from shapely.ops import nearest_points
 from abc import ABC, abstractmethod
 from benchmark.path_integration.visualization import plot_random_walk
 
+class Agent:
+    """Holds all mutable agent state for a walk: position, velocity, and accelerations."""
+    def __init__(self, dim, position=None):
+        self.origin = np.zeros(dim) if position is None else np.asarray(position, dtype=float).copy()
+        self.position = np.zeros(dim) if position is None else np.asarray(position, dtype=float).copy()
+        self.velocity = np.zeros(dim)
+        self.a_external = np.zeros(dim)
+        self.a_boundary = np.zeros(dim)
+        self.a_net = np.zeros(dim)
+
+    def reset(self, position=None):
+        self.position[:] = self.origin if position is None else np.asarray(position, dtype=float).copy() 
+        self.velocity[:] = 0
+        self.a_external[:] = 0
+        self.a_boundary[:] = 0
+        self.a_net[:] = 0
+
+
 class Boundary(ABC):
     def __init__(self, points):
         self.points = points
@@ -14,13 +32,27 @@ class Boundary(ABC):
         pass
 
     @abstractmethod
-    def handle_boundary_crossing(self, p_start, p_end):
-        """Handle when step crosses boundary. Returns valid end position."""
+    def react(self, agent: 'Agent', p_end, v_end, t) -> 'Agent':
+        """
+        Called after tentative kinematics. Updates agent in-place and returns it.
+        Reads agent.position for p_start.
+        Writes corrected position to agent.position, reaction acceleration to agent.a_boundary,
+        and final velocity (v_end + a_boundary * t) to agent.velocity.
+        p_end: tentative position after kinematics (not yet committed).
+        v_end: tentative velocity after kinematics (not yet committed).
+        t: timestep.
+        """
         pass
-        
+
+    def clip_to_boundary(self, p: np.array) -> np.array:
+        """Return the nearest point on or inside the boundary to p.
+        Used to correct sub-epsilon floating-point drift at the start of a walk.
+        Hard boundaries must override this; soft boundaries never need it."""
+        raise NotImplementedError(f'{self.__class__.__name__} does not implement clip_to_boundary')
+
     def get_points(self):
         return self.points
-    
+
     def __str__(self):
         return f'{self.__class__.__name__}'
 
@@ -29,10 +61,13 @@ class NoBoundary(Boundary):
         super().__init__([])
 
     def is_inside(self, p):
-        return True 
+        return True
 
-    def handle_boundary_crossing(self, p_start, p_end):
-        return p_end
+    def react(self, agent, p_end, v_end, t):
+        agent.position = np.asarray(p_end, dtype=float)
+        agent.a_boundary = np.zeros_like(p_end)
+        agent.velocity = np.asarray(v_end, dtype=float)
+        return agent
 
 class IntervalBoundary(Boundary):
     '''Always 1D context'''
@@ -44,24 +79,43 @@ class IntervalBoundary(Boundary):
         self.max = max(self.points)
         self.boundary_tolerance = boundary_tolerance
     
-    def is_inside(self, p):
-        """Works with 1D scalar or array"""
-        return self.min <= p <= self.max
-    
-    def is_on_boundary(self, p):
-        return (abs(p - self.min) < self.boundary_tolerance or abs(p - self.max) < self.boundary_tolerance)
+    @staticmethod
+    def _scalar(p):
+        return float(np.asarray(p).flat[0])
 
-    def handle_boundary_crossing(self, p_start, p_end):
-        """Returns 1D array for consistency"""
-        if self.is_inside(p_end):
-            return p_end
-        
-        # Clamp to boundary, return as array
-        if p_end < self.min:
-            return np.array([self.min])
+    def is_inside(self, p):
+        p = self._scalar(p)
+        return self.min <= p <= self.max
+
+    def is_on_boundary(self, p):
+        p = self._scalar(p)
+        return abs(p - self.min) < self.boundary_tolerance or abs(p - self.max) < self.boundary_tolerance
+
+    def clip_to_boundary(self, p: np.array) -> np.array:
+        return np.clip(np.asarray(p, dtype=float), self.min, self.max)
+
+    def react(self, agent, p_end, v_end, t):
+        p_scalar = self._scalar(p_end)
+        v_scalar = self._scalar(v_end)
+        if self.is_inside(p_scalar):
+            agent.position = np.array([p_scalar])
+            agent.a_boundary = np.zeros(1)
+            agent.velocity = np.array([v_scalar])
+            return agent
+        # Elastic reflection: fold overshoot, flip velocity
+        if p_scalar < self.min:
+            p_reflected = 2 * self.min - p_scalar
+            v_reflected = abs(v_scalar)   # bounce inward (positive direction)
         else:
-            return np.array([self.max])
-    
+            p_reflected = 2 * self.max - p_scalar
+            v_reflected = -abs(v_scalar)  # bounce inward (negative direction)
+        p_reflected = np.clip(p_reflected, self.min, self.max)
+        a_reaction = np.array([(v_reflected - v_scalar) / t])
+        agent.position = np.array([p_reflected])
+        agent.a_boundary = a_reaction
+        agent.velocity = np.array([v_reflected])
+        return agent
+
 class PolygonBoundary(Boundary):
     def __init__(self, points, boundary_tolerance=1e-10):
         super().__init__(points)
@@ -77,123 +131,358 @@ class PolygonBoundary(Boundary):
         point = Point(p)
         return self.polygon.contains(point) or self.polygon.touches(point)
 
-    def handle_boundary_crossing(self, p_start, p_end):
+    def _edge_inward_normal(self, intersection):
+        """Return the inward unit normal of the polygon edge nearest to intersection."""
+        coords = np.array(self.polygon.exterior.coords)
+        centroid = np.array(self.polygon.centroid.coords[0])
+        best_normal, best_dist = None, float('inf')
+        for i in range(len(coords) - 1):
+            p1, p2 = coords[i], coords[i + 1]
+            edge = p2 - p1
+            edge_len = np.linalg.norm(edge)
+            if edge_len == 0:
+                continue
+            edge_dir = edge / edge_len
+            t = np.clip(np.dot(intersection - p1, edge_dir), 0, edge_len)
+            closest = p1 + t * edge_dir
+            dist = np.linalg.norm(intersection - closest)
+            if dist < best_dist:
+                best_dist = dist
+                normal = np.array([-edge_dir[1], edge_dir[0]])
+                # Ensure normal points inward
+                if np.dot(normal, centroid - p1) < 0:
+                    normal = -normal
+                best_normal = normal
+        return best_normal
+
+    def clip_to_boundary(self, p: np.array) -> np.array:
+        nearest = self.polygon.boundary.interpolate(
+            self.polygon.boundary.project(Point(p))
+        )
+        return np.array(nearest.coords[0])
+
+    def react(self, agent, p_end, v_end, t):
+        p_start = agent.position
+        p_end = np.asarray(p_end)
+        v_end = np.asarray(v_end)
         if self.is_inside(p_end):
-            return p_end
-        
+            agent.position = p_end
+            agent.a_boundary = np.zeros_like(p_end)
+            agent.velocity = v_end
+            return agent
+
         intersections = self.boundary.intersection(LineString([p_start, p_end]))
         if intersections.is_empty:
-            return p_start
-        
+            agent.position = p_start.copy()
+            agent.a_boundary = np.zeros_like(p_end)
+            agent.velocity = v_end
+            return agent
+
         _, closest = nearest_points(Point(p_start), intersections)
-        intersection_coords = np.array(closest.coords[0])
-        
-        # Project back if needed due to numerical errors
-        if not self.is_inside(intersection_coords):
+        intersection = np.array(closest.coords[0])
+
+        # Ensure intersection is numerically on the boundary
+        if not self.is_inside(intersection):
             boundary_point = self.polygon.boundary.interpolate(
-                self.polygon.boundary.project(Point(intersection_coords))
+                self.polygon.boundary.project(Point(intersection))
             )
-            intersection_coords = np.array(boundary_point.coords[0])
-        
-        return intersection_coords
+            intersection = np.array(boundary_point.coords[0])
+
+        # Reflect remaining displacement off the boundary edge
+        normal = self._edge_inward_normal(intersection)
+        remaining = p_end - intersection
+        reflected = remaining - 2 * np.dot(remaining, normal) * normal
+        result = intersection + reflected
+        if not self.is_inside(result):
+            result = intersection  # fallback
+
+        # Elastic velocity reflection: flip normal component, keep tangential
+        v_n = np.dot(v_end, normal) * normal
+        v_reflected = v_end - 2 * v_n
+        a_reaction = (v_reflected - v_end) / t
+        agent.position = result
+        agent.a_boundary = a_reaction
+        agent.velocity = v_reflected
+        return agent
+
+class SoftBoundary(Boundary):
+    """Soft boundary: smooth pull toward center, no hard wall. Always is_inside=True.
+    Subclasses override _force_magnitude(distance) to implement different force laws."""
+    def __init__(self, spring_constant=5.0, center=None):
+        super().__init__([])
+        self.spring_constant = spring_constant
+        self._center = center  # deferred to first call if None (dim-agnostic)
+
+    def _get_center(self, p):
+        if self._center is None:
+            return np.zeros_like(p)
+        return np.asarray(self._center, dtype=float)
+
+    def _force_magnitude(self, distance: float) -> float:
+        """Override in subclasses. Returns force magnitude given distance from center."""
+        raise NotImplementedError
+
+    def is_inside(self, p):
+        return True  # no hard wall — agent can drift anywhere
+
+    def react(self, agent, p_end, v_end, t):
+        p_end = np.asarray(p_end, dtype=float)
+        center = self._get_center(p_end)
+        displacement = p_end - center
+        distance = np.linalg.norm(displacement)
+        if distance == 0:
+            a_boundary = np.zeros_like(p_end)
+        else:
+            magnitude = self._force_magnitude(distance)
+            direction = -displacement / distance  # toward center
+            a_boundary = self.spring_constant * magnitude * direction
+        agent.position = p_end
+        agent.a_boundary = a_boundary
+        agent.velocity = v_end + a_boundary * t
+        return agent
+
+    def get_points(self):
+        return []
+
+
+class LinearSoftBoundary(SoftBoundary):
+    """Force proportional to distance: F = k*d (Hookean spring toward center)."""
+    def _force_magnitude(self, distance: float) -> float:
+        return distance
+
+
+class QuadraticSoftBoundary(SoftBoundary):
+    """Force proportional to distance²: F = k*d²."""
+    def _force_magnitude(self, distance: float) -> float:
+        return distance ** 2
+
+
+class CubicSoftBoundary(SoftBoundary):
+    """Force proportional to distance³: F = k*d³."""
+    def _force_magnitude(self, distance: float) -> float:
+        return distance ** 3
 
 class WalkStrategy(ABC):
     @abstractmethod
-    def compute_step(self, p, boundary: Boundary):
+    def compute_step(self, agent: 'Agent', boundary: Boundary) -> 'Agent':
+        """Updates agent state for one step and returns it."""
         pass
 
     def __str__(self):
         return f'{self.__class__.__name__}'
 
-class SimpleRandomWalkStrategy(WalkStrategy):
-    def __init__(self, max_step_size, max_attempts=100):
-        self.max_step_size = max_step_size
+class AccelerationReplayStrategy(WalkStrategy):
+    """Replays recorded external accelerations through full kinematics with no drag.
+    The boundary reacts naturally to the replayed trajectory.
+    For strategies with no friction, this trace is identical to the original walk.
+    For strategies with friction, this trace shows what the walk would look like without drag."""
+    def __init__(self, a_external, t=1.0):
+        self._a_externals = iter(a_external)
+        self.t = t
+
+    def compute_step(self, agent, boundary):
+        a_ext = next(self._a_externals)
+        # No drag — replay external acceleration only
+        new_p = agent.position + agent.velocity * self.t + 0.5 * a_ext * self.t ** 2
+        v_end = agent.velocity + a_ext * self.t
+        agent = boundary.react(agent, new_p, v_end, self.t)
+        agent.a_external = a_ext
+        agent.a_net = a_ext  # a_net = a_ext (no drag in replay)
+        return agent
+
+class PhysicsWalkStrategy(WalkStrategy):
+    def __init__(self, max_acceleration=1.0, mass=1.0, friction_coeff=0.0, friction_order=2,
+                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
+        self.max_acceleration = max_acceleration
+        self.mass = mass
+        self.friction_coeff = friction_coeff
+        self.friction_order = friction_order  # 1: linear (honey), 2: quadratic (air)
+        self.max_speed = max_speed
+        self.t = t
+        self.fail_in_place = fail_in_place
         self.max_attempts = max_attempts
 
-    def compute_step(self, p, boundary: Boundary):
-        """Compute step with resampling if stuck on boundary"""
+    def _sample_acceleration(self, shape):
+        # 1. Random Direction: Gaussian noise gives a uniform sphere surface
+        direction = np.random.normal(0, 1, shape)
+        norm = np.linalg.norm(direction)
+        if norm == 0:
+            return np.zeros(shape)
+        direction = direction / norm
+
+        # 2. Random Magnitude: uniform in d-ball volume (u^(1/d) fills the ball uniformly)
+        d = np.prod(shape)
+        magnitude = np.random.uniform(0, 1) ** (1.0 / d)
+
+        return direction * magnitude * self.max_acceleration
+
+    def _calculate_drag_acceleration(self, velocity):
+        """Drag acceleration opposing movement: a_drag = F_drag / mass."""
+        if self.friction_coeff == 0.0:
+            return np.zeros_like(velocity)
+        speed = np.linalg.norm(velocity)
+        if speed == 0:
+            return np.zeros_like(velocity)
+        if self.friction_order == 1:
+            # Linear drag: F = -c*v → a = -(c/m)*v
+            return -(self.friction_coeff / self.mass) * velocity
+        elif self.friction_order == 2:
+            # Quadratic drag: F = -c*|v|*v → a = -(c/m)*|v|*v
+            return -(self.friction_coeff / self.mass) * speed * velocity
+        else:
+            raise ValueError("friction_order must be 1 (linear) or 2 (quadratic)")
+
+    def compute_step(self, agent, boundary):
         for attempt in range(self.max_attempts):
-            dp = np.random.uniform(-1, 1, p.shape) * self.max_step_size
-            new_p = p + dp
-            result = boundary.handle_boundary_crossing(p, new_p)
-            if result is not None:
-                return result
-            
+            a_external = self._sample_acceleration(agent.position.shape)
+            a_drag = self._calculate_drag_acceleration(agent.velocity)
+            a_net = a_external + a_drag
+
+            # Kinematics: s = v*t + ½*a*t², new_v = v + a*t
+            new_p = agent.position + agent.velocity * self.t + 0.5 * a_net * self.t ** 2
+            v_end = agent.velocity + a_net * self.t
+
+            speed = np.linalg.norm(v_end)
+            if speed > self.max_speed:
+                v_end = (v_end / speed) * self.max_speed
+
+            if not np.isfinite(new_p).all() or not np.isfinite(v_end).all():
+                continue
+
+            agent = boundary.react(agent, new_p, v_end, self.t)
+            agent.a_external = a_external
+            agent.a_net = a_net
+            return agent
+
+        if self.fail_in_place:
+            agent.reset(position=agent.position)
+            return agent
         raise RuntimeError(f"Can't find a valid step after {self.max_attempts} attempts")
 
+class SimpleRandomWalkStrategy(PhysicsWalkStrategy):
+    """No friction, no nonlinearity. Momentum is linear so AccelerationReplayStrategy trace matches exactly."""
+    def __init__(self, max_acceleration=1.0, mass=1.0, t=1.0, fail_in_place=True, max_attempts=100):
+        super().__init__(
+            max_acceleration=max_acceleration,
+            mass=mass,
+            friction_coeff=0.0,
+            t=t,
+            fail_in_place=fail_in_place,
+            max_attempts=max_attempts,
+        )
 
-class LevyFlightStrategy(WalkStrategy):
-    '''Note:
-    alpha ≈ 1.5-2.0: Most animal foraging studies (albatrosses, deer, etc.)
-    set step_size relative to boundary (just scales the distribution)
+class DiscreteRandomWalkStrategy(PhysicsWalkStrategy):
+    """Random walk on a regular grid. Each step moves ±max_acceleration along exactly one axis."""
+    def __init__(self, max_acceleration=1.0, no_step_allowed=False, mass=1.0, friction_coeff=1.0,
+                 friction_order=2, max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
+        super().__init__(
+            max_acceleration=max_acceleration,
+            mass=mass,
+            friction_coeff=friction_coeff,
+            friction_order=friction_order,
+            max_speed=max_speed,
+            t=t,
+            fail_in_place=fail_in_place,
+            max_attempts=max_attempts,
+        )
+        self.no_step_allowed = no_step_allowed
+
+    def _sample_acceleration(self, shape):
+        dim = shape[0]
+        directions = list(range(-dim, 0)) + list(range(1, dim + 1))
+        if self.no_step_allowed:
+            directions.append(0)
+        choice = np.random.choice(directions)
+        dp = np.zeros(shape)
+        if choice != 0:
+            dp[abs(choice) - 1] = np.sign(choice) * self.max_acceleration
+        return dp
+
+class LevyFlightStrategy(PhysicsWalkStrategy):
+    '''alpha ≈ 1.5-2.0: Most animal foraging studies (albatrosses, deer, etc.)
+    max_acceleration scales the Lévy distribution.
     '''
-    def __init__(self, dim=2, alpha=1.5, step_size=.1, step_size_bias=0, momentum=0.9, 
-                 momentum_bias=0, bias_direction=None, max_attempts=100):
-        self.dim = dim
+    def __init__(self, alpha=1.5, max_acceleration=0.1,
+                 mass=1.0, friction_coeff=0.1, friction_order=2,
+                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
+        super().__init__(
+            max_acceleration=max_acceleration,
+            mass=mass,
+            friction_coeff=friction_coeff,
+            friction_order=friction_order,
+            max_speed=max_speed,
+            t=t,
+            fail_in_place=fail_in_place,
+            max_attempts=max_attempts,
+        )
         self.alpha = alpha
-        self.step_size = step_size
-        self.step_size_bias = step_size_bias
-        self.momentum = momentum
-        self.momentum_bias = momentum_bias
-        self.max_attempts = max_attempts
-        
-        if bias_direction is None:
-            self.bias_direction = np.zeros(dim)
+
+    def _sample_acceleration(self, shape):
+        # Random direction (Gaussian → uniform sphere)
+        direction = np.random.normal(0, 1, shape)
+        norm = np.linalg.norm(direction)
+        if norm == 0:
+            return np.zeros(shape)
+        direction = direction / norm
+        # Lévy/Pareto heavy-tail magnitude
+        magnitude = np.random.pareto(self.alpha) * self.max_acceleration
+        return direction * magnitude
+
+def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary, agent: Agent = None, origin=None, reset=True):
+    if agent is None:
+        agent = Agent(dim, origin)
+    elif reset:
+        agent.reset()
+
+    if not boundary.is_inside(agent.position):
+        if (origin is not None or not reset) and not isinstance(boundary, SoftBoundary):
+            # Floating-point drift: the previous walk's final position landed epsilon
+            # outside the boundary edge. Clip to the nearest boundary point.
+            # Being on the boundary is valid; drift never exceeds machine epsilon.
+            agent.position = boundary.clip_to_boundary(agent.position)
         else:
-            direction = np.array(bias_direction)
-            norm = np.linalg.norm(direction)
-            if norm > 0:
-                self.bias_direction = direction / norm
-            else:
-                self.bias_direction = np.zeros(dim)
-        
-        self.bias_vector = self.momentum_bias * self.bias_direction
-        self.v_prev = np.zeros(dim)
-    
-    def compute_step(self, p, boundary: Boundary):
-        """Compute step with resampling if stuck on boundary"""
-        for attempt in range(self.max_attempts):
-            # Generate step length from power-law distribution
-            dp = (self.step_size * np.random.pareto(self.alpha, self.dim) + self.step_size_bias) * \
-                 np.random.choice([-1, 1], size=p.shape)
-            
-            # Apply momentum only if not stuck (first attempt uses previous velocity)
-            if attempt == 0:
-                dp = self.momentum * self.v_prev + (1 - self.momentum) * dp + self.bias_vector
-            else:
-                # On resamples, don't use old momentum (we're stuck)
-                dp = dp + self.bias_vector
-            
-            new_p = p + dp
-            result = boundary.handle_boundary_crossing(p, new_p)
-            
-            if result is not None:
-                self.v_prev = result - p
-                return result
-        
-        # If we couldn't find a valid move, stay in place and reset velocity
-        self.v_prev = np.zeros(self.dim)
-        return p
+            raise RuntimeError(f'Illegal start position according to {boundary}: {agent.position}')
 
-def random_walk(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary, origin=None):
-    agent_p = np.zeros(dim) if origin is None else origin
-    if not boundary.is_inside(agent_p):
-        raise RuntimeError(f'Illegal start position according to {boundary}: {agent_p}')
-    positions = []
-    # positions.append((agent_p))
-    for _ in range(steps):
-        agent_p = strategy.compute_step(agent_p, boundary)
-        positions.append(agent_p.copy())
-        
-    return np.array(positions)
+    positions  = np.empty((steps + 1, dim))
+    velocities = np.empty((steps, dim))
+    a_exts     = np.empty((steps, dim))
+    a_bnds     = np.empty((steps, dim))
+    a_nets     = np.empty((steps, dim))
 
-def positions_to_p_v_pairs(positions: np.array):
-    # Ensure 2D for processing
-    if positions.ndim == 1:
-        positions = positions[:, np.newaxis]
-    
-    velocities = np.diff(positions, axis=0, prepend=np.zeros((1, positions.shape[1])))
-    return positions, velocities
+    positions[0] = agent.position
+    for i in range(steps):
+        agent = strategy.compute_step(agent, boundary)
+        positions[i + 1] = agent.position
+        velocities[i]    = agent.velocity
+        a_exts[i]        = agent.a_external
+        a_bnds[i]        = agent.a_boundary
+        a_nets[i]        = agent.a_net
+
+    return {
+        'positions':  positions,   # (steps+1, dim)
+        'velocities': velocities,  # (steps, dim)
+        'a_ext':      a_exts,      # (steps, dim)
+        'a_bnd':      a_bnds,      # (steps, dim)
+        'a_net':      a_nets,      # (steps, dim)
+        'agent':      agent,
+    }
+
+def generate_dual_trajectory(dim: int, steps: int, strategy: WalkStrategy, boundary: Boundary, origin=None):
+    """Run two random walks with the same external accelerations.
+    Returns a combined dict with _actual and _opt suffixes.
+    The actual run uses the given strategy (may include drag/friction).
+    The optimistic run replays only the external accelerations with no drag.
+    a_ext is shared between both runs and returned once without a suffix.
+    """
+    actual = random_walk(dim, steps, strategy, boundary, origin=origin)
+    t = getattr(strategy, 't', 1.0)
+    replay = AccelerationReplayStrategy(actual['a_ext'], t=t)
+    optimistic = random_walk(dim, steps, replay, boundary, origin=origin)
+    d = {k + '_actual': v for k, v in actual.items()}
+    d.update({k + '_opt': v for k, v in optimistic.items()})
+    d['a_ext'] = actual['a_ext']  # identical for both runs — stored once
+    del d['a_ext_actual'], d['a_ext_opt']
+    return d
 
 def generate_polygon_points(n_sides, radius, rotation=0, center=None, decimals=10):
     """
@@ -276,21 +565,23 @@ def to_cartesian(polar_coords):
 
 
 if __name__ == '__main__':
-    # dim = 1
-    # # # -------------------------------------------------------------
-    # # boundary = NoBoundary()
-    # boundary = IntervalBoundary() 
-    # strategy = LevyFlightStrategy(dim=dim, alpha=2.0, momentum=0, step_size=0.1)
+    # radial tollerance for accuracy formula: dx = 1/(2**b-1), dr = 2**.5 * dx 
+    # dx := distance between points in grid in x and y direction (square grid)
+    # b := resolution
+    # dr := radial tollerance in a grid where sorounding points are within tollerance (1 point neighbourhood)
 
-    dim = 2
-    # -------------------------------------------------------------
-    # boundary = NoBoundary()
-    octagon = generate_polygon_points(n_sides=8, radius=1, rotation=np.pi/4) 
-    boundary = PolygonBoundary(points=octagon)
-    # strategy = SimpleRandomWalkStrategy(1)
-    strategy = LevyFlightStrategy(dim=dim, alpha=2, momentum=0.0, step_size=0.2)
+    dim = 1
+    boundary = IntervalBoundary(radius=1.0)
 
-    # Simulate the walk
-    steps = 100
-    positions = random_walk(dim, steps, strategy, boundary)
-    plot_random_walk('/out/', positions, strategy, boundary)
+    # dim = 2
+    # octagon = generate_polygon_points(n_sides=8, radius=1, rotation=np.pi/4)
+    # boundary = PolygonBoundary(points=octagon)
+
+    # strategy = LevyFlightStrategy()
+    # strategy = SimpleRandomWalkStrategy()
+    strategy = PhysicsWalkStrategy(max_acceleration=1.0, mass=1.0, friction_coeff=0.1, friction_order=2, max_speed=10)
+
+    # steps = 100
+    steps = 5
+    d = generate_dual_trajectory(dim, steps, strategy, boundary)
+    plot_random_walk('/out/', d['positions_actual'], strategy, boundary, dual=d)

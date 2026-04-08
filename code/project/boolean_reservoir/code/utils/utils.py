@@ -5,10 +5,18 @@ from hashlib import sha256
 from pathlib import Path
 import networkx as nx
 import time
-from os import getpid, replace
+import socket
+import logging
+import signal
+import sys
+from os import getpid, replace, environ
 
-# Ensure reproducibility by setting seeds globally
-# Wont work across architectures and GPU vs CPU etc
+logger = logging.getLogger(__name__)
+
+# Ensures reproducibility across CPU and GPU. All init-time random structures (graph, LUT,
+# initial states) use numpy/Python random. Deterministic algorithms are safe here because:
+# the only non-trivial matmul is the linear readout (2048 → n_outputs), which is small enough
+# that deterministic kernels carry negligible overhead; no dropout or batch norm is used.
 def set_seed(seed=42):
     if seed is not None:
         random.seed(seed)
@@ -16,6 +24,8 @@ def set_seed(seed=42):
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+        environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # 32KB/stream; required for deterministic cuBLAS on CUDA >= 10.2
+        torch.use_deterministic_algorithms(True)
 
 def generate_unique_seed(*args):
     # Create a string representation of the combined parameters
@@ -116,6 +126,9 @@ def override_symlink(source: Path, link: Path = None):
 def l2_distance(tensor):
     return torch.sqrt((tensor ** 2).sum(axis=1))
 
+def l2_distance_squared(tensor):
+    return (tensor ** 2).sum(axis=1)
+
 def manhattan_distance(tensor):
     return torch.abs(tensor).sum(axis=1)
 
@@ -176,3 +189,34 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
         print(f'Balanced dataset from {n_before} samples to {n_after} ({(n_before - n_after) / n_before * 100:.2f}% reduction)')
 
     return dataset
+
+
+
+def run_on_node(configs, node_job_assignments, run_fn, **kwargs):
+    # --- ADD THIS SIGNAL HANDLER ---
+    def handle_exit(signum, frame):
+        logger.warning(f"Received signal {signum}. Shutting down node runner...")
+        # Add any emergency cleanup here if needed
+        sys.exit(1)
+
+    # Register for both Ctrl+C and Slurm termination
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+    # -------------------------------
+
+    node = environ.get("SLURMD_NODENAME") or socket.gethostname()
+    if "hpc" in node:
+        logger.info(f"HPC node: {node}")
+        node_id = int(node[3:])
+    else:
+        logger.warning(f"Non-HPC node: {node}")
+        node_id = 'unknown'
+
+    indices = node_job_assignments.get(node_id, node_job_assignments.get('unknown', []))
+    selected = [configs[i] for i in indices]
+
+    for c in selected:
+        logger.info(f"Starting config for index {indices[selected.index(c)]}")
+        run_fn(c, **kwargs)
+        
+    print('done!')

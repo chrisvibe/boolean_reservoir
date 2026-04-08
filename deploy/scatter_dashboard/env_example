@@ -1,0 +1,15 @@
+# Copy this to .env and fill in your values
+
+# Path to the repo root on this machine
+REPO_PATH=/path/to/your/repo
+
+# Run containers as the host user so mounted volume writes work.
+# On the cluster, set these to your UID/GID:
+#   echo "HOST_UID=$(id -u)" >> .env
+#   echo "HOST_GID=$(id -g)" >> .env
+HOST_UID=1000
+HOST_GID=1000
+
+# Gunicorn settings
+GUNICORN_WORKERS=2
+GUNICORN_TIMEOUT=120

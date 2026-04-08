@@ -1,0 +1,22 @@
+## Multiverse config system
+Consider replacing the hand-rolled multiverse/universe system (multiverse_overrides, deep_merge,
+UniverseWrapper, generate_param_combinations) with Hydra (https://hydra.cc) for config composition,
+sweeps, and overrides. Current system works but is bespoke and hard to extend.
+
+## Grid search parquet: flat columns at save time
+
+Currently `save_grid_search_results` writes a single `params_json` column (full JSON blob per row).
+Loading any subset requires parsing every row's JSON before a filter mask can be applied.
+
+Idea: also write a small set of pre-extracted scalar columns at save time, e.g.:
+  logging.train.accuracy, logging.train.loss,
+  model.reservoir_layer.n_nodes, model.reservoir_layer.k_avg, model.reservoir_layer.mode
+
+Benefits:
+  - `df_filter_mask` (e.g. accuracy > 0.6) can run on raw parquet columns before any JSON is parsed
+    → parquet predicate pushdown; only surviving rows need DotDict construction
+  - For small result sets this could reduce load time by 10-100x on large files
+  - Enables fast columnar stats without loading params at all
+
+Constraint: requires changing `save_grid_search_results` (and backward-compat handling in the loader
+for older files that lack the extra columns).

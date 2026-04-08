@@ -1,14 +1,12 @@
 logging:
   out_path: out/temporal/kq_and_gr/grid_search/test
-  save_keys: null 
+  save_keys: null
   grid_search:
     seed: 0
     n_samples: 1
+    run: ['train', 'kqgr']
   history:
     record: True
-  kqgr:
-    eval: 'last-random'
-    tau: 3
 model:
   input_layer:
     w_bi: identity
@@ -16,8 +14,8 @@ model:
     encoding: base2
     features: 2
     redundancy: 1
-    resolution: 10 # affects how redundancy is applied 
-    chunk_size: 10 # set to resolution 
+    resolution: 10 # affects how redundancy is applied
+    chunk_size: 10 # set to resolution
     interleaving: 0
     pertubation: override
     w_in: null
@@ -41,23 +39,24 @@ model:
     epochs: 40
     evaluation: dev
 dataset:
-  train:
-    task: density 
-    bits: 10
-    window: 3
-    delay: 1
-    split:
-      train: 0.5
-      dev: 0.5
-      test: 0
-    samples: 2048 # 2**10=1024 input combinations, twice this ensures a copy for train/dev
-    sampling_mode: 'exhaustive'
+  task: density
+  bits: 10
+  window: 3
+  delay: 1
+  split:
+    train: 0.5
+    dev: 0.5
+    test: 0
+  samples: 2048 # 2**10=1024 input combinations, twice this ensures a copy for train/dev
+  sampling_mode: 'exhaustive'
+multiverse_overrides:
   kqgr:
-    bits: 10
-    split:
-      train: 1
-      dev: 0
-      test: 0
-    sampling_mode: 'exhaustive'
-    tau: 3
-    evaluation: 'last'
+    dataset:
+      bits: 10
+      split:
+        train: 1
+        dev: 0
+        test: 0
+      sampling_mode: 'exhaustive'
+      tau: 3
+      evaluation: 'last'

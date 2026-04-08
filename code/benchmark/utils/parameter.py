@@ -1,8 +1,39 @@
 from pydantic import BaseModel, Field, model_validator, ConfigDict
-from typing import Optional
+from typing import Optional, Union, List
 from pathlib import Path
 import hashlib
 import json
+
+
+class KQGRDatasetParams(BaseModel):
+    """
+    Mixin adding KQGR capacity metric fields to any dataset type.
+    tau has no default — configs without tau fail validation for KQGRXxx classes
+    so Pydantic discriminates automatically based on tau presence.
+    """
+    tau: Union[int, List[int]]
+    evaluation: Union[str, List[str]] = Field('last', description="Tau application mode: 'first', 'last', or 'random'")
+
+    @model_validator(mode='before')
+    @classmethod
+    def _assert_no_field_clash(cls, values):
+        kqgr_fields = set(KQGRDatasetParams.model_fields.keys())
+        for parent in cls.__mro__:
+            if not hasattr(parent, 'model_fields'):
+                continue
+            if issubclass(parent, KQGRDatasetParams) or parent is BaseModel:
+                continue  # skip KQGR classes (they own these fields) and BaseModel
+            clash = kqgr_fields & set(parent.model_fields.keys())
+            assert not clash, (
+                f"KQGRDatasetParams field clash in {parent.__name__}: {clash}. "
+                "Rename the conflicting field in the base dataset class."
+            )
+        return values
+
+    @property
+    def evaluation_mode(self) -> str:
+        """First segment of evaluation string (e.g. 'last-random' → 'last')."""
+        return str(self.evaluation).split('-')[0]
 
 
 class Split(BaseModel):
@@ -18,20 +49,27 @@ class Split(BaseModel):
         return values
 
 class DatasetParameters(BaseModel):
+    name: str = Field(description="Discriminator for the dataset type")
     path: Optional[Path] = Field(None, description="Path to dataset")
     split: Split = Field(Split(), description="fraction for train, dev, test")
     shuffle: bool = Field(True, description="Shuffle dataset before splitting")
     generate_data: bool = Field(False, description="Ignores loading even if dataset exists at path")
     samples: int = Field(64, description="Number of samples to generate in the dataset")
     seed: Optional[int] = Field(None, description="Random seed, None disables seed")
+    reset: bool = Field(True, description="If False, each sample's origin is the final position of the previous sample")
+    init: str = Field('', json_schema_extra={'expand': False})
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
-        extra='allow'
+        extra='forbid'
     )
 
     def has_list_in_a_field(self):
         return any(isinstance(value, list) for value in self.model_dump().values())
+
+    def _base_data_path(self) -> Path:
+        """Path segments for data-affecting base parameters."""
+        return Path(f'm-{self.samples}') / f'r-{self.seed}' / f'rst-{int(self.reset)}'
 
     @staticmethod
     def _hash_params(params, n_chars=5):

@@ -3,15 +3,24 @@ import torch
 import torch.nn as nn
 from project.boolean_reservoir.code.parameter import * 
 from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
-from project.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
+from project.boolean_reservoir.code.train_model import train_single_model
 from project.boolean_reservoir.code.encoding import bin2dec, dec2bin
-from project.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
 ACCEPTABLE_TEST_ACCURACY_THRESHOLD = 0.9
 
-class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
+class VerificationModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def save(self):
+        pass
+
+    def reset_reservoir(self, **kwargs):
+        pass
+
+class PathIntegrationVerificationModelBaseTwoEncoding(VerificationModel):
     # Linear model for sanity check to verify:
     # a) Base 2 binary encoding is relatively lossless with a decent number of bits
     # b) Path integration task can be computed by summing steps
@@ -37,9 +46,6 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
         # sum across time steps
         x = torch.sum(x, dim=1)
         return x
-        
-    def save(self):
-        pass
 
     @staticmethod
     def test_encoding_precision(bits):
@@ -56,7 +62,7 @@ class PathIntegrationVerificationModelBaseTwoEncoding(nn.Module):
         print(f"Mean error: {errors.mean():.6f}")
 
 
-class PathIntegrationVerificationModel(nn.Module):
+class PathIntegrationVerificationModel(VerificationModel):
     # Linear model for sanity check to verify:
     # a) Any reasonable binary encoding (not just base 2)
     # b) Path integration task can be computed by summing steps
@@ -81,14 +87,13 @@ class PathIntegrationVerificationModel(nn.Module):
         x = torch.sum(x, dim=1)            
         return x
 
-    def save(self):
-        pass
-
 @pytest.mark.parametrize("model_class, config_path", [
     (PathIntegrationVerificationModelBaseTwoEncoding, 'project/path_integration/test/config/1D/grid_search/verification_model.yaml'),
     (PathIntegrationVerificationModelBaseTwoEncoding, 'project/path_integration/test/config/2D/grid_search/verification_model.yaml'),
     (PathIntegrationVerificationModel, 'project/path_integration/test/config/1D/grid_search/verification_model.yaml'),
     (PathIntegrationVerificationModel, 'project/path_integration/test/config/2D/grid_search/verification_model.yaml'),
+    # Gravity boundary: x = accelerations (a_ext + a_bnd). Soft linear spring — no impulsive reactions.
+    (PathIntegrationVerificationModel, 'project/path_integration/test/config/2D/grid_search/verification_model_gravity.yaml'),
 ])
 def test_path_integration_verification_models(model_class, config_path):
     logging.debug(f"Testing model {model_class} with config {config_path}")
@@ -97,7 +102,7 @@ def test_path_integration_verification_models(model_class, config_path):
         model_instance = model_class(pi)
         logging.debug(f"Model instance created: {model_instance}")
         
-        p, trained_model, dataset, history = train_single_model(model=model_instance, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        p, trained_model, dataset, history = train_single_model(model=model_instance)
         logging.debug(f"Training completed with accuracy {trained_model.P.L.T.accuracy}")
         
         assert trained_model.P.L.T.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {trained_model.P.L.T.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"
@@ -109,5 +114,5 @@ if __name__ == '__main__':
         pi.M.I.seed = pi.D.seed = 0 # consistancy for debug
         model = PathIntegrationVerificationModelBaseTwoEncoding(pi)
         # model = PathIntegrationVerificationModel(pi)
-        p, model, dataset, history = train_single_model(model=model, dataset_init=d().dataset_init, accuracy=a().accuracy)
+        p, model, dataset, history = train_single_model(model=model)
         assert model.P.L.T.accuracy >= ACCEPTABLE_TEST_ACCURACY_THRESHOLD, f"Accuracy {model.P.L.T.accuracy} is below {ACCEPTABLE_TEST_ACCURACY_THRESHOLD}"

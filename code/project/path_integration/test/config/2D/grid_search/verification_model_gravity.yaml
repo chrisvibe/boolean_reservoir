@@ -1,0 +1,39 @@
+model:
+  input_layer:
+    encoding: 'base2'
+    features: 2
+    resolution: 8
+    redundancy: 1
+  reservoir_layer:
+    n_nodes: 100
+    k_avg: 2
+    k_max: 6
+    p: 0.5
+    self_loops: 0
+    init: 'random'
+  output_layer:
+    n_outputs: 2
+  training:
+    seed: 0
+    batch_size: 128
+    epochs: 100
+    accuracy_threshold: 0.05
+    evaluation: 'test'
+logging:
+  out_path: 'out/path_integration/test/2D/verification_model/grid_search/verification_model_gravity'
+dataset:
+  dimensions: 2
+  steps: 5
+  mode: 'acceleration'
+  strategy:
+    name: SimpleRandomWalkStrategy
+  boundary:
+    name: LinearSoftBoundary
+    params:
+      spring_constant: 1.0
+  split:
+    train: 0.8
+    dev: 0.1
+    test: 0.1
+  samples: 20000
+  seed: 0

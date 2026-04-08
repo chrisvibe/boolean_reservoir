@@ -1,7 +1,6 @@
 from benchmark.temporal.temporal_density_parity_dataset import (
     TemporalDatasetParams,
-    TemporalDensityDataset,
-    TemporalParityDataset,
+    TemporalDataset,
 )
 from project.boolean_reservoir.code.utils.utils import set_seed
 from benchmark.temporal.test.test_temporal_dataset import color_the_stream, format_task_result 
@@ -55,7 +54,7 @@ if __name__ == '__main__':
         sampling_mode='random',
         generate_data=True,
     )
-    dataset = TemporalDensityDataset(D)
+    dataset = TemporalDataset(D)
     show_dataset_samples(dataset)
     
     set_seed(0)
@@ -70,7 +69,7 @@ if __name__ == '__main__':
         sampling_mode='random',
         generate_data=True,
     )
-    dataset = TemporalParityDataset(D)
+    dataset = TemporalDataset(D)
     show_dataset_samples(dataset)
     
     # 2D examples
@@ -90,7 +89,7 @@ if __name__ == '__main__':
         sampling_mode='random',
         generate_data=True,
     )
-    dataset = TemporalDensityDataset(D)
+    dataset = TemporalDataset(D)
     show_dataset_samples(dataset)
     
     set_seed(0)
@@ -105,7 +104,7 @@ if __name__ == '__main__':
         sampling_mode='random',
         generate_data=True,
     )
-    dataset = TemporalParityDataset(D)
+    dataset = TemporalDataset(D)
     show_dataset_samples(dataset)
     
     # Exhaustive mode example
@@ -125,5 +124,5 @@ if __name__ == '__main__':
         sampling_mode='exhaustive',
         generate_data=True,
     )
-    dataset = TemporalDensityDataset(D)
+    dataset = TemporalDataset(D)
     show_dataset_samples(dataset, num_samples=16)

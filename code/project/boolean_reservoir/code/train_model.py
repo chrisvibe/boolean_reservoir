@@ -1,12 +1,17 @@
 from abc import ABC, abstractmethod
+import copy
+from collections import OrderedDict
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch
 from project.boolean_reservoir.code.utils.utils import set_seed
 from project.boolean_reservoir.code.reservoir import BooleanReservoir
 from project.boolean_reservoir.code.graph_visualizations_dash import *
-from project.boolean_reservoir.code.parameter import * 
+from project.boolean_reservoir.code.parameter import *
 from project.boolean_reservoir.code.visualization import *
+from benchmark.utils.parameter import KQGRDatasetParams
+
+_KQGR_CACHE_EXCLUDE = set(KQGRDatasetParams.model_fields.keys())  # {'tau', 'evaluation'}
 
 class AccuracyFunction(ABC):
     @abstractmethod
@@ -31,10 +36,60 @@ class BooleanAccuracy(AccuracyFunction):
         else:
             return correct
 
+class KQGRInitMixin:
+    """Mixin: LRU-cached raw dataset fetching + KQGR orchestration."""
+    _kq_cache = OrderedDict()
+    _kq_cache_maxsize = 100
+
+    def _get_kq_cached_dataset(self, P: Params):
+        exclude_fields = _KQGR_CACHE_EXCLUDE if isinstance(P.D, KQGRDatasetParams) else set()
+        cache_key = str((
+            self.__class__.__name__,
+            P.D.model_dump(exclude=exclude_fields),
+            P.M.I.model_dump(),
+            P.M.R.n_nodes,
+        ))
+        if cache_key not in self._kq_cache:
+            P_raw = copy.deepcopy(P)
+            # WARNING: shuffle=True must shuffle BEFORE truncation to n_nodes (in gen_integer_samples), not during split — otherwise exhaustive mode silently skips half the input space and GR is underestimated.
+            P_raw.dataset.samples = P.M.R.n_nodes   # KQGR needs exactly n_nodes samples
+            P_raw.dataset.split.train = 1 # all samples go to KQGR eval
+            P_raw.dataset.split.dev = 0 
+            P_raw.dataset.split.test = 0 
+            # P_raw.T.batch_size.P.M.R.n_nodes # TODO dangerous for large n_nodes? better to process in batches? plus atm grid search passes on model arround and this means making a new model... :(
+            if hasattr(P_raw.dataset, 'tau'):
+                P_raw.dataset.tau = 0               # tau only affects encoding, not raw data
+            self._kq_cache[cache_key] = self._create_raw_dataset(P_raw)
+            if len(self._kq_cache) > self._kq_cache_maxsize:
+                self._kq_cache.popitem(last=False)
+        else:
+            self._kq_cache.move_to_end(cache_key)
+        return copy.deepcopy(self._kq_cache[cache_key])
+
+    def kqgr(self, P: Params, kq: bool):
+        dataset = self._get_kq_cached_dataset(P)
+        if kq:
+            P = copy.deepcopy(P)
+            if hasattr(P.dataset, 'tau'):
+                P.dataset.tau = 0
+        return self._process_dataset(dataset, P)
+
+
 class DatasetInit(ABC):
     @abstractmethod
-    def dataset_init(self, P: Params=None) -> Dataset:
-        pass
+    def _create_raw_dataset(self, P: Params):
+        """Create and return raw (un-encoded, un-normalized, un-split) dataset."""
+
+    @abstractmethod
+    def _process_dataset(self, dataset, P: Params):
+        """Apply encoders, normalizers, splits to a raw dataset copy; return result."""
+
+    def train(self, P: Params) -> Dataset:
+        dataset = self._create_raw_dataset(P)
+        if hasattr(P.dataset, 'tau') and P.dataset.tau != 0:
+            P = copy.deepcopy(P)
+            P.dataset.tau = 0
+        return self._process_dataset(dataset, P)
 
 def criterion_strategy(strategy):
     critertion_map = {
@@ -46,7 +101,7 @@ def criterion_strategy(strategy):
     return critertion_map[strategy]()
 
 # TODO handle compiling of model in train_and_evaluate?
-def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, dataset_init: DatasetInit=None, accuracy: AccuracyFunction=None, ignore_gpu=False, compile_model=False, reset_dynamo=True):
+def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=None, model=None, save_model=True, ignore_gpu=False, compile_model=False, reset_dynamo=True):
     if model is None:
         model = BooleanReservoir(params=parameter_override, load_path=yaml_or_checkpoint_path)
     device = torch.device("cuda" if torch.cuda.is_available() and not ignore_gpu else "cpu")
@@ -54,8 +109,8 @@ def train_single_model(yaml_or_checkpoint_path='', parameter_override:Params=Non
     P = model.P
 
     # Init data
-    dataset = dataset_init(P).to(device)
-    _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=accuracy)
+    dataset = P.dataset_init_obj.train(P).to(device)
+    _, model, train_history = train_and_evaluate(model, dataset, record_stats=True, verbose=True, accuracy=P.accuracy_obj)
     if save_model:
         model.save()
     return P, model, dataset, train_history

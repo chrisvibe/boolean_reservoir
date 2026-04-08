@@ -16,9 +16,9 @@ from matplotlib.ticker import MultipleLocator
 from pathlib import Path
             
 
-def plot_many_things(model, dataset, history):
-    y_test = dataset.data['y_test'][:500]
-    y_hat_test = model(dataset.data['x_test'][:500])
+def plot_many_things(model, dataset, history, evaluation='test'):
+    y_test = dataset.data['y_' + f'{evaluation}'][:500]
+    y_hat_test = model(dataset.data['x_' + f'{evaluation}'][:500])
     plot_train_history(model.save_path, history)
     plot_predictions_and_labels(model.save_path, y_hat_test, y_test, tolerance=model.T.accuracy_threshold, axis_limits=[0, 1])
     # plot_dynamics_history(model.save_path)
@@ -44,7 +44,7 @@ def group_df_data_by_parameters(df):
     return grouped
 
 def plot_kq_and_gr(df, P: Params, filename: str, metrics: list[str] = ['M_kq', 'M_gr', 'M_delta']):
-    D = P.DD.kqgr
+    D = P.U.kqgr.D
     subtitle = f"Mode: {P.M.R.mode}, Nodes: {P.M.R.n_nodes}, Bit Stream Length: {D.bits}, Samples per config: {D.samples}"
     
     fig, ax = plt.subplots(figsize=(18, 8))

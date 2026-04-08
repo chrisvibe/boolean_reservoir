@@ -16,7 +16,7 @@ model:
   training:
     seed: 0
     batch_size: 128
-    epochs: 200
+    epochs: 100
     accuracy_threshold: 0.05
     evaluation: 'test' 
 logging:
@@ -25,20 +25,14 @@ dataset:
   dimensions: 2
   steps: 5
   strategy:
-      # - name: SimpleRandomWalkStrategy
-      #   params:
-      #     max_step_size: 0.2
+      - name: SimpleRandomWalkStrategy
       - name: LevyFlightStrategy
         params:
-          step_size: 1.0
-          alpha: 10 # alpha is high as 5 steps give small exploration and hard to learn
-          momentum: 0.0
+           friction_coeff: 0
   boundary:
-    name: PolygonBoundary
+    name: LinearSoftBoundary
     params:
-      n_sides: 8 # avoid corner effects
-      radius: 1.0
-      rotation: pi/4 
+      spring_constant: 1.0
   split:
     train: 0.8
     dev: 0.1

@@ -1,8 +1,7 @@
 import pytest
 from benchmark.temporal.temporal_density_parity_dataset import (
     TemporalDatasetParams,
-    TemporalDensityDataset,
-    TemporalParityDataset,
+    TemporalDataset,
 )
 from project.boolean_reservoir.code.utils.utils import set_seed
 import numpy as np
@@ -47,7 +46,7 @@ def density_dataset_1d():
         sampling_mode='random',
         generate_data=True,
     )
-    return TemporalDensityDataset(D)
+    return TemporalDataset(D)
 
 
 @pytest.fixture
@@ -64,7 +63,7 @@ def parity_dataset_1d():
         sampling_mode='random',
         generate_data=True,
     )
-    return TemporalParityDataset(D)
+    return TemporalDataset(D)
 
 
 @pytest.fixture
@@ -81,7 +80,7 @@ def density_dataset_2d():
         sampling_mode='random',
         generate_data=True,
     )
-    return TemporalDensityDataset(D)
+    return TemporalDataset(D)
 
 
 def test_dataset_shapes_1d(density_dataset_1d):
@@ -175,7 +174,7 @@ def test_exhaustive_mode():
         sampling_mode='exhaustive',
         generate_data=True,
     )
-    dataset = TemporalDensityDataset(D)
+    dataset = TemporalDataset(D)
     
     # Check we have all unique patterns
     patterns = dataset.x[:, 0, 0, :].numpy()  # samples x bits
@@ -197,7 +196,7 @@ def test_exhaustive_mode_with_repetition():
         sampling_mode='exhaustive',
         generate_data=True,
     )
-    dataset = TemporalDensityDataset(D)
+    dataset = TemporalDataset(D)
     
     # First 8 should be unique
     patterns = dataset.x[:8, 0, 0, :].numpy()

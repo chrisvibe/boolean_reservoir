@@ -3,7 +3,7 @@ from project.boolean_reservoir.code.utils.utils import override_symlink
 from pathlib import Path
 import torch
 
-def compute_rank(model: BooleanReservoir, x: torch.Tensor, metric: str) -> int:
+def compute_rank(model: BooleanReservoir, x: torch.Tensor, metric: str, reset_reservoir: bool = True) -> int:
     """Run model and compute rank from reservoir states"""
     nested_out = model.L.save_path / 'history' / metric
     new_save_path = nested_out / 'history'
@@ -31,4 +31,6 @@ def compute_rank(model: BooleanReservoir, x: torch.Tensor, metric: str) -> int:
     df_filter = expanded_meta[expanded_meta['phase'] == 'output_layer']
     filtered_history = history[df_filter.index].to(torch.float)
     reservoir_node_history = filtered_history[:, ~model.input_nodes_mask]
+    if reset_reservoir:
+        model.reset_reservoir(hard_reset=True) # ensure fresh reservoir
     return torch.linalg.matrix_rank(reservoir_node_history).item()

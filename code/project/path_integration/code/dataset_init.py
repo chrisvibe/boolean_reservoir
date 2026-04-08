@@ -1,18 +1,46 @@
+import copy
 from project.boolean_reservoir.code.encoding import BooleanEncoder, min_max_normalization
 from project.boolean_reservoir.code.parameter import Params
-from project.boolean_reservoir.code.utils.utils import balance_dataset
-from project.boolean_reservoir.code.train_model import DatasetInit
+from project.boolean_reservoir.code.utils.utils import balance_dataset, l2_distance, l2_distance_squared
+from project.boolean_reservoir.code.train_model import DatasetInit, KQGRInitMixin
 from benchmark.path_integration.constrained_foraging_path_dataset import ConstrainedForagingPathDataset
 
-class PathIntegrationDatasetInit(DatasetInit): # Note dont use I.seed here dataset init will use D.seed
-    def dataset_init(self, P: Params):
+
+class PathIntegrationDatasetInit(KQGRInitMixin, DatasetInit):
+
+    def _create_raw_dataset(self, P: Params):
         dataset = ConstrainedForagingPathDataset(P.D)
-        dataset = balance_dataset(dataset, num_bins=100) # Note that data range affects bin assignment (outliers dangerous)
-        dataset.set_normalizer_x(min_max_normalization)
-        dataset.set_normalizer_y(min_max_normalization)
+        if P.D.reset:
+            if P.D.dimensions == 1:
+                dataset = balance_dataset(dataset, distance_fn=l2_distance, num_bins=100)
+            elif P.D.dimensions == 2:
+                # l2 distance squared is more fair for 2D as area grows per radial slice
+                dataset = balance_dataset(dataset, distance_fn=l2_distance_squared, num_bins=100)
+        return dataset
+
+    def _process_dataset(self, dataset, P: Params):
+        dataset = copy.deepcopy(dataset)
+        dataset.set_normalizer_x(min_max_normalization())
+        dataset.set_normalizer_y(min_max_normalization())
         dataset.normalize()
         encoder = BooleanEncoder(P)
         dataset.set_encoder_x(encoder)
         dataset.encode_x()
         dataset.split_dataset()
         return dataset
+
+
+if __name__ == '__main__':
+    from project.boolean_reservoir.code.parameter import load_yaml_config
+    from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations
+    P = load_yaml_config('config/path_integration/kq_and_gr/grid_search/test.yaml')
+    P.U.kqgr.D.samples = 10
+    P.M.I.redundancy = 2
+    P.M.I.features = 2
+    p = generate_param_combinations(P)[0]
+    kq = PathIntegrationDatasetInit().kqgr(p.U.kqgr, kq=True)
+    gr = PathIntegrationDatasetInit().kqgr(p.U.kqgr, kq=False)
+    tau = p.U.kqgr.D.tau
+    assert (gr.data['x'][0, ..., -tau:] != gr.data['x'][..., -tau:]).sum() == 0
+    assert (kq.data['x'][..., :-tau] != gr.data['x'][..., :-tau]).sum() == 0
+    pass

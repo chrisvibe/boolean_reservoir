@@ -127,8 +127,13 @@ class BooleanReservoir(nn.Module):
             self.register_buffer("states_parallel", states_parallel.to(type_states)) # arithmetic with states
             self.register_buffer("output_nodes_mask", output_nodes_mask.to(torch.bool)) # mask
 
+            # Register backups for mode-switching. Start as fresh copies of states_parallel.
+            self.register_buffer("states_train_backup", states_parallel.clone())
+            self.register_buffer("states_eval_backup", states_parallel.clone())
+
             # OTHER
             self.add_graph_labels(self.graph)
+            self.reset_reservoir(hard_reset=True)
     
     def init_logging(self):
         self.out_path = self.L.out_path
@@ -185,7 +190,7 @@ class BooleanReservoir(nn.Module):
     
     @staticmethod
     def initialization_strategy(p: Params):
-        return InitializationStrategy.get(p.M.R.init)(p.M.n_nodes)
+        return InitializationStrategy.get(p.M.R.init.split('-')[0])(p.M.n_nodes)
 
     @staticmethod
     def output_activation_strategy(p: Params):
@@ -227,10 +232,41 @@ class BooleanReservoir(nn.Module):
     @torch.compiler.disable # makes errors about last compiled version not matching...
     def bin2int(self, x): # consider making x (states) float32?
         return torch.matmul(x.to(self.powers_of_2.dtype), self.powers_of_2).to(torch.int64)
+    
+    def train(self, mode: bool = True):
+        # prevent dirty reservoir state from switching between train and eval modes when reset=False
 
-    def reset_reservoir(self, samples):
-        self.states_parallel[:samples].copy_(self.initial_states.expand(samples, -1))
-   
+        # If the mode isn't changing, or we are set to hard-reset anyway, do nothing special
+        if self.training == mode or self.R.reset:
+            return super().train(mode)
+
+        # 1. Save the CURRENT state before switching
+        current_backup = getattr(self, "states_train_backup" if self.training else "states_eval_backup")
+        current_backup.copy_(self.states_parallel)
+
+        # 2. Load the TARGET state
+        target_backup = getattr(self, "states_train_backup" if mode else "states_eval_backup")
+        self.reset_reservoir(target_state=target_backup)
+
+        # 3. Flip the PyTorch internal mode flag
+        return super().train(mode)
+
+    def reset_reservoir(self, samples=None, target_state=None, hard_reset=False):
+        if samples is None:
+            samples = self.states_parallel.shape[0]
+
+        if target_state is None:
+            target_state = self.initial_states.expand(samples, -1)
+
+        self.states_parallel[:samples].copy_(target_state[:samples])
+        if 'warmup' in self.R.init:
+            self.warmup()
+
+        # WIPE BACKUPS after warmup so they reflect the fully-initialized state.
+        if hard_reset and hasattr(self, 'states_train_backup'):
+            self.states_train_backup[:samples].copy_(self.states_parallel[:samples])
+            self.states_eval_backup[:samples].copy_(self.states_parallel[:samples])
+    
     def forward(self, x):
         '''
         input is reshaped to fit number of input bits in w_in
@@ -268,7 +304,7 @@ class BooleanReservoir(nn.Module):
             return torch.cat(outputs_list, dim=0)
 
         if self.R.reset:
-            self.reset_reservoir(m)
+            self.reset_reservoir(samples=m)
         self.batch_record(m, phase='init', s=0, f=0)
 
         # INPUT LAYER
@@ -300,18 +336,7 @@ class BooleanReservoir(nn.Module):
                 # dynamics loops to digest input
                 t = self.ticks[ci]
                 for ti in range(t):
-                    # Gather the states based on the adj_list
-                    neighbour_states_paralell = self.states_parallel[:m, self.adj_list]
-
-                    # Apply mask as the adj_list has invalid connections due to homogenized tensor
-                    neighbour_states_paralell &= self.adj_list_mask 
-                    idx = self.bin2int(neighbour_states_paralell)
-
-                    # Update the state with LUT for each node I + R
-                    # no neighbours defaults in the first LUT entry → fix by no_neighbours_indices
-                    states_parallel = self.lut[self.node_indices, idx]
-                    states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
-                    self.states_parallel[:m] = states_parallel
+                    self._reservoir_tick(m)
 
                     if si == s - 1 and ci == c - 1 and ti == t - 1:
                         continue  # skip last recording, as this is output_layer
@@ -329,6 +354,23 @@ class BooleanReservoir(nn.Module):
         if self.output_activation:
             outputs = self.output_activation(outputs)
         return outputs 
+
+    def _reservoir_tick(self, m):
+        neighbour_states_paralell = self.states_parallel[:m, self.adj_list]
+        neighbour_states_paralell &= self.adj_list_mask
+        idx = self.bin2int(neighbour_states_paralell)
+        states_parallel = self.lut[self.node_indices, idx]
+        states_parallel[:, self.no_neighbours_indices] = self.states_parallel[:m, self.no_neighbours_indices]
+        self.states_parallel[:m] = states_parallel
+
+    def warmup(self, ticks=None, m=None):
+        """Tick the reservoir `ticks` times without any input to wash out the init state."""
+        if m is None:
+            m = self.T.batch_size
+        if ticks is None:
+            ticks = self.ticks[0]
+        for _ in range(ticks):
+            self._reservoir_tick(m)
 
     def batch_record(self, m, **meta_data):
         if self.record:

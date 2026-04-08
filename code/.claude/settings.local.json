@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR<=5 || \\(NR>500 && NR<=505\\) || \\(NR>2000 && NR<=2005\\)')",
+      "Bash(python3 -c \":*)",
+      "Bash(find /code -name *.yaml -path */boolean_reservoir/config/*)",
+      "Bash(find /code -type f -name *.py -exec grep -l \"performance\\\\|profile\\\\|benchmark\" {})",
+      "Bash(2)",
+      "Bash(find /code -name *.yaml -exec grep -l multiverse_overrides {})",
+      "Bash(python -m pytest project/path_integration/test/test_multiverse_grid_search.py -v)",
+      "Bash(python -m pytest project/path_integration/test/test_multiverse_grid_search.py -v -s)",
+      "Bash(python -m pytest project/path_integration/test/test_multiverse_grid_search.py::test_kqgr_model_shares_reservoir -v)",
+      "Bash(python -m pytest project/path_integration/test/test_multiverse_grid_search.py::test_multiverse_grid_search -v)"
+    ]
+  }
+}

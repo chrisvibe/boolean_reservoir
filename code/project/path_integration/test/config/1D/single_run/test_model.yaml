@@ -31,10 +31,6 @@ dataset:
   steps: 5
   strategy:
     name: LevyFlightStrategy
-    params:
-      alpha: 1
-      momentum: 0.0
-      step_size: 0.05
   boundary:
     name: IntervalBoundary
   split:

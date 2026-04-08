@@ -3,7 +3,6 @@ import numpy as np
 from benchmark.temporal.parameter import TemporalDatasetParams
 from project.boolean_reservoir.code.utils.utils import set_seed
 from benchmark.utils.base_dataset import BaseDataset
-from project.boolean_reservoir.code.encoding import dec2bin
 
 class TemporalDatasetBase(BaseDataset):
     def __init__(self, D: TemporalDatasetParams, task):
@@ -27,9 +26,11 @@ class TemporalDatasetBase(BaseDataset):
             raw_data = self.generate_data(D.samples, D.bits, D.delay, D.window)
             self.set_data(raw_data)
             self.save_data()
+        if D.shuffle:
+            self.shuffle_data()
     
     @staticmethod
-    def gen_integer_samples(samples, stream_length, sampling_mode):
+    def gen_integer_samples(samples, stream_length, sampling_mode, shuffle=False):
         """Generate integer samples based on sampling mode."""
         if sampling_mode == 'exhaustive':
             # Guard against memory explosion
@@ -39,12 +40,15 @@ class TemporalDatasetBase(BaseDataset):
                     f"Exhaustive mode with stream_length={stream_length} would generate "
                     f"{max_possible} samples, which is too large. Consider random mode or smaller stream_length."
                 )
-            
+
             # Generate all possible bit patterns (truth table)
             int_samples = np.array(list(range(max_possible)))
             # If we need more samples than exist, repeat
             if samples > len(int_samples):
                 int_samples = np.tile(int_samples, samples // len(int_samples) + 1)
+            # Shuffle BEFORE truncation so n_nodes < 2^bits gets a random subset, not always 0..n_nodes-1
+            if shuffle:
+                np.random.shuffle(int_samples)
             int_samples = int_samples[:samples]
         else:  # 'random'
             # np.random.randint max value is np.iinfo(np.int64).max
@@ -62,13 +66,14 @@ class TemporalDatasetBase(BaseDataset):
         """Generate dataset from integer samples."""
         # Generate all integers at once: samples * dimensions
         total_streams = samples * self.D.dimensions
-        int_samples = self.gen_integer_samples(total_streams, stream_length, self.D.sampling_mode)
+        int_samples = self.gen_integer_samples(total_streams, stream_length, self.D.sampling_mode, shuffle=self.D.shuffle)
         
         # Convert to torch for dec2bin
         int_samples = torch.from_numpy(int_samples)
         
-        # Convert to binary arrays
-        arrays = [dec2bin(int_val, stream_length) for int_val in int_samples]
+        # Convert to binary arrays (direct int→bit, not the float-normalizing dec2bin)
+        mask = (2 ** torch.arange(stream_length - 1, -1, -1)).to(torch.int64)
+        arrays = [(int_val.unsqueeze(-1).bitwise_and(mask)).ne(0) for int_val in int_samples]
         
         # Compute labels (arrays are already torch tensors)
         labels = [self.task(arr, window, delay) for arr in arrays]
@@ -148,3 +153,20 @@ class TemporalParityDataset(TemporalDatasetBase):
         parity = count_ones % 2 != 0
 
         return parity
+
+class TemporalDataset:
+    def __new__(cls, D: TemporalDatasetParams):
+        """
+        This intercepts the creation process and returns 
+        an instance of a subclass instead of this base class.
+        """
+        assert isinstance(D, TemporalDatasetParams)
+        
+        if D.task == 'density':
+            # We create and return a TemporalDensityDataset instead
+            return TemporalDensityDataset(D)
+        elif D.task == 'parity':
+            # We create and return a TemporalParityDataset instead
+            return TemporalParityDataset(D)
+        else:
+            raise ValueError(f"Unknown task: {D.task}")

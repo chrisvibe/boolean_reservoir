@@ -2,7 +2,7 @@ import pandas as pd
 from project.boolean_reservoir.code.utils.utils import set_seed, generate_unique_seed
 from project.boolean_reservoir.code.utils.load_save import save_grid_search_results 
 from project.boolean_reservoir.code.reservoir import BooleanReservoir
-from project.boolean_reservoir.code.train_model import train_and_evaluate
+from project.boolean_reservoir.code.train_model import train_and_evaluate, DatasetInit
 from project.boolean_reservoir.code.parameter import *
 from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations 
 from project.boolean_reservoir.code.visualization import plot_grid_search
@@ -11,8 +11,6 @@ from project.parallel_grid_search.code.parallel_utils import JobInterface
 from project.boolean_reservoir.code.kq_and_gr_metric import compute_rank
 from project.boolean_reservoir.code.graph import calc_spectral_radius
 from copy import deepcopy
-from typing import Callable
-from torch.utils.data import Dataset
 from torch import compile
 import logging
 logger = logging.getLogger(__name__)
@@ -20,35 +18,32 @@ logger = logging.getLogger(__name__)
 
 class BooleanReservoirJob(JobInterface):
     """Grid search job - runs KQGR and/or training based on config"""
-    
-    def __init__(self, i: int, j: int, total_configs: int, total_samples: int, 
-                 shared: dict, locks: dict, P: Params,
-                 dataset_init: Optional[Callable[..., Dataset]] = None,
-                 accuracy = None):
-        super().__init__(i, j, total_configs, total_samples, shared, locks)
-        self.P: Params = P
-        self.dataset_init = dataset_init
-        self.accuracy = accuracy
-    
-    def _run_kqgr(self, model: BooleanReservoir, device):
-        """Compute KQGR metrics on untrained reservoir"""
-        # Note that self.P and model.P differ here (accept and avoid re-initializing model)
-        # Set parameters for making/using KQ and GR datasets
-        self.P.DD.kqgr.samples = self.P.M.R.n_nodes # square history matrix of samples and node states per rank sample
-        tau = self.P.DD.kqgr.tau
-        self.P.DD.kqgr.tau = 0 # dont set identical bits for GR → KQ
-        kq_dataset = self.dataset_init(self.P).to(device)
-        self.P.DD.kqgr.tau = tau # set identical bits for GR
-        gr_dataset = self.dataset_init(self.P).to(device)
 
-        model.save()
-        
+    def __init__(self, i: int, j: int, total_configs: int, total_samples: int,
+                 locks: dict, P: Params, compile_model: bool = False):
+        super().__init__(i, j, total_configs, total_samples, locks)
+        self.P: Params = P
+        self.dataset_init = P.dataset_init_obj
+        self.accuracy = P.accuracy_obj
+        self.compile_model = compile_model
+
+    def _init_dataset(self, init_fn, device, *args, **kwargs):
+        with self.locks['dataset_lock']:
+            dataset = init_fn(*args, **kwargs)
+        return dataset.to(device)
+
+    def _run_kqgr(self, model: BooleanReservoir, device, P_universe: Params, name: str = 'kqgr'):
+        """Compute KQGR metrics on untrained reservoir using the given universe Params."""
+        logger.debug(f"Config {self.i}, Sample {self.j}: initialising KQGR datasets")
+        universe_dataset_init = P_universe.dataset_init_obj
+        kq_dataset = self._init_dataset(universe_dataset_init.kqgr, device, P_universe, kq=True)
+        gr_dataset = self._init_dataset(universe_dataset_init.kqgr, device, P_universe, kq=False)
+        logger.debug(f"Config {self.i}, Sample {self.j}: computing KQGR ranks")
+
         spectral_radius = float(calc_spectral_radius(model.graph))
         kq_rank = compute_rank(model, kq_dataset.data['x'], 'kq')
         gr_rank = compute_rank(model, gr_dataset.data['x'], 'gr')
 
-        model.init_logging() # restore model
-        
         self.P.L.kqgr = KQGRMetrics(
             config=self.i,
             sample=self.j,
@@ -57,15 +52,16 @@ class BooleanReservoirJob(JobInterface):
             delta=kq_rank - gr_rank,
             spectral_radius=spectral_radius
         )
-        
+
         logger.info(f"Config {self.i}, Sample {self.j}: KQ={kq_rank}, GR={gr_rank}, Δ={kq_rank - gr_rank}")
-    
+
     def _run_training(self, model: BooleanReservoir, device):
         """Train and evaluate model"""
-        with self.locks['dataset_lock']:
-            dataset = self.dataset_init(self.P).to(device)
-        
-        model = compile(model)
+        logger.debug(f"Config {self.i}, Sample {self.j}: initialising training dataset")
+        dataset = self._init_dataset(self.dataset_init.train, device, self.P)
+        logger.debug(f"Config {self.i}, Sample {self.j}: starting train_and_evaluate")
+        if self.compile_model:
+            model = compile(model)
         best_epoch, trained_model, _ = train_and_evaluate(
             model, dataset, record_stats=False, verbose=False, accuracy=self.accuracy
         )
@@ -85,19 +81,42 @@ class BooleanReservoirJob(JobInterface):
                     f"Loss: {self.P.L.train.loss:.4f}, Accuracy: {self.P.L.train.accuracy:.4f}")
     
     def _run(self, device):
-        # model.reset_reservoir is called first on each forward pass if reset is enabled (default)
+        logger.debug(f"Config {self.i}, Sample {self.j}: building model")
         model = BooleanReservoir(self.P).to(device)
 
-        if self.P.DD.kqgr:
-            self._run_kqgr(model, device)
+        # Record which universe this config belongs to (None for Mother configs).
+        # Derived from multiverse_overrides, which has exactly one key per expanded config.
+        universe_name = next(iter(self.P.multiverse_overrides or {}), None)
+        self.P.L.universe = universe_name
 
-        if self.P.DD.train:
+        run = self.P.L.grid_search.run if self.P.L.grid_search else None
+        if run is None:
+            run = ['kqgr'] if universe_name else ['train']
+
+        if 'kqgr' in run and universe_name:
+            P_universe = getattr(self.P.U, universe_name)
+            assert P_universe.M.R == self.P.M.R, (
+                f"Universe '{universe_name}' overrides reservoir_layer params — not allowed: "
+                "graph/lut are shared from the training model to guarantee determinism. "
+                "Only input_layer, output_layer, and dataset may be overridden."
+            )
+            # Share graph/lut/init_state from the training model instead of re-generating.
+            # Re-initialization from the same seed is not guaranteed deterministic on GPU
+            # (async CUDA ops between set_seed(I.seed) and set_seed(R.seed) can corrupt
+            # the random state). Passing load_dict bypasses graph/lut generation entirely.
+            # lut/init_state must be on CPU so __init__ (which calls reset_reservoir
+            # before .to(device)) sees a consistent device for all buffers.
+            kqgr_model = BooleanReservoir(P_universe, load_dict={
+                'graph': model.graph,
+                'lut': model.lut.cpu(),
+                'init_state': model.initial_states.cpu(),
+            }).to(device)
+            self._run_kqgr(kqgr_model, device, P_universe, name=universe_name)
+
+        if 'train' in run:
             self._run_training(model, device)
-        
-        with self.locks['history']:
-            self.shared['history'].append(self.P)
-        
-        return {'status': 'completed'}
+
+        return {'status': 'completed', 'history': self.P}
 
     
 def apply_seed(p: Params, seed: int):
@@ -106,29 +125,21 @@ def apply_seed(p: Params, seed: int):
     if p.M.T:
         p.M.T.seed = seed
 
-class BooleanReservoirJobFactory: # Note: assumes dataset_init handles KQGR if needed as well as training
-    def __init__(self, P: Params, param_combinations: list,
-                 dataset_init: Optional[Callable] = None,
-                 accuracy = None):
+class BooleanReservoirJobFactory:
+    def __init__(self, P: Params, param_combinations: list, compile_model: bool = False):
         self.P = P
         self.param_combinations = param_combinations
-        self.dataset_init = dataset_init
-        self.accuracy = accuracy
-        
-        if self.P.DD.train and not self.accuracy:
-            raise ValueError("Need accuracy function if training.")
-    
-    def __call__(self, i, j, total_configs, total_samples, shared, locks):
+        self.compile_model = compile_model
+
+    def __call__(self, i, j, total_configs, total_samples, locks):
         p = self._override_parameter(self.P, i, j)
         return BooleanReservoirJob(
             i=i, j=j,
             total_configs=total_configs,
             total_samples=total_samples,
-            shared=shared,
             locks=locks,
             P=p,
-            dataset_init=self.dataset_init,
-            accuracy=self.accuracy
+            compile_model=self.compile_model,
         )
     
     def _override_parameter(self, p: Params, i: int, j: int):
@@ -140,23 +151,23 @@ class BooleanReservoirJobFactory: # Note: assumes dataset_init handles KQGR if n
 
 def boolean_reservoir_grid_search(
     yaml_path: str,
-    dataset_init,
-    accuracy,
     param_combinations: list = None,
     gpu_memory_per_job_gb: float = 1,
     cpu_memory_per_job_gb: float = 1,
     cpu_cores_per_job: int = 1,
+    exploration_rate: float = 0.1,
+    compile_model: bool = False,
 ):
     """Boolean Reservoir specific grid search using the generic function"""
     yaml_path = Path(yaml_path)
     P: Params = load_yaml_config(yaml_path)
     set_seed(P.L.grid_search.seed)
-    
+
     if param_combinations is None:
         param_combinations = generate_param_combinations(P)
-    
+
     # Create job factory
-    factory = BooleanReservoirJobFactory(P, param_combinations, dataset_init=dataset_init, accuracy=accuracy)
+    factory = BooleanReservoirJobFactory(P, param_combinations, compile_model=compile_model)
     
     # Define callbacks
     def save_config(output_path: Path):
@@ -179,6 +190,7 @@ def boolean_reservoir_grid_search(
         gpu_memory_per_job_gb=gpu_memory_per_job_gb,
         cpu_memory_per_job_gb=cpu_memory_per_job_gb,
         cpu_cores_per_job=cpu_cores_per_job,
+        exploration_rate=exploration_rate,
         save_config=save_config,
         process_results=process_results,
     )

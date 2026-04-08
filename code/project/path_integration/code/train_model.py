@@ -1,11 +1,9 @@
-from project.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
+from project.boolean_reservoir.code.train_model import train_single_model
 from project.boolean_reservoir.code.visualization import plot_train_history, plot_dynamics_history, plot_activity_trace
 from project.boolean_reservoir.code.graph_visualizations_dash import plot_graph_with_weight_coloring_3D
-from project.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
 from project.path_integration.code.visualization import plot_many_things
-from project.boolean_reservoir.code.train_model_parallel import boolean_reservoir_grid_search 
-
-from os import environ
+from project.boolean_reservoir.code.train_model_parallel import boolean_reservoir_grid_search
+from project.boolean_reservoir.code.utils.utils import run_on_node
 import logging
 import sys
 logging.basicConfig(
@@ -19,24 +17,14 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     pass
 
-    # # Simple run
-    # #####################################
-    # p, model, dataset, history = train_single_model('config/path_integration/1D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # Simple run
+    #####################################
+    # p, model, dataset, history = train_single_model('config/path_integration/1D/single_run/good_model.yaml', dataset_init=d(), accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
-    # p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    # p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model.yaml', dataset_init=d(), accuracy=a().accuracy)
+    # p, model, dataset, history = train_single_model('config/path_integration/2D/single_run/good_model_small.yaml', dataset_init=d(), accuracy=a().accuracy)
     # plot_many_things(model, dataset, history)
     # plot_activity_trace(model.save_path, highlight_input_nodes=True, data_filter=lambda df: df, aggregation_handle=lambda df: df[df['sample_id'] == 0], ir_subtitle=True)
-
-
-    # # DELETE
-    # from project.boolean_reservoir.code.utils.param_utils import generate_param_combinations
-    # from project.boolean_reservoir.code.parameter import load_yaml_config
-    # from pathlib import Path
-    # P = generate_param_combinations(load_yaml_config('config/path_integration/2D/grid_search/design_choices_prep/all3.yaml'))
-    # p = P[0]
-    # # p = P[960]
-    # p.L.out_path = Path('/tmp/boolean_reservoir/inspect/')
-    # p, model, dataset, history = train_single_model(parameter_override=p, dataset_init=d().dataset_init, accuracy=a().accuracy)
 
     # # Profiling 
     # #####################################
@@ -48,29 +36,25 @@ if __name__ == '__main__':
     # Grid search stuff 
     #####################################
     configs = [
-        'config/path_integration/2D/grid_search/design_choices_prep/all.yaml',
+        'config/path_integration/1D/grid_search/design_choices/continuous.yaml',
+        'config/path_integration/1D/grid_search/design_choices/discrete.yaml',
+        'config/path_integration/2D/grid_search/design_choices/continuous.yaml',
+        'config/path_integration/2D/grid_search/design_choices/discrete.yaml',
+        'config/path_integration/2D/grid_search/design_choices/resolution_redundancy_encoding.yaml',
     ]
 
-    node = environ.get("SLURMD_NODENAME") or environ.get("SLURM_NODELIST", "unknown")
-    if "hpc" in node:
-        logger.info(f"This is hpc node: {node}")
-    else:
-        logger.warning(f"Unknown node detected: {node}")
-
-    node_job_assigments = {
-        1: [0],
-        2: [0],
+    run_on_node(configs, node_job_assignments={
+        1: [2],
+        2: [3],
+        3: [0],
+        4: [1],
+        5: [0],
+        6: [1],
+        7: [0],
+        8: [1],
+        9: [0],
         10: [0],
-        11: [0],
+        11: [1],
         'unknown': [-1],
-    }
-    if node != 'unknown':
-        id = int(node[3:])
-        configs = [configs[idx] for idx in node_job_assigments[id]]
-    else:
-        configs = [configs[idx] for idx in node_job_assigments['unknown']]
-
-    for c in configs:
-        boolean_reservoir_grid_search(c, dataset_init=d().dataset_init, accuracy=a().accuracy)
-    print('done!')
+    }, run_fn=boolean_reservoir_grid_search)
 

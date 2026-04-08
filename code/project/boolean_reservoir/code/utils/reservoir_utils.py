@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from project.boolean_reservoir.code.parameter import * 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -249,7 +250,9 @@ class InputPerturbationStrategy: # assumes states is only input nodes
 class InitializationStrategy:
     @staticmethod
     def random(n_nodes):
-        return torch.randint(0, 2, (1, n_nodes), dtype=torch.uint8)
+        # Uses numpy RNG (not torch) so output is identical across CPU and GPU given the same seed.
+        states = np.random.randint(0, 2, (1, n_nodes), dtype=np.uint8)
+        return torch.from_numpy(states)
     
     @staticmethod
     def zeros(n_nodes):

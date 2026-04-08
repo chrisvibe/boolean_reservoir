@@ -30,12 +30,13 @@ RUN conda env create -f /tmp/docker/src/environment.yaml --yes
 WORKDIR /code
 ENV PYTHONPATH="/code"
 
-# Make conda auto-activate for vscode
-RUN echo 'source /opt/conda/etc/profile.d/conda.sh' >> ~/.bashrc && \
-    echo 'conda activate boolean_reservoir' >> ~/.bashrc
-
-# Initialize conda
+# Initialize conda — must come BEFORE adding conda activate,
+# because conda init bash rewrites ~/.bashrc and would comment out
+# any manually-added activation lines that precede it.
 RUN conda init bash
+
+# Auto-activate the project environment in every new terminal
+RUN echo 'conda activate boolean_reservoir' >> ~/.bashrc
 
 # Default command
 CMD [ "bash" ]

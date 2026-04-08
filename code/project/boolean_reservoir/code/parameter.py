@@ -1,27 +1,31 @@
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, PrivateAttr
 import yaml
 from typing import List, Union, Optional
 from pathlib import Path
-from benchmark.path_integration.parameter import PathIntegrationDatasetParams
-from benchmark.temporal.parameter import TemporalDatasetParams
-from benchmark.kqgr.parameter import KQGRDatasetParams
+from benchmark.path_integration.parameter import PathIntegrationDatasetParams, KQGRPathIntegrationDatasetParams
+from benchmark.temporal.parameter import TemporalDatasetParams, KQGRTemporalDatasetParams
 from project.boolean_reservoir.code.utils.param_utils import pydantic_init, calculate_w_broadcasting, DynamicParams, CallParams, ExpressionEvaluator, expand_ticks
-from shutil import copy
+import copy
+from shutil import copy as shutil_copy
 pydantic_init()
 
-class DatasetParams(BaseModel):
-    train: Optional[Union[PathIntegrationDatasetParams, TemporalDatasetParams]] = None
-    kqgr: Optional[Union[KQGRDatasetParams]] = None
 
-    @model_validator(mode='before')
-    @classmethod
-    def handle_legacy_format(cls, data):
-        if not isinstance(data, dict):
-            return data
-        # If neither train nor kqgr present, assume it's legacy flat format → wrap as train
-        if 'train' not in data and 'kqgr' not in data:
-            return {'train': data}
-        return data
+def deep_merge(base: dict, override: dict) -> dict:
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        return copy.deepcopy(override)
+
+    # Type-Swap Protector: if dataset type changes, discard base entirely
+    if 'name' in base and 'name' in override and base['name'] != override['name']:
+        return copy.deepcopy(override)
+
+    merged = copy.deepcopy(base)
+    for k, v in override.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = deep_merge(merged[k], v)
+        else:
+            merged[k] = copy.deepcopy(v)
+    return merged
+
 
 class InputParams(BaseModel):  # TODO split into Bits layer (B→I) and Input layer (I→R)
     seed: Optional[int] = Field(
@@ -75,7 +79,7 @@ class InputParams(BaseModel):  # TODO split into Bits layer (B→I) and Input la
     chunks: Optional[Union[int, List[int]]] = Field(
         None, description="Number of chunks to split bits into")
     chunk_size: Optional[Union[int, List[int]]] = Field(
-        1, description="Bits per chunk. Overridden by chunks")
+        None, description="Bits per chunk. Defaults to resolution * redundancy per feature")
     ticks: Optional[Union[str, List[str]]] = Field(
         None, description="Number of ticks or dynamic update steps after a input step. Set as a vector corresponding to each chunk.")
 
@@ -200,7 +204,7 @@ class ReservoirParams(BaseModel):
                 self.k_min = self.k_max = int(self.k_avg)
         elif isinstance(self.k_max, str) and all([not isinstance(x, list) for x in [self.k_min, self.k_avg, self.k_max]]):
             context = {'k_avg': self.k_avg, 'k_min': self.k_min}
-            self.k_max = int(ExpressionEvaluator(context).eval(self.k_max))
+            self.k_max = round(ExpressionEvaluator(context).eval(self.k_max))
         return self
 
 
@@ -236,6 +240,19 @@ class TrainingParams(BaseModel):
                               'lr': 1e-3, 'weight_decay': 1e-3}),
         description="Optimizer configuration"
     )
+    accuracy: Optional[str] = Field(
+        None,
+        description="Accuracy function: 'Euclidean' or 'Boolean'. None infers from dataset type.",
+        json_schema_extra={'expand': False}
+    )
+
+    @property
+    def accuracy_obj(self):
+        from project.boolean_reservoir.code.train_model import EuclideanDistanceAccuracy, BooleanAccuracy
+        mapping = {'Euclidean': EuclideanDistanceAccuracy, 'Boolean': BooleanAccuracy}
+        if self.accuracy not in mapping:
+            raise ValueError(f"Unknown accuracy '{self.accuracy}'. Available: {list(mapping)}")
+        return mapping[self.accuracy]().accuracy
 
 
 class ModelParams(BaseModel):
@@ -270,6 +287,16 @@ class GridSearchParams(BaseModel):
         None, description="Random seed, None disables seed")
     n_samples: Optional[int] = Field(
         1, ge=1, description="Number of samples per configuration in grid search")
+    run: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Per-config run control: 'train' runs training, 'kqgr' runs KQGR metrics. "
+            "For Mother configs None defaults to ['train']. "
+            "For universe configs None defaults to ['kqgr'] (set by _expand_per_universe). "
+            "Override per-universe via logging.grid_search.run in the universe override dict."
+        ),
+        json_schema_extra={'expand': False}
+    )
 
 
 class HistoryParams(BaseModel):
@@ -307,6 +334,7 @@ class LoggingParams(BaseModel):
     grid_search: Optional[GridSearchParams] = Field(None)
     history: HistoryParams = Field(
         default_factory=HistoryParams, description="Parameters pertaining to recoding of reservoir dynamics")
+    universe: str | None = None
     train: TrainLog | None = None
     kqgr: KQGRMetrics | None = None
     save_keys: Optional[List[str]] = Field(
@@ -323,13 +351,6 @@ class LoggingParams(BaseModel):
             return [v]
         return v
 
-    @model_validator(mode='before')  # TODO remove after some time
-    @classmethod
-    def handle_old_keys(cls, values):
-        if 'train_log' in values:
-            values['train'] = values.pop('train_log')
-        return values
-
     @property
     def M(self):
         return self.kqgr
@@ -339,10 +360,39 @@ class LoggingParams(BaseModel):
         return self.train
 
 
+class UniverseWrapper:
+    """Lazy wrapper that deep-merges universe overrides into child Params on access."""
+
+    def __init__(self, mother: 'Params', overrides: dict):
+        self._mother = mother
+        self._overrides = overrides or {}
+        self._cache: dict = {}
+
+    def __getattr__(self, name: str) -> 'Params':
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name not in self._cache:
+            if name in self._overrides:
+                merged = deep_merge(self._mother.model_dump(), self._overrides[name])
+                self._cache[name] = Params(**merged)
+            else:
+                self._cache[name] = self._mother
+        return self._cache[name]
+
+
 class Params(BaseModel):
     model: ModelParams
     logging: LoggingParams = Field(LoggingParams())
-    dataset: Optional[DatasetParams] = None
+    dataset: Optional[Union[KQGRTemporalDatasetParams, KQGRPathIntegrationDatasetParams, PathIntegrationDatasetParams, TemporalDatasetParams]] = None
+    multiverse_overrides: Optional[dict] = Field(default=None, json_schema_extra={'expand': False})
+
+    _universes: Optional[UniverseWrapper] = PrivateAttr(default=None)
+
+    @property
+    def U(self) -> UniverseWrapper:
+        if self._universes is None:
+            self._universes = UniverseWrapper(self, self.multiverse_overrides)
+        return self._universes
 
     @property
     def M(self):
@@ -354,11 +404,22 @@ class Params(BaseModel):
 
     @property
     def D(self):
-        return self.DD.train
+        return self.dataset
 
     @property
-    def DD(self):
-        return self.dataset
+    def dataset_init_obj(self):
+        return self.D.init_obj
+
+    @property
+    def accuracy_obj(self):
+        from project.boolean_reservoir.code.train_model import EuclideanDistanceAccuracy, BooleanAccuracy
+        from benchmark.path_integration.parameter import PathIntegrationDatasetParams
+        if self.M.T.accuracy is not None:
+            return self.M.T.accuracy_obj
+        # Infer from dataset type so existing YAML configs need no changes
+        if isinstance(self.D, PathIntegrationDatasetParams):
+            return EuclideanDistanceAccuracy().accuracy
+        return BooleanAccuracy().accuracy
 
 
 def load_yaml_config(filepath):
@@ -369,7 +430,7 @@ def load_yaml_config(filepath):
 
 def save_yaml_config(base_model: BaseModel, output_dir_path: Path, file_name='parameters', copy_from_original_file_path=None):
     if copy_from_original_file_path:
-        copy(copy_from_original_file_path, output_dir_path / (file_name + '_original.yaml'))
+        shutil_copy(copy_from_original_file_path, output_dir_path / (file_name + '_original.yaml'))
     _save_yaml_config(base_model, output_dir_path / (file_name + '_short.yaml'), exclude_none=True, exclude_defaults=True)
     _save_yaml_config(base_model, output_dir_path / (file_name + '.yaml'))
 

@@ -1,12 +1,15 @@
-from benchmark.utils.parameter import DatasetParameters
-from pydantic import Field, model_validator
-from typing import List, Union
+from benchmark.utils.parameter import DatasetParameters, KQGRDatasetParams
+from pydantic import Field, model_validator, ConfigDict
+from typing import List, Literal, Union
 from pathlib import Path
 
 class TemporalDatasetParams(DatasetParameters):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
+    name: Literal["temporal"] = "temporal"
+    init: str = Field('Temporal', json_schema_extra={'expand': False})
     dimensions: Union[int, List[int]] = Field(1, description="Number of independent bit streams")
-    task: str = Field(..., description="two options: density or parity")
-    bits: Union[int, List[int]] = Field(5, description="length of the bit stream")
+    task: str = Field('density', description="two options: density or parity")
+    bits: Union[int, List[int]] = Field(10, description="length of the bit stream")
     window: Union[int, List[int]] = Field(5, description="size of the window for temporal data")
     delay: Union[int, List[int]] = Field(0, description="delay; shifts window from right to left; higher delay is easier as bits are processed right to left")
     sampling_mode: Union[str, List[str]] = Field( 'random',
@@ -30,11 +33,27 @@ class TemporalDatasetParams(DatasetParameters):
             / f'b-{self.bits}'
             / f'w-{self.window}'
             / f'd-{self.delay}'
-            / f'm-{self.samples}'
-            / f'r-{self.seed}'
+            / self._base_data_path()
             / 'dataset.pt'
         )
     
     def update_path(self):
         self.path = self._generate_path()
 
+    @property
+    def init_obj(self):
+        from project.temporal.code.dataset_init import TemporalDatasetInit
+        return TemporalDatasetInit()
+
+
+class KQGRTemporalDatasetParams(KQGRDatasetParams, TemporalDatasetParams):
+    """
+    Temporal dataset augmented with KQGR fields (tau, evaluation).
+
+    Hijacks TemporalDensityDataset for data generation but only uses x values (input
+    bitstreams) - y values (labels) are ignored since KQ/GR metrics evaluate reservoir
+    kernel quality and generalization capability, not task performance.
+
+    tau/evaluation_mode control GR metric: during encoding, tau bits per feature are set
+    identical across all samples to test generalization under reduced input diversity.
+    """

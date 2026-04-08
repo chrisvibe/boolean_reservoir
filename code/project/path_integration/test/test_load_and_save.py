@@ -3,16 +3,15 @@ from pathlib import Path
 import torch
 from copy import deepcopy
 from project.boolean_reservoir.code.reservoir import BooleanReservoir
-from project.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
-from project.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
-from project.boolean_reservoir.code.train_model_parallel import boolean_reservoir_grid_search 
+from project.boolean_reservoir.code.train_model import train_single_model
+from project.boolean_reservoir.code.train_model_parallel import boolean_reservoir_grid_search
 
 def unwrap(m):
     """Return the original underlying model if compiled with torch.compile."""
     return getattr(m, "_orig_mod", m)
 
 
-def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dataset, accuracy=a().accuracy):
+def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dataset):
     """Test that two models have identical parameters, structure, and behavior."""
     
     # Unwrap compiled models
@@ -41,8 +40,8 @@ def _model_likeness_check(model: BooleanReservoir, model2: BooleanReservoir, dat
     with torch.no_grad():
         y_hat_dev1 = m1(x_dev)
         y_hat_dev2 = m2(x_dev)
-        acc1 = accuracy(y_hat_dev1, y_dev, m1.P.model.training.accuracy_threshold)
-        acc2 = accuracy(y_hat_dev2, y_dev, m2.P.model.training.accuracy_threshold)
+        acc1 = model.P.accuracy_obj(y_hat_dev1, y_dev, m1.P.model.training.accuracy_threshold)
+        acc2 = model2.P.accuracy_obj(y_hat_dev2, y_dev, m2.P.model.training.accuracy_threshold)
         assert acc1 == acc2, "accuracy metrics do not match"
 
 def test_saving_and_loading_models():
@@ -52,7 +51,7 @@ def test_saving_and_loading_models():
         rmtree(path)
     
     # Train a model and save it
-    p, model, dataset, train_history = train_single_model('project/path_integration/test/config/2D/single_run/test_model.yaml', dataset_init=d().dataset_init, accuracy=a().accuracy)
+    p, model, dataset, train_history = train_single_model('project/path_integration/test/config/2D/single_run/test_model.yaml')
     model.save()
     
     # Load the model from the saved path
@@ -63,27 +62,35 @@ def test_saving_and_loading_models():
 
 
 def test_reproducibility_of_loaded_grid_search_checkpoint():
-    """Test that a model loaded from a grid search checkpoint can be retrained with the same results."""
-    path = Path('/tmp/boolean_reservoir/out') 
+    """Test that a model loaded from a grid search checkpoint can be retrained with the same results.
+
+    All init-time random structures use NumPy and torch.use_deterministic_algorithms(True) is set
+    in set_seed(), so results should be identical across CPU and GPU given the same seed.
+    TODO: CUDA_VISIBLE_DEVICES guard kept in case cross-device determinism breaks in practice —
+    remove once we are confident training is fully deterministic across hardware.
+    """
+    import os
+    path = Path('/tmp/boolean_reservoir/out')
     if path.exists():
         rmtree(path)
-    
+
+    # TODO: remove if cross-device determinism is confirmed — see docstring
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
     # Run grid search
     p = boolean_reservoir_grid_search(
         'project/path_integration/test/config/2D/grid_search/test_sweep.yaml',
-        dataset_init=d().dataset_init,
-        accuracy=a().accuracy,
         gpu_memory_per_job_gb = 0.5,
         cpu_memory_per_job_gb = 0.5,
         cpu_cores_per_job = 2,
     )
 
-    # Load model from checkpoint
-    model = BooleanReservoir(load_path=p.L.out_path / 'runs/last_run/checkpoints/last_checkpoint')
-    
-    # Train a new model with the same parameters
+    # Load model from checkpoint on CPU
+    model = BooleanReservoir(load_path=p.L.out_path / 'runs/last_run/checkpoints/last_checkpoint').to('cpu')
+
+    # Retrain on CPU (ignore_gpu=True ensures the main process also uses CPU)
     p2 = deepcopy(model.P)
-    p2, model2, dataset2, train_history2 = train_single_model(parameter_override=p2, dataset_init=d().dataset_init, accuracy=a().accuracy)
+    p2, model2, dataset2, train_history2 = train_single_model(parameter_override=p2, ignore_gpu=True)
     
     # Test that the models are equivalent
     _model_likeness_check(model, model2, dataset2)

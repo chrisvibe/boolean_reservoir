@@ -4,23 +4,32 @@ from project.boolean_reservoir.code.utils.load_save import custom_load_grid_sear
 from pathlib import Path
 
 if __name__ == '__main__':
-    # config = Path('config/path_integration/2D/grid_search/design_choices_prep/all.yaml')
-    config = Path('config/path_integration/2D/grid_search/design_choices_prep/all2.yaml')
     paths = list()
-    paths.append(config)
+
+    # paths.append('config/path_integration/1D/grid_search/design_choices/discrete.yaml')
+    # paths.append('config/path_integration/1D/grid_search/design_choices/continuous.yaml')
+
+    paths.append('config/path_integration/2D/grid_search/design_choices/discrete.yaml')
+    paths.append('config/path_integration/2D/grid_search/design_choices/continuous.yaml')
+
+    # paths.append('config/path_integration/2D/grid_search/design_choices/resolution_redundancy_encoding.yaml')
+
     response = 'accuracy'
-    out_path = Path('/out/path_integration/stats/design_evaluation_prep/test_all')
-    out_path = Path('/out/path_integration/stats/design_evaluation_prep/test_all2')
-    path = out_path / ''
-    print(path)
+    out_path = Path('/out/path_integration/stats/design_evaluation/all')
+    print(out_path)
 
     extractions = [
         ('T', lambda p: p.L.T, {'accuracy', 'loss'}),
-        ('I', lambda p: p.M.I, {'pertubation', 'encoding', 'redundancy', 'chunks', 'interleaving'}),
+        ('kqgr', lambda p: p.L.kqgr, {'kq', 'gr', 'delta'}),
+        ('L', lambda p: p.L, {'universe', 'out_path'}),
+        ('L_out_name', lambda p: Path(p.L.out_path).name if p.L.out_path else None, None),
+        ('kqgr', lambda p: p.U.kqgr.D, {'tau', 'evaluation'}),
+        ('D', lambda p: p.D, {'task', 'window', 'delay'}),
+        ('I', lambda p: p.M.I, {'pertubation', 'encoding', 'redundancy', 'chunks', 'interleaving', 'ticks'}),
         ('R', lambda p: p.M.R, {'mode', 'k_avg', 'init', 'k_max', 'self_loops', 'n_nodes'}),
     ]
 
-    df, factors = custom_load_grid_search_data(config_paths=config, extractions=extractions, df_filter_mask=lambda df: df.index < 100)
+    df, factors = custom_load_grid_search_data(config_paths=paths, extractions=extractions)
     print('data loaded...')
     app = create_scatter_dashboard(df, factors)
     app.run(debug=False, dev_tools_hot_reload=False)
@@ -32,4 +41,4 @@ if __name__ == '__main__':
     # factors = [f for f in factors if f not in ['I_interleaving', 'I_encoding', 'R_init', 'R_self_loops']]
     # thresh = 0.2
     # polar_design_plot(out_path, df, factors, success_thresh=thresh, title=f'design_choices_thresh={thresh}')
-    # # graph_accuracy_vs_k_avg(path, df, factors)
+    # # graph_accuracy_vs_k_avg(out_path, df, factors)

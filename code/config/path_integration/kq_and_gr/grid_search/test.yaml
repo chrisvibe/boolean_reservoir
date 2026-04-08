@@ -1,0 +1,66 @@
+logging:
+  out_path: 'out/path_integration/2D/grid_search/design_choices_prep/all'
+  save_keys: null
+  grid_search:
+    n_samples: 1
+    run: ['train', 'kqgr']
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: [base2, 'binary_embedding']
+    features: 1 # affects how redundancy is applied
+    redundancy: [1, 2, 3] # changes the task complexity
+    resolution: 10
+    chunk_size: 10 # set to resolution
+    ticks: ['1', '2']
+    interleaving: [0, 1]
+  output_layer:
+    n_outputs: 2 # no effect on kq and gr
+  reservoir_layer:
+    init: random # not much effect
+    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0]
+    k_min: 0
+    k_max: 10
+    mode: [homogeneous, heterogeneous]
+    n_nodes: [512, 1024] # make sure 2**D.bits-1 >= n_nodes to have enough states
+    reset: true
+    self_loops: [0, .1, .3, .5, 1] # interesting number of attractors
+  training:
+    accuracy_threshold: 0.05
+    batch_size: 1024
+    criterion: MSE
+    epochs: 40
+    evaluation: dev
+dataset:
+  encoding: ['cartesian', 'polar']
+  dimensions: 2
+  steps: 5
+  strategy:
+    name: SimpleRandomWalkStrategy
+    params:
+      max_step_size: 0.3
+  boundary:
+    name: PolygonBoundary
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 20000
+  seed: 0
+multiverse_overrides:
+  kqgr:
+    dataset:
+      bits: 10
+      split:
+        train: 1
+        dev: 0
+        test: 0
+      evaluation: ['first', 'last', 'random']
+      tau: [3, 5]
+      seed: 0

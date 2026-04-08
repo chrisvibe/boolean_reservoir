@@ -1,0 +1,44 @@
+services:
+  path-integration:
+    build: .
+    working_dir: /code
+    user: "${HOST_UID}:${HOST_GID}"
+    command: >
+      gunicorn
+      --bind 0.0.0.0:8051
+      --workers ${GUNICORN_WORKERS}
+      --timeout ${GUNICORN_TIMEOUT}
+      wsgi_path_integration:server
+    ports:
+      - "8051:8051"
+    volumes:
+      - ${REPO_PATH}/code:/code:ro
+      - ${REPO_PATH}/data:/data
+      - ${REPO_PATH}/out:/out
+      - ${REPO_PATH}/deploy/scatter_dashboard:/wsgi
+    environment:
+      PYTHONPATH: /code:/wsgi
+      HOME: /tmp
+    restart: unless-stopped
+
+  temporal:
+    build: .
+    working_dir: /code
+    user: "${HOST_UID}:${HOST_GID}"
+    command: >
+      gunicorn
+      --bind 0.0.0.0:8052
+      --workers ${GUNICORN_WORKERS}
+      --timeout ${GUNICORN_TIMEOUT}
+      wsgi_temporal:server
+    ports:
+      - "8052:8052"
+    volumes:
+      - ${REPO_PATH}/code:/code:ro
+      - ${REPO_PATH}/data:/data
+      - ${REPO_PATH}/out:/out
+      - ${REPO_PATH}/deploy/scatter_dashboard:/wsgi
+    environment:
+      PYTHONPATH: /code:/wsgi
+      HOME: /tmp
+    restart: unless-stopped

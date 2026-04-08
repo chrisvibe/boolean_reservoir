@@ -5,52 +5,62 @@ import numpy as np
 from pathlib import Path
 matplotlib.use('Agg')
 
-def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', sub_dir='visualizations/random_walk'):
-    # Ensure 2D shape
+def plot_random_walk(dir_path, positions, strategy, boundary, dual=None, file_prepend='', sub_dir='visualizations/random_walk', label='Walk (actual)', dual_label='Walk (optimistic)'):
+    """
+    positions: (s+1, dim) array where positions[0] is the origin (actual trajectory).
+    dual: optional dict from generate_dual_trajectory. If provided, plots the optimistic
+          (no-drag) trajectory as a dashed line alongside the actual trajectory.
+    """
     if positions.ndim == 1:
         positions = positions[:, np.newaxis]
-    zero_row = np.zeros_like((positions[0, :]))
-    steps, dimensions = positions.shape
-    positions = np.vstack((zero_row, positions))
+    n_steps, dimensions = positions.shape[0] - 1, positions.shape[1]
     time = np.arange(positions.shape[0])
+
+    opt_positions = None
+    if dual is not None:
+        opt_positions = dual['positions_opt']
+        if opt_positions.ndim == 1:
+            opt_positions = opt_positions[:, np.newaxis]
+
     fig = plt.figure(figsize=(10, 10))
-    
+
     if dimensions == 1:
         ax = fig.add_subplot(111)
-        x = positions[:, 0]
-        ax.plot(x, time, label='1D Walk')
+        ax.plot(positions[:, 0], time, label=label)
+        if opt_positions is not None:
+            ax.plot(opt_positions[:, 0], time, linestyle='--', label=dual_label)
         ax.set_xlabel('Position')
         ax.set_ylabel('Time')
-        
-        # Add boundary visualization for 1D case using get_points()
+
         boundary_points = boundary.get_points()
         if boundary_points:
-            # For 1D, boundary_points should be [min, max]
             ax.axvline(x=boundary_points[0], color='r', linestyle='--', linewidth=2, label='Boundary')
             ax.axvline(x=boundary_points[1], color='r', linestyle='--', linewidth=2)
-    
+
     elif dimensions == 2:
         ax = fig.add_subplot(111)
         ax.set_aspect('equal', adjustable='box')
-        x, y = positions[:, 0], positions[:, 1]
-        ax.plot(x, y, label='2D Walk')
+        ax.plot(positions[:, 0], positions[:, 1], label=label)
+        if opt_positions is not None:
+            ax.plot(opt_positions[:, 0], opt_positions[:, 1], linestyle='--', label=dual_label)
         ax.set_xlabel('X Position')
         ax.set_ylabel('Y Position')
-        
+
         boundary_points = boundary.get_points()
         if boundary_points:
             polygon = patches.Polygon(boundary_points, linestyle='--', linewidth=2, edgecolor='r', facecolor='none')
             ax.add_patch(polygon)
-    
+
     elif dimensions == 3:
         ax = fig.add_subplot(111, projection='3d')
         ax.set_aspect('equal', adjustable='box')
-        x, y, z = positions[:, 0], positions[:, 1], positions[:, 2]
-        ax.plot(x, y, z, label='3D Walk')
+        ax.plot(positions[:, 0], positions[:, 1], positions[:, 2], label=label)
+        if opt_positions is not None:
+            ax.plot(opt_positions[:, 0], opt_positions[:, 1], opt_positions[:, 2], linestyle='--', label=dual_label)
         ax.set_xlabel('X Position')
         ax.set_ylabel('Y Position')
         ax.set_zlabel('Z Position')
-    
+
     ax.set_title('Constrained Foraging Path')
     ax.legend()
     plt.ion()
@@ -59,7 +69,7 @@ def plot_random_walk(dir_path, positions, strategy, boundary, file_prepend='', s
     path = Path(dir_path) / sub_dir
     path.mkdir(parents=True, exist_ok=True)
     prepend = file_prepend + '_' if file_prepend else ''
-    file_name = f'{prepend}{dimensions}D-s={steps}-{strategy}-{boundary}.svg'
+    file_name = f'{prepend}{dimensions}D-s={n_steps}-{strategy}-{boundary}.svg'
     plt.savefig(path / file_name, bbox_inches='tight')
 
 def plot_random_walk_model(dir_path, x: np.array, model, y: np.array):

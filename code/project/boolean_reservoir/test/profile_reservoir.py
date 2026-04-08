@@ -4,8 +4,7 @@ import io
 import torch
 from pathlib import Path
 from project.boolean_reservoir.code.parameter import * 
-from project.boolean_reservoir.code.train_model import train_single_model, EuclideanDistanceAccuracy as a
-from project.path_integration.code.dataset_init import PathIntegrationDatasetInit as d
+from project.boolean_reservoir.code.train_model import train_single_model
 from project.boolean_reservoir.code.reservoir import BooleanReservoir
 
 # TODO these dont work, torch.compule doesnt always return a model, it may return a forward?
@@ -18,12 +17,10 @@ def profile_compile_main(config):
 def profile_compile(config, out_dir=None, gpu=False, label='', compile_model=True, iterations=1):
     pr = cProfile.Profile()
     ignore_gpu = not gpu
-    _, model, dataset, _ = train_single_model(config, dataset_init=d().dataset_init, accuracy=a().accuracy, ignore_gpu=ignore_gpu, compile_model=compile_model, reset_dynamo=compile_model)
-    dataset_init = lambda p: dataset
+    _, model, dataset, _ = train_single_model(config, ignore_gpu=ignore_gpu, compile_model=compile_model, reset_dynamo=compile_model)
     # pr.enable()
     for _ in range(iterations): # trains on dirty model just to see how quick it is with compiled architecture
-        # train_single_model(model=model, dataset_init=dataset_init, accuracy=a().accuracy, ignore_gpu=ignore_gpu, compile_model=False, reset_dynamo=False)
-        train_single_model(model=model, dataset_init=dataset_init, accuracy=a().accuracy, ignore_gpu=ignore_gpu, compile_model=True, reset_dynamo=False)
+        train_single_model(model=model, ignore_gpu=ignore_gpu, compile_model=True, reset_dynamo=False)
     # pr.disable()
     _save_and_summarize(pr, model, out_dir, label)
 
@@ -34,9 +31,10 @@ def profile_train_single_model_main(config):
 
 def profile_train_single_model(config, out_dir=None, gpu=False, label=''):
     pr = cProfile.Profile()
-    d().dataset_init(load_yaml_config(config)) # warmup to avoid recording dataset generation
+    P = load_yaml_config(config)
+    P.dataset_init_obj.train(P)  # warmup to avoid recording dataset generation
     pr.enable()
-    p, model, dataset, history = train_single_model(config, dataset_init=d().dataset_init, accuracy=a().accuracy, ignore_gpu=gpu)
+    p, model, dataset, history = train_single_model(config, ignore_gpu=gpu)
     pr.disable()
     _save_and_summarize(pr, model, out_dir, label)
     

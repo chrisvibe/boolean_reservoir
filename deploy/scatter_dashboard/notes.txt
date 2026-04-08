@@ -1,0 +1,7 @@
+ssh -NL 8051:localhost:8051 -L 8052:localhost:8052 hpc4
+
+# push project to dev
+rsync -zav --delete --exclude='__pycache__/' --exclude='*.pyc' /home/leon/Documents/katt/phd/code/boolean_reservoir/ hpc4:/cluster/datastore/christvi/code/dev/boolean_reservoir/
+
+# grab views
+rsync -av --delete hpc4:/cluster/datastore/christvi/code/dev/boolean_reservoir/out/dashboard/ /home/leon/Documents/katt/phd/code/boolean_reservoir/out/dashboard/

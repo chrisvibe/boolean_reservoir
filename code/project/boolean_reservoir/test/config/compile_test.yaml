@@ -1,0 +1,52 @@
+logging:
+  out_path: 'out/temporal/density/grid_search/design_choices/compile_test'
+  save_keys: null
+  grid_search:
+    n_samples: 1
+    run: ['train', 'kqgr']
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: base2
+    features: 1
+    redundancy: 1
+    resolution: 10
+    chunk_size: 1
+    ticks: '1'
+  output_layer:
+    activation: sigmoid
+    n_outputs: 1
+  reservoir_layer:
+    init: [random, random-warmup]
+    k_avg: [2.0, 4.0]
+    k_min: 0
+    k_max: 10
+    mode: homogeneous
+    n_nodes: [256, 512]
+    reset: true
+    self_loops: 0
+  training:
+    accuracy_threshold: 0.5
+    batch_size: 128
+    criterion: BCE
+    epochs: 40
+    evaluation: dev
+dataset:
+  task: density
+  window: 3
+  delay: 0
+  split:
+    train: 0.5
+    dev: 0.5
+    test: 0
+  samples: 1024
+  sampling_mode: exhaustive
+  shuffle: true
+  seed: 0
+multiverse_overrides:
+  kqgr:
+    dataset:
+      evaluation: [first, last]
+      tau: 3

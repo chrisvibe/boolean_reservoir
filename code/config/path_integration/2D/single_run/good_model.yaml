@@ -1,45 +1,52 @@
-model:
-  input_layer:
-    pertubation: 'override'
-    encoding: binary_embedding
-    features: 2
-    resolution: 8
-    redundancy: 6
-    chunk_size: 96 
-    interleaving: 1
-    seed: 6
-  output_layer:
-    n_outputs: 2
-    seed: 6
-  reservoir_layer:
-    mode: heterogeneous
-    init: zeros
-    k_avg: 2.2
-    k_max: 25
-    n_nodes: 3000
-    p: 0.5
-    self_loops: 0.0 # note that this seems critical? why?
-    seed: 6 
-  training:
-    batch_size: 100
-    epochs: 10
-    accuracy_threshold: 0.05
-    evaluation: 'test' 
-    seed: 0
 logging:
   out_path: 'out/path_integration/single_run/2D/good_model'
   # history:
   #   record: true
-  #   buffer_size: 64
+model:
+  input_layer:
+    seed: 0
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: base2
+    features: 2
+    redundancy: 9
+    resolution: 8
+    chunks: 1
+    ticks: '1'
+  output_layer:
+    seed: 0
+    n_outputs: 2
+  reservoir_layer:
+    seed: 0
+    init: random
+    k_avg: 3.0
+    k_min: 0
+    k_max: 25
+    mode: homogeneous
+    n_nodes: 2048
+    reset: true
+    self_loops: 0
+  training:
+    seed: 0
+    accuracy_threshold: 0.05
+    batch_size: 128
+    criterion: MSE
+    epochs: 40
+    evaluation: test
 dataset:
+  seed: 0
+  coordinate: cartesian
   dimensions: 2
   steps: 5
   strategy:
-    name: LevyFlightStrategy
+    name: PhysicsWalkStrategy
     params:
-      alpha: 1
-      momentum: 0.0
-      step_size: 0.05
+      max_force: 0.5
+      mass: 1.0
+      friction_coeff: 0.1
+      friction_order: 2
+      max_speed: 10
   boundary:
     name: PolygonBoundary
     params:
@@ -50,5 +57,4 @@ dataset:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 20000
-  seed: 0
+  samples: 30000

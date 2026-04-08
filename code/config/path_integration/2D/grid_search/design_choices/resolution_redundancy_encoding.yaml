@@ -1,0 +1,58 @@
+logging:
+  out_path: 'out/path_integration/2D/grid_search/design_choices/resolution_redundancy_encoding'
+  save_keys: null
+  grid_search:
+    n_samples: 1
+    run: ['train']
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: [base2, binary_embedding, primes]
+    features: 2
+    redundancy: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    resolution: [7, 8, 9, 10]
+    chunks: 1
+    ticks: '1'
+  output_layer:
+    n_outputs: 2
+  reservoir_layer:
+    init: [random, random-warmup]
+    k_avg: 3.0
+    k_min: 0
+    k_max: 10
+    mode: homogeneous
+    n_nodes: 2048
+    reset: true
+    self_loops: 0
+  training:
+    accuracy_threshold: 0.05
+    batch_size: 128
+    criterion: MSE
+    epochs: 40
+    evaluation: dev
+dataset:
+  coordinate: [cartesian, polar]
+  dimensions: 2
+  steps: 5
+  strategy:
+    name: PhysicsWalkStrategy
+    params:
+      max_force: 0.5
+      mass: 1.0
+      friction_coeff: 0.1
+      friction_order: 2
+      max_speed: 10
+  boundary:
+    name: PolygonBoundary
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 30000
+  seed: 0
