@@ -292,7 +292,8 @@ class AccelerationReplayStrategy(WalkStrategy):
 
 class PhysicsWalkStrategy(WalkStrategy):
     def __init__(self, max_acceleration=1.0, mass=1.0, friction_coeff=0.0, friction_order=2,
-                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
+                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100,
+                 resolution_bits=None):
         self.max_acceleration = max_acceleration
         self.mass = mass
         self.friction_coeff = friction_coeff
@@ -301,6 +302,7 @@ class PhysicsWalkStrategy(WalkStrategy):
         self.t = t
         self.fail_in_place = fail_in_place
         self.max_attempts = max_attempts
+        self.resolution_bits = resolution_bits
 
     def _sample_acceleration(self, shape):
         # 1. Random Direction: Gaussian noise gives a uniform sphere surface
@@ -335,6 +337,24 @@ class PhysicsWalkStrategy(WalkStrategy):
     def compute_step(self, agent, boundary):
         for attempt in range(self.max_attempts):
             a_external = self._sample_acceleration(agent.position.shape)
+
+            # --- UNIVERSAL QUANTIZATION BLOCK ---
+            if self.resolution_bits is not None:
+                levels = (2 ** self.resolution_bits) - 1
+
+                # 1. Clip heavy tails to the maximum representable bounds (crucial for Levy flights)
+                a_clipped = np.clip(a_external, -self.max_acceleration, self.max_acceleration)
+
+                # 2. Normalize from [-max, +max] to [0.0, 1.0]
+                a_norm = (a_clipped + self.max_acceleration) / (2 * self.max_acceleration)
+
+                # 3. Scale to [0, levels - 1], round to nearest integer, and scale back to [0.0, 1.0]
+                a_quantized = np.round(a_norm * (levels - 1)) / (levels - 1)
+
+                # 4. Map back to the physical [-max, +max] range
+                a_external = a_quantized * 2 * self.max_acceleration - self.max_acceleration
+            # ------------------------------------
+
             a_drag = self._calculate_drag_acceleration(agent.velocity)
             a_net = a_external + a_drag
 
@@ -361,7 +381,8 @@ class PhysicsWalkStrategy(WalkStrategy):
 
 class SimpleRandomWalkStrategy(PhysicsWalkStrategy):
     """No friction, no nonlinearity. Momentum is linear so AccelerationReplayStrategy trace matches exactly."""
-    def __init__(self, max_acceleration=1.0, mass=1.0, t=1.0, fail_in_place=True, max_attempts=100):
+    def __init__(self, max_acceleration=1.0, mass=1.0, t=1.0, fail_in_place=True, max_attempts=100,
+                 resolution_bits=None):
         super().__init__(
             max_acceleration=max_acceleration,
             mass=mass,
@@ -369,34 +390,8 @@ class SimpleRandomWalkStrategy(PhysicsWalkStrategy):
             t=t,
             fail_in_place=fail_in_place,
             max_attempts=max_attempts,
+            resolution_bits=resolution_bits,
         )
-
-class DiscreteRandomWalkStrategy(PhysicsWalkStrategy):
-    """Random walk on a regular grid. Each step moves ±max_acceleration along exactly one axis."""
-    def __init__(self, max_acceleration=1.0, no_step_allowed=False, mass=1.0, friction_coeff=1.0,
-                 friction_order=2, max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
-        super().__init__(
-            max_acceleration=max_acceleration,
-            mass=mass,
-            friction_coeff=friction_coeff,
-            friction_order=friction_order,
-            max_speed=max_speed,
-            t=t,
-            fail_in_place=fail_in_place,
-            max_attempts=max_attempts,
-        )
-        self.no_step_allowed = no_step_allowed
-
-    def _sample_acceleration(self, shape):
-        dim = shape[0]
-        directions = list(range(-dim, 0)) + list(range(1, dim + 1))
-        if self.no_step_allowed:
-            directions.append(0)
-        choice = np.random.choice(directions)
-        dp = np.zeros(shape)
-        if choice != 0:
-            dp[abs(choice) - 1] = np.sign(choice) * self.max_acceleration
-        return dp
 
 class LevyFlightStrategy(PhysicsWalkStrategy):
     '''alpha ≈ 1.5-2.0: Most animal foraging studies (albatrosses, deer, etc.)
@@ -404,7 +399,8 @@ class LevyFlightStrategy(PhysicsWalkStrategy):
     '''
     def __init__(self, alpha=1.5, max_acceleration=0.1,
                  mass=1.0, friction_coeff=0.1, friction_order=2,
-                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100):
+                 max_speed=np.inf, t=1.0, fail_in_place=True, max_attempts=100,
+                 resolution_bits=None):
         super().__init__(
             max_acceleration=max_acceleration,
             mass=mass,
@@ -414,6 +410,7 @@ class LevyFlightStrategy(PhysicsWalkStrategy):
             t=t,
             fail_in_place=fail_in_place,
             max_attempts=max_attempts,
+            resolution_bits=resolution_bits,
         )
         self.alpha = alpha
 

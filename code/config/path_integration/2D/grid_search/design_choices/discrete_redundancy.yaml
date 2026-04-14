@@ -1,31 +1,31 @@
 logging:
-  out_path: 'out/path_integration/2D/grid_search/design_choices/discrete'
+  out_path: 'out/path_integration/2D/grid_search/design_choices/discrete_redundancy'
   save_keys: null
   grid_search:
-    n_samples: 1
-    run: ['train', 'kqgr']
+    n_samples: 10
+    run: ['train']
 model:
   input_layer:
     w_bi: identity
     w_ir: identity
     pertubation: override
     encoding: base2
-    features: 2 # affects how redundancy is applied
-    redundancy: [10, 13, 16] # changes the task complexity
+    features: 2
+    redundancy: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38]
     resolution: 3
     chunks: 1
-    ticks: ['1', '2']
+    ticks: '1'
   output_layer:
     n_outputs: 2 # no effect on kq and gr
   reservoir_layer:
     init: random
-    k_avg: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    k_avg: 3.0
     k_min: 0
-    k_max: ['k_avg + 3 * k_avg ** .5', 'k_avg + 1.28 * k_avg ** .5'] # interesting number of attractors 
-    mode: [homogeneous, heterogeneous]
-    n_nodes: [512, 1024] # make sure 2**D.bits-1 >= n_nodes to have enough states
+    k_max: 'k_avg + 3 * k_avg ** .5'
+    mode: homogeneous
+    n_nodes: 2048
     reset: true
-    self_loops: [0, .1, .3, .5, 1] # interesting number of attractors
+    self_loops: 0
   training:
     accuracy_threshold: 0.25 # ~ sqrt(2) / (2**3 - 1) diagonal + neighbour grids are considered a "hit"
     batch_size: 128

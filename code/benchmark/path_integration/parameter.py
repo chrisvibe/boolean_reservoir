@@ -4,8 +4,7 @@ from pathlib import Path
 import math
 from benchmark.utils.parameter import DatasetParameters, KQGRDatasetParams
 from benchmark.path_integration.constrained_foraging_path import (
-    LevyFlightStrategy, SimpleRandomWalkStrategy, DiscreteRandomWalkStrategy,
-    PhysicsWalkStrategy,
+    LevyFlightStrategy, SimpleRandomWalkStrategy, PhysicsWalkStrategy,
     PolygonBoundary, IntervalBoundary, NoBoundary,
     SoftBoundary, LinearSoftBoundary, QuadraticSoftBoundary, CubicSoftBoundary,
     generate_polygon_points, stretch_polygon
@@ -17,7 +16,6 @@ def strategy_factory(p: DynamicParams):
     strategy_map = {
         'LevyFlightStrategy': LevyFlightStrategy,
         'SimpleRandomWalkStrategy': SimpleRandomWalkStrategy,
-        'DiscreteRandomWalkStrategy': DiscreteRandomWalkStrategy,
         'PhysicsWalkStrategy': PhysicsWalkStrategy,
     }
 
@@ -106,10 +104,12 @@ class PathIntegrationDatasetParams(DatasetParameters):
 
         strategy_str = self.strategy.name[:3].upper()  # First 3 chars of name
         strategy_hash = self._hash_params(self.strategy.params)
-        
+        resolution_bits = self.strategy.params.model_dump().get('resolution_bits', None)
+        res_str = f'res-{resolution_bits}' if resolution_bits is not None else 'res-cont'
+
         boundary_str = self.boundary.name[:3].upper()  # First 3 chars of name
         boundary_hash = self._hash_params(self.boundary.params)
-        
+
         return (
             Path('data/path_integration')
             / f'c-{self.coordinate}'
@@ -118,6 +118,7 @@ class PathIntegrationDatasetParams(DatasetParameters):
             / f's-{self.steps}'
             / strategy_str
             / strategy_hash
+            / res_str
             / boundary_str
             / boundary_hash
             / self._base_data_path()

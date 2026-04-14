@@ -2,28 +2,40 @@
     "name": "boolean_reservoir",
     "image": "boolean_reservoir:1.0",
     "remoteUser": "vscode",
-    "features": {
-        "ghcr.io/devcontainers/features/python:1": {}
-    },
+    
+    // Removed Python feature to prevent overwriting Conda environment settings
+    "features": {},
+
     "workspaceFolder": "/code",
     "mounts": [
-        "source=${localWorkspaceFolder},target=/root/repo,type=bind,ro",
+        "source=${localWorkspaceFolder},target=/repo,type=bind,ro",
         "source=${localWorkspaceFolder}/code,target=/code,type=bind",
         "source=${localWorkspaceFolder}/data,target=/data,type=bind",
         "source=${localWorkspaceFolder}/out,target=/out,type=bind"
     ],
-    "postCreateCommand": "sudo chown -R vscode:vscode /code /data /out",
+
     "customizations": {
         "vscode": {
             "settings": {
-                "python.defaultInterpreterPath": "/opt/conda/envs/boolean_reservoir/bin/python"
+                "python.defaultInterpreterPath": "/home/vscode/.conda/envs/boolean_reservoir/bin/python",
+                "python.terminal.activateEnvInSelectedTerminal": true,
+                "python.analysis.extraPaths": ["/code"]
             },
             "extensions": [
                 "ms-python.python",
+                "ms-python.vscode-pylance",
+                "Anthropic.claude-code"
             ]
         }
     },
+
     "hostRequirements": {
         "gpu": "optional"
-    }
+    },
+
+    "containerEnv": {
+        "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+        "ANTHROPIC_ORG_ID": "${localEnv:ANTHROPIC_ORG_ID}",
+        "PYTHONPATH": "/code"
+    },
 }

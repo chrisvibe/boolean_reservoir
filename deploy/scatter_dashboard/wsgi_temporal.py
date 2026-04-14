@@ -9,7 +9,7 @@ paths = [
 
 extractions = [
     ('T', lambda p: p.L.T, {'accuracy', 'loss'}),
-    ('kqgr', lambda p: p.L.kqgr, {'kq', 'gr', 'delta'}),
+    ('kqgr', lambda p: p.L.kqgr, {'kq', 'gr', 'delta', 'spectral_radius'}),
     ('L', lambda p: p.L, {'universe', 'out_path'}),
     ('L_out_name', lambda p: Path(p.L.out_path).name if p.L.out_path else None, None),
     ('kqgr', lambda p: p.U.kqgr.D, {'tau', 'evaluation'}),

@@ -11,7 +11,7 @@ model:
     pertubation: [override, xor]
     encoding: [base2, binary_embedding, primes]
     features: 1 # affects how redundancy is applied
-    redundancy: [1, 2, 3] # changes the task complexity
+    redundancy: [10, 13, 16] # changes the task complexity
     resolution: 3
     chunks: 1
     ticks: ['1', '2']
@@ -37,13 +37,13 @@ dataset:
   dimensions: 1
   steps: 5
   strategy:
-    name: PhysicsWalkStrategy
+    name: SimpleRandomWalkStrategy
     params:
-      max_force: 0.5
+      resolution_bits: 3
+      max_acceleration: 0.5
       mass: 1.0
-      friction_coeff: 0.1
-      friction_order: 2
-      max_speed: 10
+      friction_coeff: 0.0
+      max_speed: 10.0
   boundary:
     name: IntervalBoundary
   split:

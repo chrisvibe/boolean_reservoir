@@ -1,0 +1,54 @@
+logging:
+  out_path: 'out/path_integration/1D/grid_search/design_choices/discrete_redundancy'
+  save_keys: null
+  grid_search:
+    n_samples: 10
+    run: ['train']
+model:
+  input_layer:
+    w_bi: identity
+    w_ir: identity
+    pertubation: override
+    encoding: base2
+    features: 1
+    redundancy: [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    resolution: 3
+    chunks: 1
+    ticks: '1'
+  output_layer:
+    n_outputs: 1 # no effect on kq and gr
+  reservoir_layer:
+    init: random
+    k_avg: 3.0
+    k_min: 0
+    k_max: 'k_avg + 3 * k_avg ** .5' # 3 std of binomial distribution
+    mode: homogeneous
+    n_nodes: 1024
+    reset: true
+    self_loops: 0
+  training:
+    accuracy_threshold: 0.25 # ~ sqrt(2) / (2**3 - 1) diagonal + neighbour grids are considered a "hit"
+    batch_size: 128
+    criterion: MSE
+    epochs: 40
+    evaluation: dev
+dataset:
+  coordinate: cartesian
+  dimensions: 1
+  steps: 5
+  strategy:
+    name: SimpleRandomWalkStrategy
+    params:
+      resolution_bits: 3
+      max_acceleration: 0.5
+      mass: 1.0
+      friction_coeff: 0.0
+      max_speed: 10.0
+  boundary:
+    name: IntervalBoundary
+  split:
+    train: 0.5
+    dev: 0.3
+    test: 0.2
+  samples: 30000
+  seed: 0

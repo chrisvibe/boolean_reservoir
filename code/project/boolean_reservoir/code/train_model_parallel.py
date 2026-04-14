@@ -152,11 +152,11 @@ class BooleanReservoirJobFactory:
 def boolean_reservoir_grid_search(
     yaml_path: str,
     param_combinations: list = None,
-    gpu_memory_per_job_gb: float = 1,
-    cpu_memory_per_job_gb: float = 1,
+    gpu_memory_per_job_gb: float = 2,
+    cpu_memory_per_job_gb: float = 2,
     cpu_cores_per_job: int = 1,
     exploration_rate: float = 0.1,
-    compile_model: bool = False,
+    compile_model: bool = True,
 ):
     """Boolean Reservoir specific grid search using the generic function"""
     yaml_path = Path(yaml_path)

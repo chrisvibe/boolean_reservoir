@@ -179,9 +179,14 @@ def balance_dataset(dataset, num_bins=100, distance_fn=l2_distance, labels_are_c
             for i, q in enumerate(quartiles):
                 print(f" {q}%: {before_quartiles[i]:.4f} → {after_quartiles[i]:.4f}")
     
-    # Update dataset with balanced indices
-    dataset.data['x'] = x[balanced_indices]
-    dataset.data['y'] = y[balanced_indices]
+    # Shuffle before set_data: balanced_indices are assembled bin-by-bin (sorted by distance),
+    # so without shuffling split_dataset's sequential indexing would assign center samples to
+    # train and extreme samples to test — giving a badly biased split.
+    balanced_indices = balanced_indices[torch.randperm(len(balanced_indices))]
+
+    # Update dataset with balanced indices — use set_data to update registered buffers
+    # so the balanced subset persists through normalize() → _sync_buffers_to_dict()
+    dataset.set_data({'x': x[balanced_indices], 'y': y[balanced_indices]})
     
     # Report overall reduction
     if verbose:

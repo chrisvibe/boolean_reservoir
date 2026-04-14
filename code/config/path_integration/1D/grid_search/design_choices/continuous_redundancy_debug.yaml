@@ -1,43 +1,38 @@
 logging:
-  out_path: 'out/path_integration/single_run/1D/good_model'
-  # history:
-  #   record: true
-  #   buffer_size: 64
+  out_path: '/tmp/out/path_integration/1D/grid_search/design_choices/continuous_redundancy'
+  save_keys: null
+  grid_search:
+    n_samples: 10
+    run: ['train']
 model:
   input_layer:
-    seed: 0
     w_bi: identity
     w_ir: identity
     pertubation: override
     encoding: base2
     features: 1
-    redundancy: 10
+    redundancy: [10, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     resolution: 10
     chunks: 1
     ticks: '1'
   output_layer:
-    seed: 0
-    n_outputs: 1
+    n_outputs: 1 # no effect on kq and gr
   reservoir_layer:
-    seed: 0
     init: random
-    k_avg: 3
+    k_avg: 3.0
     k_min: 0
-    k_max: 25
+    k_max: 'k_avg + 3 * k_avg ** .5' # 3 std of binomial distribution
     mode: homogeneous
     n_nodes: 1024
     reset: true
     self_loops: 0
   training:
-    seed: 0
     accuracy_threshold: 0.05
     batch_size: 128
     criterion: MSE
     epochs: 40
-    evaluation: test
+    evaluation: dev
 dataset:
-  name: path_integration
-  seed: 0
   coordinate: cartesian
   dimensions: 1
   steps: 5
@@ -55,4 +50,5 @@ dataset:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 20000
+  samples: 30000
+  seed: 0

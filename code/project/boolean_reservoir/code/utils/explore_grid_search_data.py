@@ -295,6 +295,8 @@ def create_scatter_dashboard(
     def get_stable_color(combo_str, offset=0):
         if combo_str == "Other":
             return '#CCCCCC'
+        if isinstance(offset, dict):
+            return color_palette[offset['d']]
         hash_input = f"{combo_str}_{offset}"
         hash_value = int(md5(hash_input.encode()).hexdigest(), 16)
         return color_palette[hash_value % len(color_palette)]
@@ -503,7 +505,7 @@ def create_scatter_dashboard(
         if not y_jitter and y_col in filtered_df.columns and y_agg_label != 'std':
             y_min, y_max = filtered_df[y_col].min(), filtered_df[y_col].max()
             if y_min >= 0 and y_max <= 1:
-                fig.update_yaxes(range=[0, 1], fixedrange=True)
+                fig.update_yaxes(range=[0, 1])
 
         return fig
 
@@ -933,16 +935,30 @@ def create_scatter_dashboard(
     ], style={'background': _DARK, 'color': _TEXT, 'padding': '16px', 'minHeight': '100vh'})
 
     # ---- Shift+click legend handler ------------------------------------------
+    # Shift+click → inc; Shift+Alt+click → dec; Shift+digits then click → set offset directly
+    # All changes are batched while shift is held and applied on shift release.
     app.clientside_callback(
         """
         function(figure) {
             if (!window._shiftKeyState) {
-                window._shiftKeyState = {pressed: false};
+                window._shiftKeyState = {pressed: false, alt: false, pendingDigits: '', pendingActions: []};
                 document.addEventListener('keydown', function(e) {
                     if (e.key === 'Shift') window._shiftKeyState.pressed = true;
+                    else if (e.key === 'Alt') window._shiftKeyState.alt = true;
+                    else if (window._shiftKeyState.pressed && /^Digit[0-9]$/.test(e.code))
+                        window._shiftKeyState.pendingDigits += e.code.slice(-1);
                 });
                 document.addEventListener('keyup', function(e) {
-                    if (e.key === 'Shift') window._shiftKeyState.pressed = false;
+                    if (e.key === 'Shift') {
+                        window._shiftKeyState.pressed = false;
+                        window._shiftKeyState.pendingDigits = '';
+                        var actions = window._shiftKeyState.pendingActions;
+                        window._shiftKeyState.pendingActions = [];
+                        if (actions.length > 0)
+                            dash_clientside.set_props('legend-shift-click', {data: JSON.stringify(actions)});
+                    } else if (e.key === 'Alt') {
+                        window._shiftKeyState.alt = false;
+                    }
                 });
             }
 
@@ -952,13 +968,18 @@ def create_scatter_dashboard(
                 gd._shiftClickAttached = true;
 
                 gd.on('plotly_legendclick', function(eventData) {
-                    if (window._shiftKeyState.pressed) {
-                        var traceName = eventData.data[eventData.curveNumber].name;
-                        dash_clientside.set_props('legend-shift-click', {
-                            data: traceName + '|' + Date.now()
-                        });
-                        return false;
+                    if (!window._shiftKeyState.pressed) return;
+                    var traceName = eventData.data[eventData.curveNumber].name;
+                    var action;
+                    if (window._shiftKeyState.pendingDigits) {
+                        action = {t: traceName, action: 'set',
+                            value: parseInt(window._shiftKeyState.pendingDigits, 10)};
+                        window._shiftKeyState.pendingDigits = '';
+                    } else {
+                        action = {t: traceName, action: window._shiftKeyState.alt ? 'dec' : 'inc'};
                     }
+                    window._shiftKeyState.pendingActions.push(action);
+                    return false;
                 });
             }, 300);
             return window.dash_clientside.no_update;
@@ -1279,8 +1300,19 @@ def create_scatter_dashboard(
     def bump_color_offset(shift_click_data, offsets):
         if not shift_click_data:
             raise PreventUpdate
-        trace_name = shift_click_data.rsplit('|', 1)[0]
-        offsets[trace_name] = offsets.get(trace_name, 0) + 1
+        n = len(color_palette)
+        for item in orjson.loads(shift_click_data):
+            trace_name = item['t']
+            action = item['action']
+            current = offsets.get(trace_name, 0)
+            if action == 'set':
+                offsets[trace_name] = {'d': int(item['value']) % n}
+            elif isinstance(current, dict):
+                offsets[trace_name] = {'d': (current['d'] + (1 if action == 'inc' else -1)) % n}
+            elif action == 'inc':
+                offsets[trace_name] = (current + 1) % n
+            else:
+                offsets[trace_name] = (current - 1) % n
         return offsets
 
     @callback(

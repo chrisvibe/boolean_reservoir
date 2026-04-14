@@ -1,45 +1,40 @@
 logging:
-  out_path: 'out/path_integration/single_run/1D/good_model'
-  # history:
-  #   record: true
-  #   buffer_size: 64
+  out_path: 'out/path_integration/2D/grid_search/design_choices/continuous_redundancy'
+  save_keys: null
+  grid_search:
+    n_samples: 10
+    run: ['train']
 model:
   input_layer:
-    seed: 0
     w_bi: identity
     w_ir: identity
     pertubation: override
     encoding: base2
-    features: 1
-    redundancy: 10
+    features: 2
+    redundancy: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38]
     resolution: 10
     chunks: 1
     ticks: '1'
   output_layer:
-    seed: 0
-    n_outputs: 1
+    n_outputs: 2 # no effect on kq and gr
   reservoir_layer:
-    seed: 0
     init: random
-    k_avg: 3
+    k_avg: 3.0
     k_min: 0
-    k_max: 25
+    k_max: 'k_avg + 3 * k_avg ** .5'
     mode: homogeneous
-    n_nodes: 1024
+    n_nodes: 2048
     reset: true
     self_loops: 0
   training:
-    seed: 0
     accuracy_threshold: 0.05
     batch_size: 128
     criterion: MSE
     epochs: 40
-    evaluation: test
+    evaluation: dev
 dataset:
-  name: path_integration
-  seed: 0
   coordinate: cartesian
-  dimensions: 1
+  dimensions: 2
   steps: 5
   strategy:
     name: PhysicsWalkStrategy
@@ -50,9 +45,14 @@ dataset:
       friction_order: 2
       max_speed: 10
   boundary:
-    name: IntervalBoundary
+    name: PolygonBoundary
+    params:
+      n_sides: 12
+      radius: 1.0
+      rotation: pi/4
   split:
     train: 0.5
     dev: 0.3
     test: 0.2
-  samples: 20000
+  samples: 30000
+  seed: 0
